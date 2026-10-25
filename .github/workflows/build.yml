@@ -1,0 +1,51 @@
+name: Build FIELDIV-ENGINE
+
+# Compila FIELDIV-ENGINE.exe (el lanzador) en Windows y monta el zip listo para usar:
+#   FIELDIV-ENGINE.exe, CHANGELOG.txt, README.md, engine\ (las herramientas)
+# En cada push a main queda como artefacto (pestaña Actions); al publicar una release se adjunta a ella.
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller==6.10.0
+          pyinstaller --onefile --console --name FIELDIV-ENGINE launcher/fieldiv_engine.py
+
+      - name: Zip
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path out/FIELDIV-ENGINE | Out-Null
+          Copy-Item dist/FIELDIV-ENGINE.exe out/FIELDIV-ENGINE/
+          Copy-Item CHANGELOG.txt, README.md out/FIELDIV-ENGINE/
+          Copy-Item engine out/FIELDIV-ENGINE/engine -Recurse
+          Compress-Archive -Path out/FIELDIV-ENGINE -DestinationPath FIELDIV-ENGINE.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FIELDIV-ENGINE
+          path: FIELDIV-ENGINE.zip
+
+      - name: Adjuntar a la release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" FIELDIV-ENGINE.zip --clobber

@@ -35,9 +35,14 @@ CANDADO = threading.Lock()
 
 
 def buscar_iso():
-    isos = [f for f in os.listdir(AQUI) if f.lower().endswith(".iso") and "(valle)" not in f]
-    isos.sort(key=lambda f: ("(" in f, len(f), f))
-    return os.path.join(AQUI, isos[0]) if isos else None
+    """La ISO de King's Field IV: en esta carpeta o en la de encima (FIELDIV-ENGINE: la ISO junto al .exe)."""
+    for carpeta in (AQUI, os.path.dirname(AQUI)):
+        isos = [f for f in os.listdir(carpeta) if f.lower().endswith(".iso") and "(valle)" not in f
+                and "(parche)" not in f]
+        isos.sort(key=lambda f: ("(" in f, len(f), f))
+        if isos:
+            return os.path.join(carpeta, isos[0])
+    return None
 
 
 def cargar_texturas():

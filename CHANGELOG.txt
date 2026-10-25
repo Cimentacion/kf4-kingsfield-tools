@@ -1,0 +1,34 @@
+FIELDIV-ENGINE - CHANGELOG
+==========================
+
+Alpha 0.1 - revision 2 (2026-10-26)
+-----------------------------------
+- New layout: FIELDIV-ENGINE.exe (menu launcher) + engine\ folder with the tools + this CHANGELOG.txt.
+  Put your King's Field IV ISO next to the .exe (or inside engine\).
+- Secret walls: the rising wall keeps KFIV's own slab collision and opening (rotated and scaled to the
+  King's Field wall), and rises the full height of the wall. Brighter, so it matches the walls around it.
+- All .bat files use Windows line endings.
+
+Alpha 0.1 (2026-10-26)
+----------------------
+First public release.
+
+Map generator / King's Field port
+- Ports King's Field levels into King's Field IV (PAL, SLES-50920), replacing map 099 (New Game).
+- Real King's Field geometry and textures, with collision built from the models.
+- Decor imported from the original MO.T models: barrels, tables, tombs, lamps, the healing fountain.
+- Secret walls with the original King's Field model; doors as a rising slab with the original door texture.
+- Healing fountain: HP only, with KFIV's own fountain script and effect.
+- Breakable barrels; torches and lamps add a soft warm light; bluish fountain room.
+- Enemy damage capped at about 10 per hit (ported map only).
+
+HUD and gameplay patch
+- HP number inside the orb.
+- Cross HUD: magic on top (icon, name, MP cost), consumable at the bottom (icon and count).
+- Weapon EXP bar and level in the equipment screen; weapons level up at 70 and 140 hits.
+- Optional twin-stick controls; starting gear in engine\equipo_inicial.txt.
+- PARCHE_HUD.bat: HUD and/or controls patch for your own ISO, without the map generator.
+
+Known issues
+- Secret walls and doors are new: report anything that looks off.
+- An enemy between you and an object takes the X button (the game's own priority).

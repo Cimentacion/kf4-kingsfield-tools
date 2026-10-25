@@ -1910,6 +1910,7 @@ LUZ_ENEMIGOS = 24     # bloque de luz propio para los enemigos
 LUZ_OBJETOS_KF = 25   # bloque de luz de los objetos del mapa portado (puertas, paredes secretas, cofres, barriles):
 # la luna fría de los enemigos los dejaba gris azulados al lado de las paredes del King's Field, que son oscuras y
 # cálidas; esta es tenue y cálida, para que la pared que se abre no se distinga de las de al lado
+LUZ_PANEL_AMB = 1.75
 LUZ_PANEL = 26        # la pared secreta del King's Field: su luz va en sus colores de vértice (los del mapa): sin luces
 LUZ_OBJETOS_KF_COLORES = [(0.30, 0.27, 0.20, 0.0), (0.12, 0.10, 0.07, 0.0), (0.05, 0.05, 0.05, 0.0),
                           (0.30, 0.28, 0.24, 1.0)]
@@ -2126,9 +2127,10 @@ def _registro_de(cajas, x, z):
 
 def panel_kf(t, tris):
     """La losa del 4 (t: plantilla del def 80) con la pared de verdad del King's Field: tris = [(textura, 3 x
-    (punto del editor, uv, color, normal))]. Devuelve (modelo, colisión, registro de objeto sin def/índices) o None.
-    El objeto va sin giro y con escala (1, sy, 1): sus puntos en cm alrededor de su pie; la losa del 4 sube 300 de
-    sus unidades, así que sy hace que suba toda la altura de la pared. Su caja de colisión, la de la pared."""
+    (punto del editor, uv, color, normal))]. Devuelve (modelo, colisión, registro de objeto, movimiento) o None.
+    La losa se deja como en el 4 (su caja de colisión de 200 x 300 x 20, intacta): se gira para que su lado fino
+    vaya con el grosor de la pared y se escala a la medida de la pared; los puntos de la pared se pasan a su
+    espacio (sin giro ni escala). Así choca y se abre como la losa del 4."""
     import math
     if not tris:
         return None
@@ -2137,10 +2139,16 @@ def panel_kf(t, tris):
     z0, z1 = min(p[2] for p in pts), max(p[2] for p in pts)
     y_pie = max(p[1] for p in pts)                       # Y hacia abajo: el pie es la Y mayor
     alto = y_pie - min(p[1] for p in pts)
-    # lo que sube: la parte de abajo de la pared (hasta el techo: la de encima está dentro de la roca)
-    alto_paso = min(alto, max(alto / 2.0, 250.0)) if alto > 500 else alto
-    sy = max(alto_paso + 20.0, 100.0) / 300.0
+    # lo que tiene que subir: la parte de abajo de la pared (hasta el techo; la de encima está dentro de la roca)
+    alto_paso = alto / 2.0 if alto > 500 else alto
     cx, cz = (x0 + x1) / 2.0, (z0 + z1) / 2.0
+    fino_x = (x1 - x0) < (z1 - z0)
+    # giro: el eje z de la losa (su grosor) en el eje fino de la pared (door.c: mundo = (x cos + z sen, -x sen + z cos))
+    ang = math.pi / 2 if fino_x else 0.0
+    ca, sa = math.cos(ang), math.sin(ang)
+    ancho = (z1 - z0) if fino_x else (x1 - x0)
+    grueso = max((x1 - x0) if fino_x else (z1 - z0), 20.0)
+    sx, sy, sz = ancho / 200.0, (alto_paso + 10.0) / 300.0, grueso / 20.0
     m = bytearray(t["modelo"])
     length = struct.unpack_from("<I", m, 0)[0]
     nmesh = struct.unpack_from("<H", m, 4)[0]
@@ -2148,13 +2156,14 @@ def panel_kf(t, tris):
         return None
     off0, n0 = struct.unpack_from("<II", m, 0x10 + 36)
     off1, n1 = struct.unpack_from("<II", m, 0x10 + 48 + 36)
+    if off0 > off1:
+        return None
     cab1 = bytes(m[off1:off1 + 0x90])                    # cabecera de paquete de la losa (plantilla)
     pos = off1
     for _ in range(n1):
         pos += 0x90 + m[pos + 0x70] * 32 + 16
     fin_paquetes = pos
     paquetes = []
-    ntris = 0
     for tex, tri in tris:
         h = bytearray(cab1)
         tbp, cbp, tbw, w, hh, psm = tex
@@ -2168,10 +2177,15 @@ def panel_kf(t, tris):
         cuerpo = bytearray()
         for k, (p, uv, col, n) in enumerate(tri):
             x, y, z = to_native(p)
-            lx, ly, lz = x - cx, (y - y_pie) / sy, z - cz
+            dx, dz = x - cx, z - cz
+            lx, lz = dx * ca - dz * sa, dx * sa + dz * ca        # el giro de la losa, deshecho
+            lx, ly, lz = lx / sx, (y - y_pie) / sy, lz / sz
             nx, ny, nz = n[0], -n[2], n[1]
+            nx, nz = nx * ca - nz * sa, nx * sa + nz * ca
+            nx, ny, nz = nx / sx, ny / sy, nz / sz                 # normal en el espacio escalado
             ln = math.sqrt(nx * nx + ny * ny + nz * nz) or 1.0
-            cuerpo += struct.pack("<4h4h4h4H", int(round(lx)), int(round(ly)), int(round(lz)), 1,
+            cuerpo += struct.pack("<4h4h4h4H", int(round(clamp(lx, -32000, 32000))), int(round(clamp(ly, -32000, 32000))),
+                                  int(round(clamp(lz, -32000, 32000))), 1,
                                   int(nx / ln * 4096), int(ny / ln * 4096), int(nz / ln * 4096),
                                   -32768 if k < 2 else 0,
                                   int(round(uv[0] * 4096)), int(round(uv[1] * 4096)), 4096, 0,
@@ -2180,33 +2194,18 @@ def panel_kf(t, tris):
         cola = bytearray(16)
         cola[15] = 0x14 if not paquetes else 0x17
         paquetes.append(bytes(h) + bytes(cuerpo) + bytes(cola))
-        ntris += 1
-    cuerpo1 = b"".join(paquetes)
-    nuevo = bytearray(m[:off1]) + cuerpo1 + m[fin_paquetes:length]
+    nuevo = bytearray(m[:off1]) + b"".join(paquetes) + m[fin_paquetes:length]
     nuevo_len = len(nuevo)
     nuevo += m[length:]                                  # la parte de textura propia del objeto, tal cual
     struct.pack_into("<I", nuevo, 0, nuevo_len)
-    struct.pack_into("<H", nuevo, 6, min(65535, ntris + 3))
-    struct.pack_into("<I", nuevo, 8, 3 * ntris + 5)
+    struct.pack_into("<H", nuevo, 6, min(65535, len(paquetes) + 3))
+    struct.pack_into("<I", nuevo, 8, 3 * len(paquetes) + 5)
     struct.pack_into("<II", nuevo, 0x10 + 48 + 36, off1, len(paquetes))
-    if off0 > off1:
-        return None
-    # colisión: la caja de la losa (8 esquinas en float al final) con la medida de la pared (en sus unidades)
-    c = bytearray(t["colision"])
-    esquinas = len(c) - 8 * 16
-    ex, ez = (x1 - x0) / 2.0, (z1 - z0) / 2.0
-    for k in range(8):
-        q = esquinas + k * 16
-        ox_, oy_, oz_, w_ = struct.unpack_from("<4f", c, q)
-        struct.pack_into("<4f", c, q, ex if ox_ > 0 else -ex, oy_, ez if oz_ > 0 else -ez, w_)
-    alcance = math.hypot(ex, ez) + 1.0
-    if struct.unpack_from("<f", c, 0x10)[0] < alcance:
-        struct.pack_into("<f", c, 0x10, alcance)
     b = bytearray(t["rec"])
     struct.pack_into("<4f", b, 0x00, cx, y_pie, cz, 0.0)
-    struct.pack_into("<4f", b, 0x10, 0.0, 0.0, 0.0, 0.0)
-    struct.pack_into("<4f", b, 0x20, 1.0, sy, 1.0, 1.0)
-    # el movimiento: la losa sube 280 (cm del mundo: el juego suma ese desplazamiento a la posición sin escalarlo,
+    struct.pack_into("<4f", b, 0x10, 0.0, ang, 0.0, 0.0)
+    struct.pack_into("<4f", b, 0x20, sx, sy, sz, 1.0)
+    # el movimiento: la losa sube 280 (el juego suma ese desplazamiento a la posición sin escalarlo,
     # map_object/door.c); la pared del King's Field es más alta: que suba toda su altura
     mov = t["movimiento"]
     if mov:
@@ -2220,7 +2219,7 @@ def panel_kf(t, tris):
                     mov[k:k + 4] = b_
                 k = mov.find(a_, k + 4)
         mov = bytes(mov)
-    return bytes(nuevo), bytes(c), b, mov
+    return bytes(nuevo), t["colision"], b, mov
 
 
 def colocar_objetos_kf(objs, obj_secc, lista, plantillas, recs, log, tex_pared=None):
@@ -2743,7 +2742,8 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
         for li in range(4):
             v = dirs[li][ax] if (li < 3 and ax < 3) else (1.0 if (ax == 3 and li == 3) else 0.0)
             struct.pack_into("<f", blocks, lb + (ax * 4 + li) * 4, v)
-    for li, col in enumerate([(0.0, 0.0, 0.0, 0.0)] * 3 + [(1.0, 1.0, 1.0, 1.0)]):
+    # (con 1,0 salía bastante más oscura que las paredes del mapa de al lado: se sube a ojo)
+    for li, col in enumerate([(0.0, 0.0, 0.0, 0.0)] * 3 + [(LUZ_PANEL_AMB,) * 3 + (1.0,)]):
         struct.pack_into("<4f", blocks, lb + 0x40 + li * 16, *col)
 
     if cielo:
@@ -4643,9 +4643,15 @@ def main():
     if args:
         src_path = os.path.abspath(args[0])
     else:
-        isos = [f for f in os.listdir(here) if f.lower().endswith(".iso") and "(valle)" not in f]
-        isos.sort(key=lambda f: ("(" in f, len(f), f))   # la ISO limpia primero, no las (debug)
-        src_path = os.path.join(here, isos[0]) if isos else here
+        # la ISO: en esta carpeta o en la de encima (FIELDIV-ENGINE: el .exe y la ISO fuera, las herramientas en engine)
+        src_path = here
+        for carpeta in (here, os.path.dirname(here)):
+            isos = [f for f in os.listdir(carpeta) if f.lower().endswith(".iso") and "(valle)" not in f
+                    and "(parche)" not in f]
+            isos.sort(key=lambda f: ("(" in f, len(f), f))   # la ISO limpia primero, no las (debug)
+            if isos:
+                src_path = os.path.join(carpeta, isos[0])
+                break
     src = md.Source(src_path)
     d099 = src.read("099.map")
     d031 = src.read("031.map")

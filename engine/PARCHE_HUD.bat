@@ -17,6 +17,7 @@ if "%PY%"=="" (
 rem The ISO: drag it onto this .bat, or "King's Field IV.iso" is looked for in this folder and in Downloads
 set "ISO=%~1"
 if "%ISO%"=="" if exist "King's Field IV.iso" set "ISO=King's Field IV.iso"
+if "%ISO%"=="" if exist "..\King's Field IV.iso" set "ISO=..\King's Field IV.iso"
 if "%ISO%"=="" if exist "%USERPROFILE%\Downloads\King's Field IV.iso" set "ISO=%USERPROFILE%\Downloads\King's Field IV.iso"
 if "%ISO%"=="" (
   echo Drag your King's Field IV ISO ^(PAL, SLES-50920^) onto this .bat.
