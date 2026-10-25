@@ -1910,7 +1910,7 @@ LUZ_ENEMIGOS = 24     # bloque de luz propio para los enemigos
 LUZ_OBJETOS_KF = 25   # bloque de luz de los objetos del mapa portado (puertas, paredes secretas, cofres, barriles):
 # la luna fría de los enemigos los dejaba gris azulados al lado de las paredes del King's Field, que son oscuras y
 # cálidas; esta es tenue y cálida, para que la pared que se abre no se distinga de las de al lado
-LUZ_PANEL_AMB = 1.75
+LUZ_PANEL_AMB = 0.8
 LUZ_PANEL = 26        # la pared secreta del King's Field: su luz va en sus colores de vértice (los del mapa): sin luces
 LUZ_OBJETOS_KF_COLORES = [(0.30, 0.27, 0.20, 0.0), (0.12, 0.10, 0.07, 0.0), (0.05, 0.05, 0.05, 0.0),
                           (0.30, 0.28, 0.24, 1.0)]
@@ -2205,6 +2205,9 @@ def panel_kf(t, tris):
     struct.pack_into("<4f", b, 0x00, cx, y_pie, cz, 0.0)
     struct.pack_into("<4f", b, 0x10, 0.0, ang, 0.0, 0.0)
     struct.pack_into("<4f", b, 0x20, sx, sy, sz, 1.0)
+    # que no se cierre sola al alejarse (door.c: MapObject_UpdateOpenDoor solo la cierra si este campo es 0):
+    # la pared secreta del King's Field se queda abierta
+    b[0x46] = 1
     # el movimiento: la losa sube 280 (el juego suma ese desplazamiento a la posición sin escalarlo,
     # map_object/door.c); la pared del King's Field es más alta: que suba toda su altura
     mov = t["movimiento"]
@@ -2742,7 +2745,7 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
         for li in range(4):
             v = dirs[li][ax] if (li < 3 and ax < 3) else (1.0 if (ax == 3 and li == 3) else 0.0)
             struct.pack_into("<f", blocks, lb + (ax * 4 + li) * 4, v)
-    # (con 1,0 salía bastante más oscura que las paredes del mapa de al lado: se sube a ojo)
+    # (medido en una captura: con 1,75 salía 2,5 veces más clara que las paredes de al lado)
     for li, col in enumerate([(0.0, 0.0, 0.0, 0.0)] * 3 + [(LUZ_PANEL_AMB,) * 3 + (1.0,)]):
         struct.pack_into("<4f", blocks, lb + 0x40 + li * 16, *col)
 
@@ -4265,10 +4268,15 @@ def _dano(fuerzas):
     return sum(f * f / (f + c) for f in fuerzas if f > 0)
 
 
+DANO_SOLO_TIPOS = {21}    # solo la serpiente (chr.prm byte 0x02: 21 = Snake); los demás enemigos quitan lo suyo
+
+
 def rebajar_dano(d):
     b = bytearray(d)
     n = 0
     for r in range(len(b) // 0x450):
+        if b[r * 0x450 + 2] not in DANO_SOLO_TIPOS:
+            continue
         for a in range(3):
             o = r * 0x450 + 0x240 + a * 0x88
             for j in range(3):
@@ -4485,8 +4493,8 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
                 f.seek(dat_off + oc)
                 f.write(chr_nuevo)
                 if done == 0:
-                    log.append(f"Enemigos: {n_bajados} golpes cuerpo a cuerpo rebajados a unos {DANO_MAX_GOLPE} de daño "
-                               f"(con 50 de vida y sin armadura)")
+                    log.append(f"Serpiente: {n_bajados} golpes cuerpo a cuerpo rebajados a unos {DANO_MAX_GOLPE} de daño "
+                               f"(con 50 de vida y sin armadura); los demás enemigos, como en el juego")
         done += 1
         # la página del arma con la fila de experiencia (siempre a partir del archivo original)
         _, d_a = _leer_dat(iso, lang, "menu/equip_a_para.dat")

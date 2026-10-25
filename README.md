@@ -52,6 +52,11 @@ FIELDIV-ENGINE\
 
 The tools' messages are mostly in Spanish.
 
+## Support
+
+If you want to help keep the project going: [ko-fi.com/cimentacion](https://ko-fi.com/cimentacion).
+It's a free, non-commercial fan project; donations are optional.
+
 ## Credits
 
 - [KingsFieldRE / KFModTool](https://github.com/IvanDSM/KingsFieldRE) — King's Field formats and object IDs.

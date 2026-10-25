@@ -507,7 +507,10 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
                 n = _norm(_cross(_sub(b, a), _sub(c, a)))
             uv = [((ax + min(u - cu, lado)) / W, (ay + min(vv - cv, lado)) / H) for (u, vv) in uvs]
             sec = _SECRETA_ACTUAL[0]
-            if sec and sec[0] not in NICHOS_KF and nrm_ps is not None and nrm_ps[1] == 0 and not agua:
+            if sec and sec[0] not in NICHOS_KF and nrm_ps is not None and nrm_ps[1] == 0 and nrm_ps[2] == 0 \
+                    and not agua:
+                # (solo las dos caras grandes: los cantos, de cara a los lados del hueco, se quedan en el mapa;
+                # si subían con ella se veía a través del marco)
                 # la pared que sube de la puerta secreta: al objeto (kf4_valle), no al mapa ni a su colisión
                 # la luz, la de un poco por delante de la cara: en la cara misma (el borde de la casilla) salía la
                 # de la roca de al lado, casi negra

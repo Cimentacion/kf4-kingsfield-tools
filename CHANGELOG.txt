@@ -1,6 +1,12 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 3 (2026-10-26)
+-----------------------------------
+- Secret walls: the sides of the opening stay in place when the wall rises (you could see through the frame),
+  the wall stays open like in King's Field, and its light matches the walls next to it.
+- Enemy damage cap now only applies to the snake; every other enemy hits as in the original game.
+
 Alpha 0.1 - revision 2 (2026-10-26)
 -----------------------------------
 - New layout: FIELDIV-ENGINE.exe (menu launcher) + engine\ folder with the tools + this CHANGELOG.txt.
@@ -20,7 +26,7 @@ Map generator / King's Field port
 - Secret walls with the original King's Field model; doors as a rising slab with the original door texture.
 - Healing fountain: HP only, with KFIV's own fountain script and effect.
 - Breakable barrels; torches and lamps add a soft warm light; bluish fountain room.
-- Enemy damage capped at about 10 per hit (ported map only).
+- Snake damage capped at about 10 per hit (ported map only).
 
 HUD and gameplay patch
 - HP number inside the orb.
