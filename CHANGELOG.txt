@@ -1,6 +1,12 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 4 (2026-10-26)
+-----------------------------------
+- Secret walls: removed a small white spike at the foot of the wall (a hidden piece of KFIV's slab).
+- Secret walls: no more flickering floor where the wall's floor meets the floor next to it.
+- Secret walls: darker, closer to the walls around them.
+
 Alpha 0.1 - revision 3 (2026-10-26)
 -----------------------------------
 - Secret walls: the sides of the opening stay in place when the wall rises (you could see through the frame),

@@ -507,6 +507,12 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
                 n = _norm(_cross(_sub(b, a), _sub(c, a)))
             uv = [((ax + min(u - cu, lado)) / W, (ay + min(vv - cv, lado)) / H) for (u, vv) in uvs]
             sec = _SECRETA_ACTUAL[0]
+            if sec and nrm_ps is not None and nrm_ps[1] != 0 and not agua:
+                # suelo y techo del modelo de la pared secreta: 1 cm por debajo (el techo, 2 por encima) del de las
+                # casillas de al lado, que también lo tienen: si no, los dos parpadeaban en la unión
+                # (quitar el del modelo donde la casilla ya tiene suelo dejaba agujeros: no siempre lo tiene entero)
+                dz = -0.01 if nrm_ps[1] < 0 else 0.02
+                P = [(p_[0], p_[1], p_[2] + dz) for p_ in P]
             if sec and sec[0] not in NICHOS_KF and nrm_ps is not None and nrm_ps[1] == 0 and nrm_ps[2] == 0 \
                     and not agua:
                 # (solo las dos caras grandes: los cantos, de cara a los lados del hueco, se quedan en el mapa;

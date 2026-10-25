@@ -1910,7 +1910,7 @@ LUZ_ENEMIGOS = 24     # bloque de luz propio para los enemigos
 LUZ_OBJETOS_KF = 25   # bloque de luz de los objetos del mapa portado (puertas, paredes secretas, cofres, barriles):
 # la luna fría de los enemigos los dejaba gris azulados al lado de las paredes del King's Field, que son oscuras y
 # cálidas; esta es tenue y cálida, para que la pared que se abre no se distinga de las de al lado
-LUZ_PANEL_AMB = 0.8
+LUZ_PANEL_AMB = 0.4
 LUZ_PANEL = 26        # la pared secreta del King's Field: su luz va en sus colores de vértice (los del mapa): sin luces
 LUZ_OBJETOS_KF_COLORES = [(0.30, 0.27, 0.20, 0.0), (0.12, 0.10, 0.07, 0.0), (0.05, 0.05, 0.05, 0.0),
                           (0.30, 0.28, 0.24, 1.0)]
@@ -2194,6 +2194,14 @@ def panel_kf(t, tris):
         cola = bytearray(16)
         cola[15] = 0x14 if not paquetes else 0x17
         paquetes.append(bytes(h) + bytes(cuerpo) + bytes(cola))
+    # la primera malla de la losa (una pirámide blanca de 20 unidades, escondida dentro de la losa del 4): con la
+    # escala de la pared asomaba al pie como un pico blanco; sus puntos, todos al origen
+    q = off0
+    for _ in range(n0):
+        nv = m[q + 0x70]
+        for k in range(nv):
+            struct.pack_into("<3h", m, q + 0x90 + k * 32, 0, 0, 0)
+        q += 0x90 + nv * 32 + 16
     nuevo = bytearray(m[:off1]) + b"".join(paquetes) + m[fin_paquetes:length]
     nuevo_len = len(nuevo)
     nuevo += m[length:]                                  # la parte de textura propia del objeto, tal cual
@@ -2745,7 +2753,7 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
         for li in range(4):
             v = dirs[li][ax] if (li < 3 and ax < 3) else (1.0 if (ax == 3 and li == 3) else 0.0)
             struct.pack_into("<f", blocks, lb + (ax * 4 + li) * 4, v)
-    # (medido en una captura: con 1,75 salía 2,5 veces más clara que las paredes de al lado)
+    # (medido en capturas: con 1,75 salía 2,5 veces más clara que las paredes de al lado y con 0,8, el doble)
     for li, col in enumerate([(0.0, 0.0, 0.0, 0.0)] * 3 + [(LUZ_PANEL_AMB,) * 3 + (1.0,)]):
         struct.pack_into("<4f", blocks, lb + 0x40 + li * 16, *col)
 
