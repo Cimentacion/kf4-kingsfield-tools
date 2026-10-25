@@ -1,0 +1,267 @@
+#!/usr/bin/env python3
+"""
+kf1_objetos.py - Enemigos y objetos de un nivel de King's Field (PS1, el KF2 japonés) para el editor del 4.
+
+Cada nivel tiene en FDAT.T la entrada 3n+1 con su base de datos (formato de KFModTool, IvanDSM/KingsFieldRE):
+  u32 tamaño + 40 clases de enemigo (byte 0 = modelo) y sus estados
+  u32 tamaño + 200 enemigos de 16 bytes:
+      modo de reaparición, clase, giro fijo, casilla X, casilla Y, % reaparición, objeto que suelta, capa,
+      u16 giro, s16 fino X, s16 fino Y, s16 fino Z    (fino: 0..2047 dentro de la casilla)
+  u32 tamaño + 350 objetos de 24 bytes:
+      capa, casilla X, casilla Y, ?, u16 id, u16 giro, s16 fino X, Y, Z, 10 bytes de parámetros
+  u32 tamaño + 128 efectos
+
+Aquí se traduce cada enemigo a un registro de chr.prm del 4 que se le parece, y cada objeto que se coge
+(armas, armaduras, hierbas, llaves...) a un objeto del 4.
+"""
+
+import collections
+import math
+import struct
+
+CELDA_M = 2.5
+
+# --- enemigos: modelo de KF (EntityMeshID) -> (nombre, registro de chr.prm del 4, vuela) ---
+# (el 9 no se pone: es una llamita estática de 1 punto de experiencia que hay a montones por los niveles)
+ENEMIGOS = {
+    0: ("Green Slime", 2, False), 12: ("Green Slime", 2, False), 13: ("Green Slime", 2, False),
+    19: ("Green Slime", 2, False), 1: ("Poison Slime", 3, False),
+    2: ("Sigill", 6, False),                       # araña
+    4: ("Baltail", 16, False),                     # salamandra
+    6: ("Sting Fly", 10, True),                    # murciélago de sangre
+    10: ("Ghost", 85, True),                       # segador
+    11: ("Reik", 24, False),                       # armadura viviente
+    14: ("Head Eater", 18, False),                 # phagos
+    15: ("Mogle", 12, False),                      # critter
+    16: ("S-Knight", 24, False), 34: ("Copper Knight", 24, False),
+    17: ("Soldier", 93, False), 18: ("Archer", 92, False),
+    21: ("Skeleton", 50, False), 44: ("Skeleton of One-Eyed Giant", 58, False),
+    22: ("Termite", 11, False), 25: ("Giant Termite", 11, False), 47: ("Mecha Termite", 11, False),
+    23: ("Kald", 56, False),                       # muerto viviente
+    24: ("Psythe", 85, True),
+    26: ("Red Spike Ball", 66, True),              # malicia
+    27: ("Log Stalker", 12, False),
+    28: ("Demon Lord", 58, False), 46: ("Mecha Demon Lord", 58, False),   # esqueleto alto (no el jefe)
+    29: ("Kraken", 13, False),                    # serpiente (la cabeza, 30, va con el cuerpo: no se duplica)
+    31: ("Earth Elemental", 68, False),
+    32: ("Refma", 66, True), 51: ("Refma", 66, True),
+    33: ("Tarn", 58, False),                       # esqueleto alto (el gigante es un jefe)
+    35: ("Dias Bagil", 24, False),
+    39: ("Guyra", 24, False),                      # armadura viviente (el Earth King es un jefe)
+    40: ("Salamander", 16, False),
+    42: ("Billent", 81, False),                    # larva
+    50: ("Bitt", 10, True),
+    107: ("Dragon Grass", 49, False),              # flor oscura
+}
+# vida de cada registro del 4 (chr.prm +0x0A), para repartir los que no caben entre los que sí
+VIDA = {13: 200, 2: 60, 3: 60, 6: 100, 10: 54, 11: 105, 12: 750, 16: 550, 18: 1, 19: 600, 24: 1800, 32: 3000, 34: 4500,
+        39: 500, 40: 1400, 49: 500, 50: 250, 56: 210, 58: 800, 66: 1300, 67: 900, 68: 900, 73: 3800, 75: 5500,
+        81: 205, 85: 300, 92: 200, 93: 540}
+# jefes y bichos enormes del 4: cuelgan el juego al cargar el mapa (probado con el 34, Earth King, y el 75,
+# Greater Demon); si algún modelo de KF apunta a uno, se cambia por la armadura viviente. Los escarabajos 19 y 39
+# también cuelgan (probado: solo 8 del 39 y no carga); los termitas son el escarabajo 11, el de 099
+JEFES = {19, 39, 15, 17, 20, 22, 23, 32, 34, 45, 47, 55, 57, 61, 64, 71, 72, 73, 74, 75, 76, 78, 138, 151, 155, 156, 157,
+         158, 159}
+MAX_TIPOS = 4          # huecos de pool por mapa que se usan (cada tipo de enemigo ocupa uno)
+MAX_ENEMIGOS = 120     # el 4 admite 128 por mapa (entity_pool[2][0x80]) y 60 activos a la vez (los cercanos)
+
+# --- objetos que se cogen: id de KF -> objeto del 4 (item_nam.prm) ---
+OBJETOS = {
+    # armas
+    0: 169, 1: 156, 2: 164, 3: 199, 4: 202, 5: 165, 6: 205, 7: 155, 8: 155, 9: 187, 10: 186, 11: 176,
+    12: 168, 13: 196, 14: 167, 15: 186, 16: 207, 17: 210, 18: 155, 19: 155, 20: 155,
+    # cascos
+    21: 257, 22: 261, 23: 256, 24: 271, 25: 264, 26: 274, 27: 251,
+    # cuerpo
+    28: 280, 29: 286, 30: 296, 31: 295, 32: 298, 33: 276,
+    # escudos
+    34: 223, 35: 226, 36: 240, 37: 240, 38: 243, 39: 246, 40: 221,
+    # brazos
+    41: 307, 42: 304, 43: 319, 44: 314, 45: 311, 46: 301,
+    # pies
+    47: 331, 48: 336, 49: 334, 50: 346, 51: 341, 52: 328,
+    # anillos, collares
+    53: 355, 54: 371, 55: 363, 56: 356, 57: 372, 58: 361, 59: 351,
+    # consumibles y demás
+    70: 368, 71: 32, 72: 114, 73: 34, 74: 7, 75: 9, 76: 13, 77: 15, 78: 16, 79: 17, 80: 18, 81: 15,
+    82: 14, 85: 130, 90: 71, 91: 74, 92: 72, 93: 73, 94: 75, 95: 76, 96: 70, 97: 70,
+    98: 351, 110: 6, 117: 145, 118: 145, 119: 6,
+}
+COFRES = (120, 121, 122, 123)       # tapas y cuerpos de cofre
+PUERTAS = {125, 126, 127, 128, 129, 132, 133, 134, 135, 139, 140, 194}
+SECRETAS = {130, 131, 138, 205, 209, 214}
+# de esas, las que son una pared con un hueco (nicho) en su cara: modelo fijo, no se abren (van como decorado,
+# kf_malla); las otras (130 SecretDoor, 205) son la pared que sube
+NICHOS = {131, 138, 209, 214}
+PUERTAS_SECRETAS = SECRETAS - NICHOS
+BARRILES = {179}                     # barril (clase Hider): en el 4, el barril que se rompe a golpes (def 2)
+
+
+def _secciones(db):
+    out = []
+    p = 0
+    for _ in range(4):
+        if p + 4 > len(db):
+            out.append(b"")
+            continue
+        n = struct.unpack_from("<I", db, p)[0]
+        out.append(db[p + 4:p + 4 + n])
+        p += 4 + n
+    return out
+
+
+def leer(fdat, nivel):
+    """(enemigos, objetos) del nivel. enemigo: dict(modelo, x, y, capa, fx, fy, fz, giro);
+    objeto: dict(id, x, y, capa, fx, fy, fz, giro, param)."""
+    clases, ents, objs, _ = _secciones(fdat[3 * nivel + 1])
+    # las clases son de 120 bytes en la versión europea (122 en otras): se mira cuál deja modelos coherentes
+    paso = 120
+    for p in (120, 122, 124):
+        if len(clases) >= p * 2 and clases[p] != 0xFF and clases[p + 1] in (4, 0x40, 40):
+            paso = p
+            break
+    modelo_clase = [clases[i * paso] if i * paso < len(clases) else 255 for i in range(40)]
+    enemigos = []
+    for i in range(len(ents) // 16):
+        r = ents[i * 16:i * 16 + 16]
+        modo, clase, _, x, y, _, _, capa = r[:8]
+        if clase >= 40 or modo == 0xFF or x >= 80 or y >= 80:
+            continue
+        giro, fx, fy, fz = struct.unpack_from("<Hhhh", r, 8)
+        enemigos.append({"modelo": modelo_clase[clase], "x": x, "y": y, "capa": capa & 1,
+                         "fx": fx, "fy": fy, "fz": fz, "giro": giro})
+    objetos = []
+    for i in range(len(objs) // 24):
+        r = objs[i * 24:i * 24 + 24]
+        capa, x, y = r[0], r[1], r[2]
+        oid, giro, fx, fy, fz = struct.unpack_from("<HHhhh", r, 4)
+        if oid in (0xFF, 0xFFFF) or x >= 80 or y >= 80:
+            continue
+        objetos.append({"id": oid, "x": x, "y": y, "capa": capa & 1, "fx": fx, "fy": fy, "fz": fz,
+                        "giro": giro, "param": bytes(r[14:24])})
+    return enemigos, objetos
+
+
+def _fino(f):
+    """Posición fina dentro de la casilla: 0..2047 (algunos la guardan fuera: se recorta)."""
+    return min(max(f, 0), 2047) / 2048.0
+
+
+def para_editor(fdat, nivel, pad, ox, oy, celda, altura_capa=None, vecinos=None, techo_de=None):
+    """Listas 'enemigos', 'items' y 'kf_objetos' (cofres, puertas, paredes que se abren) del JSON del editor,
+    y un resumen.
+    altura_capa(columna, fila, capa) -> metros o None: la altura del suelo de esa capa (puentes, pisos altos).
+    vecinos(columna, fila) -> {(dc, df): se anda}: para girar puertas y cofres según el pasillo.
+    techo_de(columna, fila) -> metros libres hasta el techo, o None."""
+    enemigos, objetos = leer(fdat, nivel)
+
+    # la casilla "X" del archivo es la fila de la rejilla y la "Y" la columna (comprobado: así caen todos
+    # los enemigos sobre suelo)
+    def pos(e):
+        X = ox + (e["y"] + pad + _fino(e["fy"])) * celda
+        Y = oy + (e["x"] + pad + _fino(e["fx"])) * celda
+        return round(X, 3), round(Y, 3)
+
+    # tipos: los MAX_TIPOS registros más repetidos; el resto pasa al de vida más parecida
+    cuenta = collections.Counter(ENEMIGOS[e["modelo"]][1] for e in enemigos if e["modelo"] in ENEMIGOS)
+    elegidos = [r for r, _ in cuenta.most_common(MAX_TIPOS)]
+    cambio = {}
+    for r in cuenta:
+        if r not in elegidos:
+            cambio[r] = min(elegidos, key=lambda c: abs(VIDA.get(c, 500) - VIDA.get(r, 500)))
+    sin = collections.Counter()
+    lista = []
+    for e in enemigos:
+        if e["modelo"] not in ENEMIGOS:
+            sin[e["modelo"]] += 1
+            continue
+        nombre, reg, vuela = ENEMIGOS[e["modelo"]]
+        reg = cambio.get(reg, reg)
+        if reg in JEFES:
+            reg = 24
+        X, Y = pos(e)
+        d = {"tipo": f"chr:{reg}", "x": X, "y": Y, "kf": nombre, "giro": round(e["giro"] / 4096 * 6.2832, 3)}
+        if vuela:
+            d["vuela"] = True
+        if altura_capa:
+            z = altura_capa(e["y"], e["x"], e["capa"])
+            if z is not None:
+                d["z"] = round(z, 3)
+        lista.append(d)
+    if len(lista) > MAX_ENEMIGOS:        # repartidos por todo el nivel, no solo los primeros de la lista
+        lista = [lista[i * len(lista) // MAX_ENEMIGOS] for i in range(MAX_ENEMIGOS)]
+    items, cofres, puertas, secretas = [], [], [], []
+    en_cofre = {(o["x"], o["y"]) for o in objetos if o["id"] in COFRES or o["id"] in BARRILES}
+    contenido = {}                       # casilla del cofre -> objeto del 4 que hay dentro
+    for o in objetos:
+        if o["id"] in OBJETOS and (o["x"], o["y"]) in en_cofre:
+            contenido.setdefault((o["x"], o["y"]), OBJETOS[o["id"]])
+    puestas = set()
+    for o in objetos:
+        X, Y = pos(o)
+        col, fila = o["y"], o["x"]
+        z = altura_capa(col, fila, o["capa"]) if altura_capa else None
+        oid = o["id"]
+        if oid in OBJETOS:
+            if (o["x"], o["y"]) in en_cofre:
+                continue                    # va dentro del cofre
+            it = {"id": OBJETOS[oid], "x": X, "y": Y, "kf": oid}
+            if z is not None:
+                it["z"] = round(z, 3)
+            items.append(it)
+            continue
+        if oid not in (121, 123) and oid not in PUERTAS and oid not in PUERTAS_SECRETAS and oid not in BARRILES:
+            continue
+        if (col, fila) in puestas:          # puertas de dos hojas: una por casilla
+            continue
+        puestas.add((col, fila))
+        v = vecinos(col, fila) if vecinos else {}
+        techo = techo_de(col, fila) if techo_de else None
+        ew = v.get((1, 0)) and v.get((-1, 0))
+        ns = v.get((0, 1)) and v.get((0, -1))
+        if ew and not ns:
+            giro = math.pi / 2              # el paso va de este a oeste: la hoja cruza en norte-sur
+        elif ns and not ew:
+            giro = 0.0
+        else:
+            giro = 0.0 if (o["giro"] // 1024) % 2 == 0 else math.pi / 2
+        if z is None and altura_capa:
+            # la casilla de una puerta o pared secreta no tiene suelo (es el hueco de la pared): la altura del
+            # paso que cierra, el suelo de las casillas de al lado (la más baja). Sin esto la losa quedaba a la
+            # altura de la rejilla (lo alto de la roca) y no se veía: solo el hueco
+            vecinas = [altura_capa(col + dc, fila + dr, c) for dc, dr in ((1, 0), (-1, 0), (0, 1), (0, -1))
+                       for c in (o["capa"], 1 - o["capa"])]
+            vecinas = [h for h in vecinas if h is not None]
+            if vecinas:
+                z = min(vecinas)
+        d = {"x": X, "y": Y, "kf": oid}
+        if z is not None:
+            d["z"] = round(z, 3)
+        if oid in BARRILES:
+            d.update(tipo="barril", giro=round(o["giro"] / 4096 * 2 * math.pi, 4), medida=[1.33, 1.56],
+                     objeto=contenido.get((o["x"], o["y"]), 0))
+            cofres.append(d)
+        elif oid in (121, 123):
+            # el cofre de espaldas a la pared que tenga; su objeto dentro
+            for (dc, dr), g in (((0, -1), 0.0), ((0, 1), math.pi), ((1, 0), -math.pi / 2), ((-1, 0), math.pi / 2)):
+                if v and not v.get((dc, dr), True):
+                    giro = g
+                    break
+            d.update(tipo="cofre", giro=round(giro, 4), medida=[1.6, None], objeto=contenido.get((o["x"], o["y"]), 0))
+            cofres.append(d)
+        elif oid in PUERTAS:
+            alto = min(3.05, techo) if techo else 3.05
+            d.update(tipo="puerta", giro=round(giro, 4), medida=[CELDA_M, round(alto, 3)])
+            puertas.append(d)
+        else:
+            alto = techo if techo else 3.0
+            d.update(tipo="secreta", giro=round(giro, 4), medida=[CELDA_M, round(alto, 3)])
+            secretas.append(d)
+    resumen = {
+        "enemigos": collections.Counter(d["kf"] for d in lista),
+        "tipos_kf4": [f"chr:{r}" for r in elegidos],
+        "cambiados": cambio,
+        "sin_equivalente": sin,
+        "objetos": len(items), "cofres": len(cofres), "puertas": len(puertas), "secretas": len(secretas),
+    }
+    return lista, items, cofres + puertas + secretas, resumen

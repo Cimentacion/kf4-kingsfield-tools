@@ -1,0 +1,12 @@
+# game data: never commit it (use your own copy)
+*.iso
+*.ISO
+*.bin
+*.map
+*.T
+kf4_valle/
+kf4_mapas/
+# generated
+__pycache__/
+*.pyc
+mapa_torre*.json

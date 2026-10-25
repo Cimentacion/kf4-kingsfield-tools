@@ -1,0 +1,1831 @@
+<title>Editor de La Torre</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400&display=swap">
+<style>
+/* Mesa de cantero: un banco de trabajo oscuro, piedra y tiza, con el visor 3D en el centro. */
+:root {
+  color-scheme: dark;
+  --bg: #15171a;
+  --panel: #1d2024;
+  --panel-2: #262a2f;
+  --line: #343940;
+  --fg: #e4e1da;
+  --fg-dim: #9a9890;
+  --accent: #d6b46a;
+  --accent-fg: #1a1608;
+  --danger: #d0705c;
+  --ok: #7fbf7a;
+  --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 13px;
+  padding-left: max(0px, env(safe-area-inset-left, 0px)); padding-right: max(0px, env(safe-area-inset-right, 0px));
+}
+.app { display: grid; grid-template-rows: auto 1fr auto; height: 100%; }
+header {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  padding-block: 8px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: var(--panel); border-bottom: 1px solid var(--line);
+}
+header h1 { font-family: var(--font-display); font-weight: 700; font-size: 20px; letter-spacing: 0.04em; margin: 0 10px 0 0; text-transform: uppercase; }
+header .gap { width: 10px; }
+.main { display: grid; grid-template-columns: 236px minmax(0, 1fr) 262px; min-height: 0; }
+aside { background: var(--panel); overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+aside.left { border-right: 1px solid var(--line); }
+aside.right { border-left: 1px solid var(--line); }
+.vp { position: relative; min-width: 0; min-height: 300px; }
+.vp canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+h2 { font-family: var(--font-display); font-weight: 500; font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-dim); margin: 0 0 6px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+button, .btn {
+  font: inherit; color: var(--fg); background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px;
+  padding: 6px 8px; cursor: pointer; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+button:hover, .btn:hover { border-color: var(--fg-dim); }
+button:disabled { opacity: 0.4; cursor: default; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button.on { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+button.danger { color: var(--danger); }
+button kbd { font-family: var(--font-mono); font-size: 10px; color: var(--fg-dim); margin-left: 4px; }
+button.on kbd { color: var(--accent-fg); }
+header button { text-align: center; }
+label.row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; color: var(--fg-dim); }
+label.row span.v { font-family: var(--font-mono); color: var(--fg); font-variant-numeric: tabular-nums; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+input[type=number], select, input[type=text] {
+  font: inherit; background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; width: 100%; min-width: 0;
+}
+input[type=color] { width: 100%; height: 28px; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 2px; }
+.field { display: grid; grid-template-columns: minmax(0, 1fr) 84px; gap: 6px; align-items: center; color: var(--fg-dim); }
+.nivel { display: grid; grid-template-columns: 30px 1fr 30px; gap: 4px; align-items: center; }
+.nivel button { text-align: center; padding: 4px 0; }
+.nivel input { text-align: center; font-family: var(--font-mono); font-size: 15px; }
+.swatches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.sw { display: flex; flex-direction: column; gap: 3px; padding: 3px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); cursor: pointer; }
+.sw.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.sw i { display: block; height: 30px; border-radius: 2px; background-size: cover; image-rendering: pixelated; }
+.sw b { font-weight: 400; font-size: 11px; color: var(--fg-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 6px; }
+.slot { display: grid; gap: 3px; padding: 4px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); cursor: pointer; text-align: center; font: inherit; color: var(--fg-dim); }
+.slot i { display: block; height: 22px; border-radius: 2px; background-size: cover; image-rendering: pixelated; }
+.slot.on { border-color: var(--accent); color: var(--fg); box-shadow: 0 0 0 1px var(--accent); }
+.hint { color: var(--fg-dim); line-height: 1.45; margin: 0; }
+.hint b { color: var(--fg); font-weight: 500; }
+footer {
+  display: flex; flex-wrap: wrap; gap: 16px; padding-block: 5px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: var(--panel); border-top: 1px solid var(--line); font-family: var(--font-mono); color: var(--fg-dim); font-size: 12px;
+}
+footer b { color: var(--fg); font-weight: 400; }
+.toast { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--line); padding: 8px 12px; border-radius: 4px; pointer-events: none; max-width: 80%; }
+.walkhelp { position: absolute; left: 12px; top: 12px; background: rgba(0,0,0,0.55); color: #fff; padding: 8px 10px; border-radius: 4px; font-family: var(--font-mono); font-size: 12px; }
+.ayuda { position: absolute; right: 12px; top: 12px; background: rgba(15,16,18,0.82); color: var(--fg); padding: 8px 10px; border-radius: 4px; font-size: 12px; max-width: 300px; line-height: 1.45; pointer-events: none; }
+dialog { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; max-width: min(720px, 92vw); width: 100%; }
+dialog textarea { width: 100%; height: 300px; background: var(--bg); color: var(--fg); border: 1px solid var(--line); font-family: var(--font-mono); font-size: 11px; }
+.sep { height: 1px; background: var(--line); }
+.meter { height: 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+.meter i { display: block; height: 100%; width: 0; background: var(--ok); }
+.meter i.lleno { background: var(--danger); }
+.meter i.casi { background: var(--accent); }
+.avisos { margin: 6px 0 0; padding-left: 16px; color: var(--danger); line-height: 1.4; }
+.avisos.ok { color: var(--ok); list-style: none; padding-left: 0; }
+@media (max-width: 860px) {
+  .main { grid-template-columns: 1fr; grid-template-rows: 55vh auto auto; overflow-y: auto; }
+  .vp { order: 0; } aside.left { order: 1; border-right: 0; } aside.right { order: 2; border-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="app">
+  <header>
+    <h1>Editor de La Torre</h1>
+    <button id="bNuevo" title="Mapa vacío con una meseta">Nuevo</button>
+    <button id="bPlantilla" title="La aldea, el puente y la torre">Plantilla prólogo</button>
+    <button id="bAbrir">Abrir .json</button>
+    <button id="bGuardar">Guardar mapa_torre.json</button>
+    <span class="gap"></span>
+    <button id="bDeshacer" title="Ctrl+Z" disabled>Deshacer</button>
+    <button id="bRehacer" title="Ctrl+Y" disabled>Rehacer</button>
+    <button id="bRejilla" class="on" title="G">Rejilla</button>
+    <button id="bPaseo" title="Pasear a la altura del jugador">Paseo (1,6 m)</button>
+    <span class="gap"></span>
+    <button id="bTex" title="Los .png que saca EXPORTAR_TEXTURAS.bat de tu ISO">Texturas del juego</button>
+    <button id="bVista" title="El mapa tal como lo construye el generador para la ISO" hidden>Vista del juego</button>
+    <button id="bColision" title="Paredes en rojo y suelos en verde, tal como irán al juego" hidden>Colisión</button>
+    <button id="bJugar" title="Guarda, genera la ISO y abre PCSX2" hidden>Probar en el juego</button>
+    <span id="stLocal" class="hint"></span>
+    <input id="fAbrir" type="file" accept=".json,application/json" hidden>
+    <input id="fTex" type="file" accept="image/png" multiple hidden>
+  </header>
+  <div class="main">
+    <aside class="left">
+      <section>
+        <h2>Construir con bloques</h2>
+        <div class="grid2" id="toolsConstruir"></div>
+        <p class="hint" style="margin-top:6px">Como en Minecraft: <b>clic encima</b> de un bloque pone otro encima; <b>clic en un lado</b> lo pone al lado. <b>Mantén y arrastra</b> para hacer un suelo plano a esa altura. Donde no hay nada se construye sobre la rejilla de obra (0 m).</p>
+        <p class="hint" style="margin-top:6px"><b>Cambiar la altura:</b> herramienta «Cambiar altura», pulsa un bloque y arrastra el ratón hacia arriba o hacia abajo. O escribe una «Altura del suelo plano» y arrastra un rectángulo con «Suelo plano».</p>
+        <div style="display:grid; gap:6px; margin-top:8px">
+          <div class="field"><span>Alto del bloque</span><select id="sBloque"><option value="0.25">0,25 m</option><option value="0.5">0,5 m</option><option value="1.25">1,25 m</option><option value="2.5" selected>2,5 m (cubo)</option></select></div>
+          <div class="field"><span>Alto del techo (m)</span><input id="nTecho" type="number" step="0.5" value="4"></div>
+          <div class="field"><span>Altura del suelo plano (m)</span><input id="nPlano" type="number" step="0.5" placeholder="auto"></div>
+        </div>
+      </section>
+      <section>
+        <h2>Terreno</h2>
+        <div class="grid2" id="toolsTerreno"></div>
+      </section>
+      <section>
+        <h2>Pincel</h2>
+        <label class="row" for="rRadio">Radio <span class="v" id="vRadio"></span></label>
+        <input id="rRadio" type="range" min="1" max="30" step="0.5" value="5">
+        <label class="row" for="rFuerza">Fuerza <span class="v" id="vFuerza"></span></label>
+        <input id="rFuerza" type="range" min="0.5" max="20" step="0.5" value="4">
+        <label class="row" for="rPaso">Escalón de altura <span class="v" id="vPaso"></span></label>
+        <input id="rPaso" type="range" min="0" max="2" step="0.25" value="0">
+      </section>
+      <section>
+        <h2>Texturas</h2>
+        <div class="slots" id="slots"></div>
+        <div class="swatches" id="swatches"></div>
+      </section>
+      <section>
+        <h2>Color de vértice</h2>
+        <input id="cPintura" type="color" value="#c08850" aria-label="Color para pintar">
+        <div class="grid2" id="modosColor" style="margin-top:6px"></div>
+        <div class="field" style="margin-top:6px"><span>Pincel de color</span><select id="sPincelColor"><option value="exacto" selected>Vértice exacto</option><option value="suave">Suave (radio)</option></select></div>
+        <button id="bPintarColor" style="margin-top:6px; width:100%">Pintar color</button>
+        <p class="hint" style="margin-top:6px">Los puntos blancos marcan los vértices que vas a pintar. Con <b>Vértice exacto</b> pintas solo la esquina más cercana: oscurece la esquina de un cubo y la cara hace el degradado sola. Con <b>Suave</b> pintas todo lo que cabe en el Radio. El juego guarda ese color en cada vértice; «Quitar color» lo deja como estaba.</p>
+      </section>
+      <section>
+        <h2>Piezas</h2>
+        <div class="grid2" id="toolsPiezas"></div>
+      </section>
+      <section>
+        <h2>Marcas</h2>
+        <div class="grid2" id="toolsMarcas"></div>
+        <p class="hint" style="margin-top:6px">El protagonista es la flecha <b style="color:#4da3ff">azul</b>: arrástrala con cualquier herramienta para moverlo, y con ella elegida, Q y E lo giran. Lo mismo con el guardado (turquesa), los objetos (amarillo) y los enemigos (rojo).</p>
+      </section>
+    </aside>
+    <div class="vp" id="vp">
+      <div class="toast" id="toast" hidden></div>
+      <div class="ayuda" id="ayuda"></div>
+      <div class="walkhelp" id="walkhelp" hidden>Paseo · W A S D andar · arrastra para mirar · Esc salir</div>
+    </div>
+    <aside class="right">
+      <section id="insp">
+        <h2>Selección</h2>
+        <p class="hint" id="inspVacio">Con <b>Seleccionar</b> pulsa una pieza o marca. Arrástrala para moverla, Q y E la giran, Supr la borra.</p>
+        <div id="inspCampos" style="display:grid; gap:6px"></div>
+      </section>
+      <div class="sep"></div>
+      <section style="display:grid; gap:6px">
+        <h2>Memoria del mapa</h2>
+        <div class="meter"><i id="mBarra"></i></div>
+        <p class="hint" id="mTexto">—</p>
+        <button id="bComprobar" hidden title="Monta el 099.map entero como Probar en el juego, sin tocar la ISO">Comprobar el mapa</button>
+        <ul class="avisos" id="mAvisos" hidden></ul>
+        <p class="hint">KF4 carga el mapa entero al entrar y no descarga nada mientras juegas: todo tiene que caber a la vez en el sitio del mapa (la barra). Lo que queda tras la niebla no se dibuja, por trozos de <span id="mTrozo">20</span> m. Pasar a otro mapa aún no está hecho.</p>
+      </section>
+      <div class="sep"></div>
+      <section style="display:grid; gap:6px">
+        <h2>Mapa</h2>
+        <div class="field"><span>Celdas por lado</span><select id="sN"><option>48</option><option>64</option><option selected>96</option><option>128</option></select></div>
+        <div class="field"><span>Color de la niebla</span><input id="cNiebla" type="color" value="#d6dae0"></div>
+        <label class="row" for="rNiebla">Distancia de la niebla <span class="v" id="vNiebla"></span></label>
+        <input id="rNiebla" type="range" min="300000" max="3000000" step="50000" value="1400000">
+        <div class="field"><span>Bajada de los bordes (m)</span><input id="nBorde" type="number" step="1" min="1" value="10"></div>
+        <div class="field"><span>Textura de los bordes del terreno</span><select id="sParedTerreno"></select></div>
+        <label class="row"><span>Barandilla invisible contra el vacío</span><input id="cBarandilla" type="checkbox" checked></label>
+        <label class="row"><span>Tapa por encima de los techos</span><input id="cCubierta" type="checkbox"></label>
+      </section>
+      <div class="sep"></div>
+      <section>
+        <h2>Atajos</h2>
+        <p class="hint">Ctrl+Z deshacer · Ctrl+Y rehacer · G rejilla · clic derecho girar la cámara · rueda acercar · botón central desplazar · arrastrar la flecha azul mueve al protagonista.</p>
+      </section>
+    </aside>
+  </div>
+  <footer>
+    <span>Herramienta <b id="stTool">—</b></span>
+    <span>Casilla <b id="stCelda">—</b></span>
+    <span>Altura <b id="stAlt">—</b></span>
+    <span>Piezas <b id="stObj">0</b></span>
+    <span>Triángulos <b id="stTris">0</b></span>
+    <span id="stGuardado"></span>
+  </footer>
+</div>
+
+<dialog id="dlgJson">
+  <h2>mapa_torre.json</h2>
+  <p class="hint">Este visor no deja guardar el archivo directamente. Copia el texto y guárdalo como mapa_torre.json en la carpeta del juego.</p>
+  <textarea id="taJson" readonly></textarea>
+  <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:8px">
+    <button id="bCopiar">Copiar</button><button id="bCerrar">Cerrar</button>
+  </div>
+</dialog>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function () {
+"use strict";
+// ---------------------------------------------------------------- datos
+const PALETA = ["vacio", "losas", "sillar", "muro", "roca", "roca_gris", "musgo", "grava", "piedra_lisa", "ladrillo", "banda", "estrias", "madera", "friso", "nicho"];
+const NOMBRE_TEX = { vacio: "Vacío", losas: "Losas", sillar: "Sillar", muro: "Muro", roca: "Roca", roca_gris: "Roca gris", musgo: "Musgo", grava: "Grava", piedra_lisa: "Piedra lisa", ladrillo: "Ladrillo", banda: "Cornisa", estrias: "Estrías", madera: "Madera", friso: "Friso", nicho: "Nicho" };
+const COLOR_TEX = { vacio: "#000000", losas: "#8a8170", sillar: "#9c968a", muro: "#7d776d", roca: "#6f6a60", roca_gris: "#85857f", musgo: "#666b52", grava: "#a09a88", piedra_lisa: "#a8a59c", ladrillo: "#7c6b5c", banda: "#9a9484", estrias: "#a19c90", madera: "#4a3d30", friso: "#6e6a5e", nicho: "#5e5a52" };
+const PIEZAS = {
+  casa: { nombre: "Casa", params: { ancho: 5, fondo: 7.5, alto: 8, cumbre: 4.8, puerta: "N", chimenea: true, chimenea_alto: 7.5, ruina: false, hundido: false } },
+  columna: { nombre: "Columna", params: { alto: 9, radio: 0.6, rota: false } },
+  murete: { nombre: "Murete", params: { largo: 6, alto: 0.9 } },
+  portal: { nombre: "Portal", params: { ancho: 13, alto: 16 } },
+  escaleras: { nombre: "Escalinata", params: { ancho: 3, largo: 6, alto: 3 } },
+  puente: { nombre: "Puente", params: { largo: 80, subida: 3, ancho: 5 } },
+  barbacana: { nombre: "Barbacana", params: {} },
+  torre: { nombre: "Torre", params: { radio: 115 } },
+  ruina: { nombre: "Ruina de columnas", params: { lado: 18, pisos: 3 } },
+};
+const OBJETOS = [[6, "Hierba"], [7, "Jugo herbal"], [9, "Remedio"], [151, "Cachiporra"], [155, "Espada básica"], [221, "Escudo de madera"], [251, "Casco de cuero"], [276, "Chaleco de retazos"], [71, "Cristal de fuego"]];
+const ENEMIGOS = [["planta", "Planta"], ["escarabajo", "Escarabajo"], ["seta", "Seta"], ["murcielago", "Murciélago"]];
+const HERR_CONSTRUIR = [["plano", "Suelo plano"], ["bloque", "Poner bloque"], ["quitar", "Quitar bloque"], ["borrar", "Borrar"], ["altura", "Cambiar altura"], ["escalera", "Escalera"], ["techo", "Techo"], ["sintecho", "Quitar techo"], ["hueco", "Hueco (vacío)"]];
+const HERR_TERRENO = [["elevar", "Elevar"], ["bajar", "Bajar"], ["suavizar", "Suavizar"], ["aplanar", "Aplanar"], ["pintar", "Pintar textura"], ["color", "Color"], ["seleccionar", "Seleccionar"]];
+const HERR_MARCAS = [["inicio", "Inicio"], ["guardado", "Guardado"], ["item", "Objeto"], ["enemigo", "Enemigo"]];
+const MODOS_COLOR = [["tenir", "Teñir"], ["aclarar", "Aclarar"], ["oscurecer", "Oscurecer"], ["quitar", "Quitar color"]];
+const RECT = ["plano", "techo", "sintecho", "hueco", "borrar"];
+const BLOQUES = ["bloque", "quitar", "altura", "escalera"];
+const PINCEL = ["elevar", "bajar", "suavizar", "aplanar", "pintar", "color"];
+const AYUDA = {
+  bloque: "Clic encima de un bloque: pone otro encima. Clic en un lado: lo pone al lado. Mantén pulsado y arrastra: hace un suelo plano a esa altura. Arriba usa la textura de Suelo y los lados la de Pared.",
+  quitar: "Clic en un bloque: le quita uno de alto. Arrastra para rebajar todo a esa altura.",
+  altura: "Pulsa un bloque (o una casilla vacía de la rejilla) y, sin soltar, arrastra el ratón hacia arriba o hacia abajo: sube o baja de bloque en bloque.",
+  escalera: "Pulsa un bloque y, sin soltar, arrastra hasta otro de distinta altura. Al soltar sale la escalera entre los dos, con sus peldaños. Si arrastras también de lado, la escalera es más ancha.",
+  techo: "Arrastra sobre casillas: techo a la altura del bloque más alto de la zona más el alto del techo. Con paredes alrededor, el interior queda en penumbra.",
+  sintecho: "Arrastra para quitar el techo de esas casillas.",
+  hueco: "Arrastra: abre el vacío. En el juego, caer ahí mata (la zona roja de abajo).",
+  borrar: "Pincha o arrastra: borra lo que tocas. Un bloque desaparece entero; si ya no queda nada encima del terreno, la casilla se queda vacía.",
+  plano: "Pincha una casilla y arrastra un rectángulo: todo queda plano a la altura de la casilla donde empezaste (o a la que escribas en «Altura del suelo plano»), con la textura de Suelo. Sobre el vacío se hace en la rejilla de obra.",
+  elevar: "Sube el terreno con el pincel (no toca las casillas construidas).",
+  bajar: "Baja el terreno con el pincel.",
+  suavizar: "Suaviza el terreno.",
+  aplanar: "Aplana el terreno a la altura donde empiezas a pintar.",
+  pintar: "Pinta la textura elegida. Con «Suelo» pinta suelos, con «Pared» las caras de los lados y con «Techo» los techos.",
+  color: "Pinta el color de los vértices con el modo elegido (teñir, aclarar, oscurecer, quitar).",
+  seleccionar: "Pulsa una pieza o marca para editarla; arrástrala para moverla.",
+};
+
+let M = null;               // el mapa
+let seleccion = null;
+let herramienta = "plano";
+const slots = { suelo: 1, pared: 2, techo: 12 };
+let slotActivo = "suelo";
+let modoColor = "tenir";
+let rejilla = true;
+const texturas = {};
+
+function mapaVacio(n) {
+  const c = 2.5;
+  return { version: 2, n, celda: c, origen: [-n * c / 2, -n * c / 2], alturas: new Array((n + 1) * (n + 1)).fill(0),
+    texturas: new Array(n * n).fill(0), paleta: PALETA.slice(), celdas: {}, colores: null, paredes: null,
+    pared_terreno: "roca", borde_prof: 10, cubierta: false, grosor_techo: 0.6,
+    objetos: [], inicio: { x: 0, y: 0, rumbo: 0 }, guardado: null, items: [], enemigos: [],
+    niebla: [214, 218, 224], niebla_k: 1400000, barandilla: true };
+}
+function idxV(i, j) { return j * (M.n + 1) + i; }
+function idxC(i, j) { return j * M.n + i; }
+function cuadro(x, y) { return [Math.floor((x - M.origen[0]) / M.celda), Math.floor((y - M.origen[1]) / M.celda)]; }
+function hV(i, j) { i = Math.max(0, Math.min(M.n, i)); j = Math.max(0, Math.min(M.n, j)); return M.alturas[idxV(i, j)]; }
+function ruido(x, y) { const s = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453; return s - Math.floor(s); }
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+// ---------------------------------------------------------------- casillas (igual que kf4_editor.py)
+let tapadas = new Set();
+let cache = new Map();
+function trozo() { return Math.max(8, Math.ceil(M.n / 10.5)); }
+function calcularTapadas() {
+  tapadas = new Set();
+  const n = M.n, c = M.celda;
+  M.objetos.forEach((o) => {
+    const p = o.params || {};
+    if (o.tipo === "casa") {
+      const g = Math.round((o.rot || 0) / 90) * 90, ang = g * Math.PI / 180;
+      let w = p.ancho, d = p.fondo;
+      if (Math.round(g / 90) % 2) [w, d] = [d, w];
+      const x = M.origen[0] + Math.round((o.x - w / 2 - M.origen[0]) / c) * c + w / 2;
+      const y = M.origen[1] + Math.round((o.y - d / 2 - M.origen[1]) / c) * c + d / 2;
+      const W = p.ancho, D = p.fondo;
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+        const cx = M.origen[0] + (i + 0.5) * c - x, cy = M.origen[1] + (j + 0.5) * c - y;
+        const lx = cx * Math.cos(-ang) - cy * Math.sin(-ang), ly = cx * Math.sin(-ang) + cy * Math.cos(-ang);
+        if (Math.abs(lx) < W / 2 && Math.abs(ly) < D / 2) tapadas.add(i + "," + j);
+      }
+    } else if (o.tipo === "puente") {
+      const ang = (o.rot || 0) * Math.PI / 180;
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+        const cx = M.origen[0] + (i + 0.5) * c - o.x, cy = M.origen[1] + (j + 0.5) * c - o.y;
+        const lx = cx * Math.cos(-ang) - cy * Math.sin(-ang), ly = cx * Math.sin(-ang) + cy * Math.cos(-ang);
+        if (Math.abs(lx) < p.ancho / 2 && ly > 0 && ly < p.largo) tapadas.add(i + "," + j);
+      }
+    }
+  });
+}
+function celdaEn(i, j) {
+  if (i < 0 || j < 0 || i >= M.n || j >= M.n) return null;
+  const k = i + "," + j;
+  if (tapadas.has(k)) return "tapada";
+  if (cache.has(k)) return cache.get(k);
+  const c = M.celdas[k];
+  let out = null;
+  if (c && !c.terreno) {
+    if (!c.vacio) {
+      const tex = c.tex || "losas";
+      out = { tipo: "suelo", tex, pared: c.pared || tex, techo: c.techo ?? null, ttex: c.ttex || c.pared || tex, i, j, cc: c.cc || null };
+      if (c.esc) {
+        const [d, f0, f1] = c.esc;
+        Object.assign(out, { tipo: "escalera", dir: d, f0: +f0, f1: +f1 });
+        out.esq = d === "N" ? [f0, f0, f1, f1] : d === "S" ? [f1, f1, f0, f0] : d === "E" ? [f0, f1, f1, f0] : [f1, f0, f0, f1];
+      } else { const f = +(c.f || 0); out.esq = [f, f, f, f]; }
+    }
+  } else {
+    const t = M.texturas[idxC(i, j)];
+    if (t) {
+      const pt = M.paredes ? M.paredes[idxC(i, j)] : 0;
+      out = { tipo: "terreno", tex: PALETA[t] || "losas", pared: pt ? PALETA[pt] : (M.pared_terreno || "roca"),
+        techo: c && c.terreno ? (c.techo ?? null) : null, ttex: c && c.terreno ? (c.ttex || "muro") : "muro",
+        esq: [hV(i, j), hV(i + 1, j), hV(i + 1, j + 1), hV(i, j + 1)], i, j, cc: null };
+    }
+  }
+  // un techo que no queda por encima del suelo (p. ej. sobre un muro igual de alto) no existe
+  if (out && out.techo !== null && +out.techo <= Math.max(...out.esq) + 0.05) out.techo = null;
+  if (out && out.techo !== null) out.techo = +out.techo;
+  cache.set(k, out);
+  return out;
+}
+function pasos(c) { return Math.max(1, Math.round(Math.abs(c.f1 - c.f0) / 0.3)); }
+function perfil(c, lado) {
+  const [h00, h10, h11, h01] = c.esq;
+  if (c.tipo !== "escalera") return [[0, 1, ...({ S: [h00, h10], N: [h01, h11], W: [h00, h01], E: [h10, h11] })[lado]]];
+  const eje = "NS".includes(c.dir) ? "y" : "x", ladoEje = "WE".includes(lado) ? "y" : "x";
+  if (ladoEje !== eje) { const h = c.dir === lado ? c.f1 : c.f0; return [[0, 1, h, h]]; }
+  const n = pasos(c), dz = (c.f1 - c.f0) / n, out = [];
+  for (let m = 0; m < n; m++) { const k = "NE".includes(c.dir) ? m : n - 1 - m; const h = c.f0 + (k + 1) * dz; out.push([m / n, (m + 1) / n, h, h]); }
+  return out;
+}
+function alturaEn(x, y) {
+  const fx = (x - M.origen[0]) / M.celda, fy = (y - M.origen[1]) / M.celda;
+  const i = Math.floor(fx), j = Math.floor(fy), tx = fx - i, ty = fy - j;
+  const c = celdaEn(i, j);
+  let e;
+  if (c && c !== "tapada") e = c.esq; else e = [hV(i, j), hV(i + 1, j), hV(i + 1, j + 1), hV(i, j + 1)];
+  return (e[0] * (1 - tx) + e[1] * tx) * (1 - ty) + (e[3] * (1 - tx) + e[2] * tx) * ty;
+}
+function colorEn(x, y) {
+  if (!M.colores) return [1, 1, 1];
+  const n = M.n, fx = clamp((x - M.origen[0]) / M.celda, 0, n), fy = clamp((y - M.origen[1]) / M.celda, 0, n);
+  const i = Math.min(Math.floor(fx), n - 1), j = Math.min(Math.floor(fy), n - 1), tx = fx - i, ty = fy - j;
+  const g = (ii, jj) => { const v = M.colores[jj * (n + 1) + ii]; return [(v >> 16) & 255, (v >> 8) & 255, v & 255]; };
+  const a = g(i, j), b = g(i + 1, j), d = g(i, j + 1), e = g(i + 1, j + 1);
+  return [0, 1, 2].map((k) => ((a[k] * (1 - tx) + b[k] * tx) * (1 - ty) + (d[k] * (1 - tx) + e[k] * tx) * ty) / 128);
+}
+
+// ---------------------------------------------------------------- constructor de la malla
+// (x, y, z) del juego -> (x, z, -y) de three
+const V = (x, y, z) => new THREE.Vector3(x, z, -y);
+const escTex = (t) => (M && M.escala_tex ? M.escala_tex : (t === "losas" ? 3 : 4));
+let B = null;   // buffers por textura mientras se construye
+function buf(t) { if (!B.tex[t]) B.tex[t] = { pos: [], uv: [], col: [], nrm: [] }; return B.tex[t]; }
+// la misma luz que hornea el generador (LuzDia.piedra de kf4_prologo.py): sol con mucho contraste, penumbra bajo
+// los techos, y los bordes que caen al vacío se funden con la niebla. 128 = blanco del juego (1.0 aquí).
+const SOL = (() => { const v = [0.32, -0.55, 0.77], l = Math.hypot(...v); return v.map((x) => x / l); })();
+function colCelda(A, p) {
+  if (!A || A === "tapada" || A.tipo === "terreno") return colorEn(p[0], p[1]);
+  if (!A.cc) return [1, 1, 1];
+  const C = M.celda, tx = clamp((p[0] - (M.origen[0] + A.i * C)) / C, 0, 1), ty = clamp((p[1] - (M.origen[1] + A.j * C)) / C, 0, 1);
+  const g = (v) => [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+  const [a, b, c, d] = A.cc.map(g);    // esquinas 00, 10, 11, 01
+  return [0, 1, 2].map((k) => ((a[k] * (1 - tx) + b[k] * tx) * (1 - ty) + (d[k] * (1 - tx) + c[k] * tx) * ty) / 128);
+}
+function luzJuego(p, n, interior, fondo, cel) {
+  const d = Math.max(0, n[0] * SOL[0] + n[1] * SOL[1] + n[2] * SOL[2]), cielo = 0.5 + 0.5 * n[2];
+  let k = 0.10 + 1.55 * Math.pow(d, 0.8) + 0.20 * cielo;
+  if (interior > 0) k = k * (1 - interior) + 0.10 * interior;
+  let c = [128 * k * 1.03, 128 * k, 128 * k * 0.95];
+  if (p[2] < -10) { const t = clamp((-10 - p[2]) / 120, 0, 1) * 0.55; c = [c[0] * (1 - t) + 150 * t, c[1] * (1 - t) + 158 * t, c[2] * (1 - t) + 170 * t]; }
+  const m = cel === undefined ? colorEn(p[0], p[1]) : colCelda(cel, p);
+  c = c.map((v, z) => clamp(clamp(v, 0, 255) * m[z], 0, 255));
+  if (fondo > 0) c = c.map((v, z) => v * (1 - fondo) + M.niebla[z] * 0.62 * fondo);
+  return c.map((v) => v / 128);
+}
+// k: 1 normal, 0.55 bajo techo, 0.12 pie de un borde que cae al vacío (se funde con la niebla)
+function vert(b, p, uv, n, k, cel) {
+  b.pos.push(p[0], p[2], -p[1]); b.uv.push(uv[0], uv[1]); b.nrm.push(n[0], n[2], -n[1]);
+  const c = luzJuego(p, n, k === 0.55 ? 0.55 : 0, k === 0.12 ? 1 : 0, cel);
+  b.col.push(c[0], c[1], c[2]);
+}
+function quad(t, a, b, c, d, uva, uvb, uvc, uvd, n, ks, cs) {
+  const bb = buf(t); ks = ks || [1, 1, 1, 1]; cs = cs || [undefined, undefined, undefined, undefined];
+  vert(bb, a, uva, n, ks[0], cs[0]); vert(bb, b, uvb, n, ks[1], cs[1]); vert(bb, c, uvc, n, ks[2], cs[2]);
+  vert(bb, a, uva, n, ks[0], cs[0]); vert(bb, c, uvc, n, ks[2], cs[2]); vert(bb, d, uvd, n, ks[3], cs[3]);
+  B.tris += 2;
+}
+// abajo toma el color de la celda baja (clo) y arriba el de la alta (cup)
+function cara(t, p0, p1, lo0, lo1, up0, up1, n, interior, fondo, clo, cup) {
+  if (Math.max(up0 - lo0, up1 - lo1) < 0.005) return;
+  const e = escTex(t), u0 = (p0[0] + p0[1]) / e, u1 = (p1[0] + p1[1]) / e;
+  const k = interior ? 0.55 : 1, kf = fondo ? 0.12 : k;
+  quad(t, [p0[0], p0[1], lo0], [p1[0], p1[1], lo1], [p1[0], p1[1], up1], [p0[0], p0[1], up0],
+    [u0, -lo0 / e], [u1, -lo1 / e], [u1, -up1 / e], [u0, -up0 / e], n, [kf, kf, k, k], [clo, clo, cup, cup]);
+}
+function carasArista(A, Bc, lado, pA, pB, nB, vacio) {
+  const perfA = perfil(A, lado), op = { S: "N", N: "S", W: "E", E: "W" }[lado];
+  const perfB = vacio ? null : perfil(Bc, op);
+  const cortes = Array.from(new Set([0, 1, ...perfA.flatMap((t) => [t[0], t[1]]), ...(perfB ? perfB.flatMap((t) => [t[0], t[1]]) : [])])).sort((a, b) => a - b);
+  const val = (perf, t, izq) => {
+    for (const [t0, t1, h0, h1] of perf) if (izq ? (t0 <= t && t < t1) : (t0 < t && t <= t1)) return h0 + (h1 - h0) * (t1 > t0 ? (t - t0) / (t1 - t0) : 0);
+    return izq ? perf[0][2] : perf[perf.length - 1][3];
+  };
+  const P = (t) => [pA[0] + (pB[0] - pA[0]) * t, pA[1] + (pB[1] - pA[1]) * t];
+  const neg = [-nB[0], -nB[1], -nB[2]];
+  const prof = Math.max(0.01, M.borde_prof ?? 10);
+  for (let q = 0; q + 1 < cortes.length; q++) {
+    const t0 = cortes[q], t1 = cortes[q + 1];
+    if (t1 - t0 < 1e-6) continue;
+    const a0 = val(perfA, t0, true), a1 = val(perfA, t1, false);
+    if (vacio) { cara(A.pared, P(t0), P(t1), a0 - prof, a1 - prof, a0, a1, nB, false, true, A, A); continue; }
+    const b0 = val(perfB, t0, true), b1 = val(perfB, t1, false), d0 = a0 - b0, d1 = a1 - b1;
+    let tramos = [[t0, t1, d0, d1]];
+    if (d0 * d1 < 0) { const tc = t0 + (t1 - t0) * d0 / (d0 - d1); tramos = [[t0, tc, d0, 0], [tc, t1, 0, d1]]; }
+    for (const [s0, s1, e0, e1] of tramos) {
+      const ha0 = val(perfA, s0, true), ha1 = val(perfA, s1, false), hb0 = val(perfB, s0, true), hb1 = val(perfB, s1, false);
+      if (Math.max(e0, e1) > 0.005) cara(A.pared, P(s0), P(s1), hb0, hb1, ha0, ha1, nB, Bc.techo !== null, false, Bc, A);
+      else if (Math.min(e0, e1) < -0.005) cara(Bc.pared, P(s0), P(s1), ha0, ha1, hb0, hb1, neg, A.techo !== null, false, A, Bc);
+    }
+  }
+  const cA = A.techo, cB = vacio ? null : Bc.techo;
+  if (cA === null && cB === null) return;
+  const p0 = P(0), p1 = P(1), g = M.grosor_techo ?? 0.6;
+  if (cA !== null && cB !== null) {
+    if (Math.abs(cA - cB) < 0.005) return;
+    if (cA < cB) cara(A.ttex, p0, p1, cA, cA, cB, cB, nB, true);
+    else cara(Bc.ttex, p0, p1, cB, cB, cA, cA, neg, true);
+    return;
+  }
+  if (cA !== null) {
+    const altoB = vacio ? -1e9 : Math.max(...perfil(Bc, op).flatMap((t) => [t[2], t[3]]));
+    if (altoB < cA - 0.005) cara(A.ttex, p0, p1, cA, cA, cA + g, cA + g, nB, false);
+  } else {
+    const altoA = Math.max(...perfA.flatMap((t) => [t[2], t[3]]));
+    if (altoA < cB - 0.005) cara(Bc.ttex, p0, p1, cB, cB, cB + g, cB + g, neg, false);
+  }
+}
+function escalera(c, x0, y0) {
+  const C = M.celda, n = pasos(c), dz = (c.f1 - c.f0) / n, up = [0, 0, 1], k = c.techo !== null ? 0.55 : 1, e = escTex(c.tex);
+  for (let s = 0; s < n; s++) {
+    const u0 = s / n, u1 = (s + 1) / n, h0 = c.f0 + s * dz, h1 = c.f0 + (s + 1) * dz;
+    let r, fr, nf;
+    if (c.dir === "N") { r = [x0, y0 + u0 * C, x0 + C, y0 + u1 * C]; fr = [[x0, y0 + u0 * C], [x0 + C, y0 + u0 * C]]; nf = [0, -1, 0]; }
+    else if (c.dir === "S") { r = [x0, y0 + (1 - u1) * C, x0 + C, y0 + (1 - u0) * C]; fr = [[x0 + C, y0 + (1 - u0) * C], [x0, y0 + (1 - u0) * C]]; nf = [0, 1, 0]; }
+    else if (c.dir === "E") { r = [x0 + u0 * C, y0, x0 + u1 * C, y0 + C]; fr = [[x0 + u0 * C, y0 + C], [x0 + u0 * C, y0]]; nf = [-1, 0, 0]; }
+    else { r = [x0 + (1 - u1) * C, y0, x0 + (1 - u0) * C, y0 + C]; fr = [[x0 + (1 - u0) * C, y0], [x0 + (1 - u0) * C, y0 + C]]; nf = [1, 0, 0]; }
+    const a = [r[0], r[1], h1], b = [r[2], r[1], h1], cc = [r[2], r[3], h1], d = [r[0], r[3], h1];
+    quad(c.tex, a, b, cc, d, [a[0] / e, a[1] / e], [b[0] / e, b[1] / e], [cc[0] / e, cc[1] / e], [d[0] / e, d[1] / e], up, [k, k, k, k], [c, c, c, c]);
+    cara(c.pared, fr[0], fr[1], h0, h0, h1, h1, nf, c.techo !== null, false, c, c);
+  }
+}
+function lineaRejilla(p0, p1, h0, h1) { B.lin.push(p0[0], h0 + 0.03, -p0[1], p1[0], h1 + 0.03, -p1[1]); }
+function construirMundo(i0, j0, i1, j1) {
+  const n = M.n, C = M.celda;
+  if (i0 === undefined) { i0 = 0; j0 = 0; i1 = n; j1 = n; cache = new Map(); calcularTapadas(); }
+  B = { tex: {}, lin: [], tris: 0, zmin: Infinity, hayVacio: false };
+  for (let j = j0; j < Math.min(n, j1); j++) for (let i = i0; i < Math.min(n, i1); i++) {
+    const A = celdaEn(i, j);
+    if (!A || A === "tapada") continue;
+    const x0 = M.origen[0] + i * C, y0 = M.origen[1] + j * C;
+    const [h00, h10, h11, h01] = A.esq;
+    B.zmin = Math.min(B.zmin, h00, h10, h11, h01);
+    const a = [x0, y0, h00], b = [x0 + C, y0, h10], cc = [x0 + C, y0 + C, h11], d = [x0, y0 + C, h01];
+    const k = A.techo !== null ? 0.55 : 1;
+    if (A.tipo === "escalera") escalera(A, x0, y0);
+    else {
+      const e = escTex(A.tex);
+      const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], v = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
+      let nr = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+      const L = Math.hypot(...nr) || 1; nr = nr.map((x) => x / L); if (nr[2] < 0) nr = nr.map((x) => -x);
+      quad(A.tex, a, b, cc, d, [a[0] / e, a[1] / e], [b[0] / e, b[1] / e], [cc[0] / e, cc[1] / e], [d[0] / e, d[1] / e], nr, [k, k, k, k], [A, A, A, A]);
+    }
+    if (A.techo !== null) {
+      const t = A.techo, e = escTex(A.ttex), dn = [0, 0, -1];
+      const pts = [[x0, y0, t], [x0, y0 + C, t], [x0 + C, y0 + C, t], [x0 + C, y0, t]];
+      quad(A.ttex, ...pts, ...pts.map((p) => [p[0] / e, p[1] / e]), dn, [0.55, 0.55, 0.55, 0.55]);
+      if (M.cubierta) {
+        const g = M.grosor_techo ?? 0.6, top = [[x0, y0, t + g], [x0 + C, y0, t + g], [x0 + C, y0 + C, t + g], [x0, y0 + C, t + g]];
+        quad(A.ttex, ...top, ...top.map((p) => [p[0] / e, p[1] / e]), [0, 0, 1]);
+      }
+    }
+    // rejilla: el borde sur y oeste de cada casilla (y norte/este si no hay vecina)
+    const pS = perfil(A, "S"), pW = perfil(A, "W");
+    lineaRejilla([x0, y0], [x0 + C, y0], pS[0][2], pS[pS.length - 1][3]);
+    lineaRejilla([x0, y0], [x0, y0 + C], pW[0][2], pW[pW.length - 1][3]);
+    for (const [lado, vi, vj, p0, p1, nB] of [
+      ["N", i, j + 1, [x0, y0 + C], [x0 + C, y0 + C], [0, 1, 0]], ["E", i + 1, j, [x0 + C, y0], [x0 + C, y0 + C], [1, 0, 0]],
+      ["S", i, j - 1, [x0, y0], [x0 + C, y0], [0, -1, 0]], ["W", i - 1, j, [x0, y0], [x0, y0 + C], [-1, 0, 0]]]) {
+      const Bc = celdaEn(vi, vj);
+      if (Bc === "tapada") continue;
+      if (!Bc) {
+        B.hayVacio = true;
+        carasArista(A, null, lado, p0, p1, nB, true);
+        if (lado === "N" || lado === "E") { const pp = perfil(A, lado); lineaRejilla(p0, p1, pp[0][2], pp[pp.length - 1][3]); }
+      } else if (lado === "N" || lado === "E") carasArista(A, Bc, lado, p0, p1, nB, false);
+    }
+  }
+  return B;
+}
+
+// ---------------------------------------------------------------- escena
+const vp = document.getElementById("vp");
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+vp.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+const camara = new THREE.PerspectiveCamera(60, 1, 0.1, 4000);
+camara.position.set(40, 45, 55);
+const controles = new THREE.OrbitControls(camara, renderer.domElement);
+controles.mouseButtons = { LEFT: -1, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
+controles.target.set(0, 0, -10);
+controles.maxPolarAngle = Math.PI * 0.495;
+controles.update();
+scene.add(new THREE.HemisphereLight(0xe8ecf2, 0x3a3630, 0.6));
+const sol = new THREE.DirectionalLight(0xfff4e6, 1.1);
+sol.position.set(0.32, 0.77, 0.55).multiplyScalar(100);
+scene.add(sol);
+
+const matTex = {};
+function material(nombre) {
+  if (!matTex[nombre]) {
+    const m = new THREE.MeshBasicMaterial({ color: texturas[nombre] ? 0xffffff : COLOR_TEX[nombre] || "#888", vertexColors: true, side: THREE.DoubleSide });
+    if (texturas[nombre]) m.map = texturas[nombre];
+    matTex[nombre] = m;
+  }
+  return matTex[nombre];
+}
+const grupoMundo = new THREE.Group(); scene.add(grupoMundo);
+
+const grupoPiezas = new THREE.Group(); scene.add(grupoPiezas);
+const grupoMarcas = new THREE.Group(); scene.add(grupoMarcas);
+const cursor = new THREE.Mesh(new THREE.RingGeometry(0.96, 1, 48), new THREE.MeshBasicMaterial({ color: 0xd6b46a, side: THREE.DoubleSide, depthTest: false, transparent: true, opacity: 0.9 }));
+cursor.rotation.x = -Math.PI / 2; cursor.renderOrder = 10; scene.add(cursor);
+// caja de las casillas elegidas y plano del nivel
+const cajaSel = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xd6b46a, transparent: true, opacity: 0.22, depthWrite: false }));
+const bordeSel = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({ color: 0xd6b46a }));
+cajaSel.renderOrder = 9; bordeSel.renderOrder = 9; cajaSel.add(bordeSel); scene.add(cajaSel); cajaSel.visible = false;
+const planoNivel = new THREE.GridHelper(50, 20, 0xd6b46a, 0x8a7444);
+planoNivel.material.transparent = true; planoNivel.material.opacity = 0.45; planoNivel.material.depthWrite = false;
+scene.add(planoNivel);
+const flechaEsc = new THREE.ArrowHelper(new THREE.Vector3(0, 0, -1), new THREE.Vector3(), 3, 0xffe9a8, 1, 0.7);
+scene.add(flechaEsc); flechaEsc.visible = false;
+const planoMat = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+
+function aplicarNiebla() {
+  const c = new THREE.Color(`rgb(${M.niebla[0]},${M.niebla[1]},${M.niebla[2]})`);
+  scene.background = c;
+  const lejos = M.niebla_k / 2000;
+  scene.fog = new THREE.Fog(c, lejos * 0.12, lejos);
+}
+
+// la zona de muerte: en KF4, caer al vacío mata (la vida llega a 0 al cabo de unos 2,5 s de caída)
+const rejillaObra = new THREE.GridHelper(1, 1, 0x7a6a40, 0x7a6a40);
+rejillaObra.material.transparent = true; rejillaObra.material.opacity = 0.35; rejillaObra.material.depthWrite = false; scene.add(rejillaObra);
+function ponerRejillaObra() {
+  const lado = M.n * M.celda;
+  scene.remove(rejillaObra); rejillaObra.geometry.dispose();
+  const g = new THREE.GridHelper(lado, M.n, 0x7a6a40, 0x7a6a40);
+  rejillaObra.geometry = g.geometry;
+  rejillaObra.position.copy(V(M.origen[0] + lado / 2, M.origen[1] + lado / 2, -0.02));
+  scene.add(rejillaObra);
+}
+const zonaMuerte = new THREE.Group(); scene.add(zonaMuerte);
+(function () {
+  const plano = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0xc0281e, transparent: true, opacity: 0.14, side: THREE.DoubleSide, depthWrite: false, fog: false }));
+  plano.rotation.x = -Math.PI / 2; zonaMuerte.add(plano);
+  const rej = new THREE.GridHelper(1, 40, 0xff5040, 0xff5040); rej.material.transparent = true; rej.material.opacity = 0.3; rej.material.fog = false; zonaMuerte.add(rej);
+  const cv = document.createElement("canvas"); cv.width = 512; cv.height = 96;
+  const x = cv.getContext("2d"); x.font = "bold 44px sans-serif"; x.fillStyle = "#ff6a58"; x.textAlign = "center"; x.textBaseline = "middle";
+  x.fillText("ZONA DE MUERTE", 256, 34); x.font = "26px sans-serif"; x.fillText("caer al vacío mata", 256, 76);
+  const rot = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false, fog: false, transparent: true }));
+  rot.renderOrder = 20; zonaMuerte.add(rot);
+  zonaMuerte.userData = { plano, rej, rot };
+})();
+function ponerZonaMuerte(b) {
+  const { plano, rej, rot } = zonaMuerte.userData;
+  const lado = M.n * M.celda, z = (isFinite(b.zmin) ? b.zmin : 0) - (M.borde_prof ?? 10) - 0.3;
+  const cx = M.origen[0] + lado / 2, cy = M.origen[1] + lado / 2;
+  [plano, rej].forEach((o) => { o.position.copy(V(cx, cy, z)); });
+  plano.scale.set(lado * 1.6, lado * 1.6, 1); rej.scale.set(lado * 1.6, 1, lado * 1.6);
+  rot.position.copy(V(cx, M.origen[1] - lado * 0.1, z + 2)); rot.scale.set(lado * 0.25, lado * 0.047, 1);
+  zonaMuerte.visible = !local.vista || true;
+}
+// El mundo se dibuja en trozos de TR x TR casillas: al editar solo se rehacen los trozos tocados.
+const TR = 16;
+const trozos = new Map();          // "ti,tj" -> { meshes, lineas, tris, zmin }
+let sucios = new Set(), todoSucio = true;
+const lineas = new THREE.Group(); scene.add(lineas);
+function marcar(i, j) {
+  for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+    const a = i + di, b = j + dj;
+    if (a < 0 || b < 0 || a >= M.n || b >= M.n) continue;
+    sucios.add(Math.floor(a / TR) + "," + Math.floor(b / TR));
+  }
+}
+function marcarVertice(i, j) { marcar(i - 1, j - 1); marcar(i, j); }
+function marcarTodo() { todoSucio = true; }
+let pendiente = false;
+function rehacerMundo() { if (!pendiente) { pendiente = true; requestAnimationFrame(() => { pendiente = false; construirMundoAhora(); }); } }
+let trisEditor = 0;
+function quitarTrozo(k) {
+  const t = trozos.get(k); if (!t) return;
+  t.meshes.forEach((m) => { grupoMundo.remove(m); m.geometry.dispose(); });
+  if (t.lineas) { lineas.remove(t.lineas); t.lineas.geometry.dispose(); }
+  trozos.delete(k);
+}
+function construirTrozo(ti, tj) {
+  const k = ti + "," + tj;
+  quitarTrozo(k);
+  const b = construirMundo(ti * TR, tj * TR, (ti + 1) * TR, (tj + 1) * TR);
+  const t = { meshes: [], lineas: null, tris: b.tris, zmin: b.zmin };
+  for (const [tx, d] of Object.entries(b.tex)) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(d.pos, 3));
+    g.setAttribute("uv", new THREE.Float32BufferAttribute(d.uv, 2));
+    g.setAttribute("normal", new THREE.Float32BufferAttribute(d.nrm, 3));
+    g.setAttribute("color", new THREE.Float32BufferAttribute(d.col, 3));
+    g.computeBoundingSphere();
+    const m = new THREE.Mesh(g, material(tx)); grupoMundo.add(m); t.meshes.push(m);
+  }
+  if (b.lin.length) {
+    const lg = new THREE.BufferGeometry(); lg.setAttribute("position", new THREE.Float32BufferAttribute(b.lin, 3));
+    t.lineas = new THREE.LineSegments(lg, matLineas); lineas.add(t.lineas);
+  }
+  trozos.set(k, t);
+}
+const matLineas = new THREE.LineBasicMaterial({ color: 0x101010, transparent: true, opacity: 0.45 });
+function construirMundoAhora(todos) {
+  if (todos) todoSucio = true;
+  const todosHechos = todoSucio;
+  cache = new Map();
+  if (todoSucio) {
+    calcularTapadas();
+    [...trozos.keys()].forEach(quitarTrozo);
+    const nt = Math.ceil(M.n / TR);
+    for (let tj = 0; tj < nt; tj++) for (let ti = 0; ti < nt; ti++) construirTrozo(ti, tj);
+  } else sucios.forEach((k) => { const [a, b] = k.split(",").map(Number); construirTrozo(a, b); });
+  todoSucio = false; sucios = new Set();
+  lineas.visible = rejilla && !local.vista;
+  grupoMundo.visible = !local.vista;
+  let tris = 0, zmin = Infinity;
+  trozos.forEach((t) => { tris += t.tris; zmin = Math.min(zmin, t.zmin); });
+  trisEditor = tris;
+  ponerZonaMuerte({ zmin });
+  if (todosHechos) ponerRejillaObra();
+  rejillaObra.visible = rejilla && !local.vista;
+  document.getElementById("stTris").textContent = tris.toLocaleString("es");
+  memoriaEstimada();
+}
+
+// ---- vistas previas de las piezas ----
+function matPara(nombre, k) {
+  const m = new THREE.MeshLambertMaterial({ color: new THREE.Color(COLOR_TEX[nombre]).multiplyScalar(k || 1) });
+  if (texturas[nombre]) { m.map = texturas[nombre]; m.color.setScalar(k || 1); }
+  return m;
+}
+function caja(g, mat, x0, y0, z0, x1, y1, z1) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(Math.abs(x1 - x0), Math.abs(z1 - z0), Math.abs(y1 - y0)), mat);
+  m.position.copy(V((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2));
+  g.add(m); return m;
+}
+function cilindro(g, mat, x, y, r, z0, z1, lados, r2) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r2 !== undefined ? r2 : r, r, z1 - z0, lados || 8, 1, false), mat);
+  m.position.copy(V(x, y, (z0 + z1) / 2)); g.add(m); return m;
+}
+let texTorre = null;
+function texturaTorre() {
+  if (texTorre) return texTorre;
+  const cv = document.createElement("canvas"); cv.width = 256; cv.height = 256;
+  const x = cv.getContext("2d");
+  x.fillStyle = "#b9b4a8"; x.fillRect(0, 0, 256, 256);
+  x.fillStyle = "#141414";
+  for (let i = 0; i < 8; i++) x.fillRect(i * 32 + 18, 0, 12, 206);
+  x.fillStyle = "#8e897e"; x.fillRect(0, 206, 256, 50);
+  texTorre = new THREE.CanvasTexture(cv); texTorre.wrapS = texTorre.wrapT = THREE.RepeatWrapping;
+  return texTorre;
+}
+function vistaPieza(o) {
+  const g = new THREE.Group();
+  const p = o.params || {};
+  const piedra = matPara("muro"), sill = matPara("sillar"), estr = matPara("estrias"), oscuro = new THREE.MeshLambertMaterial({ color: 0x151515 });
+  if (o.tipo === "casa") {
+    const w = p.ancho, d = p.fondo, h = p.alto;
+    caja(g, piedra, -w / 2, -d / 2, 0, w / 2, d / 2, p.ruina ? h * 0.75 : h);
+    const lado = { N: [0, d / 2, 0, 1], S: [0, -d / 2, 0, -1], E: [w / 2, 0, 1, 0], W: [-w / 2, 0, -1, 0] }[p.puerta || "N"];
+    const pu = caja(g, oscuro, lado[0] - (lado[3] ? 1.25 : 0.05), lado[1] - (lado[2] ? 1.25 : 0.05), 0, lado[0] + (lado[3] ? 1.25 : 0.05), lado[1] + (lado[2] ? 1.25 : 0.05), 3.1);
+    pu.position.add(V(lado[2] * 0.03, lado[3] * 0.03, 0));
+    if (!p.ruina) {
+      const cumbre = p.cumbre || 4.5, largoX = w >= d;
+      const forma = new THREE.Shape();
+      const L = largoX ? d : w;
+      forma.moveTo(-L / 2 - 0.45, 0); forma.lineTo(L / 2 + 0.45, 0); forma.lineTo(0, cumbre); forma.closePath();
+      const largo = (largoX ? w : d) + 0.9;
+      const geo = new THREE.ExtrudeGeometry(forma, { depth: largo, bevelEnabled: false });
+      geo.translate(0, 0, -largo / 2);
+      const t = new THREE.Mesh(geo, matPara("losas", 0.95));
+      t.position.copy(V(0, 0, h - 0.3));
+      if (largoX) t.rotation.y = Math.PI / 2;
+      g.add(t);
+    }
+    if (p.chimenea) caja(g, matPara("ladrillo"), -0.7, -d / 2 - 1.5, 0, 0.7, -d / 2 - 0.1, h + (p.chimenea_alto || 7));
+  } else if (o.tipo === "columna") {
+    cilindro(g, estr, 0, 0, p.radio, 0, p.alto, 8);
+  } else if (o.tipo === "murete") {
+    caja(g, piedra, -p.largo / 2, -0.25, 0, p.largo / 2, 0.25, p.alto);
+  } else if (o.tipo === "portal") {
+    const w = p.ancho / 2;
+    cilindro(g, estr, -w, 0, 0.8, 0, p.alto, 8); cilindro(g, estr, w, 0, 0.8, 0, p.alto, 8);
+    caja(g, matPara("banda"), -w - 0.9, -0.8, p.alto, w + 0.9, 0.8, p.alto + 1.6);
+  } else if (o.tipo === "escaleras") {
+    const n = Math.max(1, Math.round(p.alto / 0.3));
+    for (let k = 0; k < n; k++) caja(g, matPara("losas"), -p.ancho / 2, p.largo * k / n, -0.5, p.ancho / 2, p.largo * (k + 1) / n, p.alto * (k + 1) / n);
+  } else if (o.tipo === "puente") {
+    const w = p.ancho / 2;
+    caja(g, sill, -w, 0, -1.2, w, p.largo, Math.max(0.2, p.subida));
+    for (let y = 6; y < p.largo - 3; y += 12.5) caja(g, sill, -w - 0.4, y - 1.4, -120, w + 0.4, y + 1.4, -3);
+  } else if (o.tipo === "barbacana") {
+    caja(g, sill, -8, 0, -40, 8, 12, 18.2);
+    caja(g, oscuro, -2.2, -0.05, 0, 2.2, 0.05, 6);
+  } else if (o.tipo === "torre") {
+    const t = texturaTorre().clone(); t.needsUpdate = true; t.repeat.set(Math.round(p.radio / 4), 18);
+    cilindro(g, new THREE.MeshLambertMaterial({ map: t }), 0, 0, p.radio, 24, 700, 60);
+    cilindro(g, sill, 0, 0, p.radio, -260, 24, 60);
+  } else if (o.tipo === "ruina") {
+    cilindro(g, matPara("roca"), 0, 0, p.lado * 0.75, -150, 0, 10, p.lado * 0.75);
+    const L = p.lado, hp = 19 * p.pisos;
+    for (let k = 0; k < 4; k++) for (let i = 0; i < 6; i++) {
+      const f = (i + 0.5) / 6 - 0.5, ang = Math.PI / 2 * k;
+      const cx = Math.cos(ang) * L / 2 - Math.sin(ang) * f * L, cy = Math.sin(ang) * L / 2 + Math.cos(ang) * f * L;
+      cilindro(g, estr, cx, cy, 0.75, 0, hp * (0.6 + 0.4 * ruido(i, k)), 4);
+    }
+    caja(g, oscuro, -L / 2 + 2.5, -L / 2 + 2.5, 0, L / 2 - 2.5, L / 2 - 2.5, hp * 0.9);
+  }
+  return g;
+}
+function marca(color, alto) {
+  const g = new THREE.Group();
+  const m = new THREE.Mesh(new THREE.ConeGeometry(0.45, alto, 10), new THREE.MeshBasicMaterial({ color }));
+  m.rotation.x = Math.PI; m.position.y = alto / 2 + 0.2; g.add(m);
+  return g;
+}
+function construirPiezas() {
+  grupoPiezas.clear(); grupoMarcas.clear();
+  cache = new Map(); calcularTapadas();
+  M.objetos.forEach((o, i) => {
+    const g = vistaPieza(o);
+    const z = (o.z !== undefined && o.z !== null) ? o.z : alturaEn(o.x, o.y);
+    g.position.copy(V(o.x, o.y, z)); g.rotation.y = (o.rot || 0) * Math.PI / 180;
+    g.userData = { kind: "obj", i };
+    if (seleccion && seleccion.kind === "obj" && seleccion.i === i) resaltar(g);
+    grupoPiezas.add(g);
+  });
+  const poner = (g, x, y, sel) => { g.position.copy(V(x, y, alturaEn(x, y))); g.userData = sel; if (seleccion && seleccion.kind === sel.kind && seleccion.i === sel.i) resaltar(g); grupoMarcas.add(g); };
+  const ini = marca(0x4da3ff, 1.8);
+  const flecha = new THREE.Mesh(new THREE.ConeGeometry(0.3, 1.2, 8), new THREE.MeshBasicMaterial({ color: 0x4da3ff }));
+  flecha.rotation.x = -Math.PI / 2; flecha.position.set(0, 2.6, -0.9); ini.add(flecha);
+  ini.rotation.y = (M.inicio.rumbo || 0) * Math.PI / 180;
+  poner(ini, M.inicio.x, M.inicio.y, { kind: "inicio", i: 0 });
+  if (M.guardado) poner(marca(0x55e0c8, 1.4), M.guardado.x, M.guardado.y, { kind: "guardado", i: 0 });
+  M.items.forEach((it, i) => poner(marca(0xe9cf6a, 0.9), it.x, it.y, { kind: "item", i }));
+  M.enemigos.forEach((e, i) => poner(marca(0xd0705c, 1.4), e.x, e.y, { kind: "enemigo", i }));
+  grupoPiezas.visible = !local.vista;
+  document.getElementById("stObj").textContent = M.objetos.length;
+}
+function resaltar(g) {
+  // las marcas usan MeshBasicMaterial, que no tiene "emissive": ponérselo rompía el dibujado de todo el editor
+  g.traverse((m) => {
+    if (!m.isMesh) return;
+    m.material = m.material.clone();
+    if (m.material.emissive) m.material.emissive = new THREE.Color(0x4a3a10);
+    else m.material.color.lerp(new THREE.Color(0xffffff), 0.55);
+  });
+}
+function todo() { calcularTapadas(); construirMundoAhora(true); construirPiezas(); }
+
+// ---------------------------------------------------------------- deshacer
+const pasado = [], futuro = [];
+function foto() { return JSON.stringify(M); }
+function historial() {
+  pasado.push(foto()); if (pasado.length > 80) pasado.shift();
+  futuro.length = 0; botonesHistorial();
+}
+function botonesHistorial() {
+  document.getElementById("bDeshacer").disabled = !pasado.length;
+  document.getElementById("bRehacer").disabled = !futuro.length;
+}
+function restaurar(s) { const sel = null; M = JSON.parse(s); seleccion = sel; cargarCampos(); todo(); inspector(); guardarLocal(); texturasDelMapa(); }
+function deshacer() { if (!pasado.length) return; futuro.push(foto()); restaurar(pasado.pop()); botonesHistorial(); toast("Deshecho"); }
+function rehacer() { if (!futuro.length) return; pasado.push(foto()); restaurar(futuro.pop()); botonesHistorial(); toast("Rehecho"); }
+document.getElementById("bDeshacer").onclick = deshacer;
+document.getElementById("bRehacer").onclick = rehacer;
+
+// ---------------------------------------------------------------- interfaz
+function botonesHerramienta(cont, lista) {
+  const el = document.getElementById(cont);
+  lista.forEach(([id, txt]) => {
+    const b = document.createElement("button"); b.textContent = txt; b.dataset.h = id; b.id = "h_" + id;
+    b.onclick = () => elegir(id); el.appendChild(b);
+  });
+}
+botonesHerramienta("toolsConstruir", HERR_CONSTRUIR);
+botonesHerramienta("toolsTerreno", HERR_TERRENO);
+botonesHerramienta("toolsPiezas", Object.entries(PIEZAS).map(([k, v]) => ["pieza:" + k, v.nombre]));
+botonesHerramienta("toolsMarcas", HERR_MARCAS);
+(function () {
+  const el = document.getElementById("modosColor");
+  MODOS_COLOR.forEach(([id, txt]) => {
+    const b = document.createElement("button"); b.textContent = txt; b.dataset.modo = id;
+    b.onclick = () => { modoColor = id; el.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x.dataset.modo === id)); if (herramienta !== "color") elegir("color"); };
+    if (id === modoColor) b.classList.add("on");
+    el.appendChild(b);
+  });
+})();
+document.getElementById("bPintarColor").onclick = () => elegir("color");
+function elegir(id) {
+  herramienta = id;
+  document.querySelectorAll("[data-h]").forEach((b) => b.classList.toggle("on", b.dataset.h === id));
+  const todas = HERR_CONSTRUIR.concat(HERR_TERRENO, HERR_MARCAS);
+  const t = id.startsWith("pieza:") ? "Poner " + PIEZAS[id.slice(6)].nombre.toLowerCase() : (todas.find((h) => h[0] === id) || [0, id])[1];
+  document.getElementById("stTool").textContent = t;
+  document.getElementById("ayuda").textContent = AYUDA[id] || (id.startsWith("pieza:") ? "Pulsa en el suelo para ponerla. Luego, con Seleccionar, la mueves, giras (Q, E) y ajustas a la derecha." : "Pulsa en el suelo para ponerla.");
+  cursor.visible = PINCEL.includes(id);
+  if (id !== "color") puntosColor.count = 0;
+  planoNivel.visible = false;
+  cajaSel.visible = false; flechaEsc.visible = false;
+  if (id === "pintar" && slotActivo === "suelo" && texPintar() === 0) { /* vacío en suelo: abre el abismo */ }
+}
+function texPintar() { return slots[slotActivo]; }
+function fondoTex(i, n) {
+  i.style.background = n === "vacio" ? "repeating-linear-gradient(45deg,#000 0 6px,#2a2a2a 6px 12px)" : COLOR_TEX[n];
+  if (texturas[n] && texturas[n].image) { i.style.backgroundImage = `url(${texturas[n].image.src})`; i.style.backgroundSize = "cover"; }
+}
+function swatches() {
+  const sl = document.getElementById("slots"); sl.innerHTML = "";
+  [["suelo", "Suelo"], ["pared", "Pared"], ["techo", "Techo"]].forEach(([k, txt]) => {
+    const b = document.createElement("button"); b.type = "button"; b.className = "slot" + (k === slotActivo ? " on" : "");
+    const i = document.createElement("i"); fondoTex(i, PALETA[slots[k]]);
+    const s = document.createElement("span"); s.textContent = txt;
+    b.append(i, s); b.onclick = () => { slotActivo = k; swatches(); }; sl.appendChild(b);
+  });
+  const el = document.getElementById("swatches"); el.innerHTML = "";
+  PALETA.forEach((n, t) => {
+    if (t === 0 && slotActivo !== "suelo") return;
+    const d = document.createElement("button"); d.className = "sw" + (t === slots[slotActivo] ? " on" : ""); d.type = "button";
+    const i = document.createElement("i"); fondoTex(i, n);
+    const b = document.createElement("b"); b.textContent = NOMBRE_TEX[n];
+    d.append(i, b);
+    d.onclick = () => { slots[slotActivo] = t; swatches(); };
+    el.appendChild(d);
+  });
+  const sp = document.getElementById("sParedTerreno");
+  if (!sp.options.length) PALETA.slice(1).forEach((n) => { const o = document.createElement("option"); o.value = n; o.textContent = NOMBRE_TEX[n]; sp.appendChild(o); });
+}
+const rRadio = document.getElementById("rRadio"), rFuerza = document.getElementById("rFuerza"), rPaso = document.getElementById("rPaso");
+function etiquetas() {
+  document.getElementById("vRadio").textContent = (+rRadio.value).toFixed(1) + " m";
+  document.getElementById("vFuerza").textContent = (+rFuerza.value).toFixed(1);
+  document.getElementById("vPaso").textContent = +rPaso.value ? (+rPaso.value).toFixed(2) + " m" : "libre";
+  document.getElementById("vNiebla").textContent = Math.round(M.niebla_k / 2000) + " m";
+  document.getElementById("mTrozo").textContent = Math.round(trozo() * M.celda);
+  cursor.scale.setScalar(+rRadio.value);
+}
+[rRadio, rFuerza, rPaso].forEach((r) => r.oninput = etiquetas);
+function toast(t) {
+  const el = document.getElementById("toast"); el.textContent = t; el.hidden = false;
+  clearTimeout(toast.t); toast.t = setTimeout(() => (el.hidden = true), 2400);
+}
+
+// ---- inspector ----
+function campo(cont, etiqueta, tipo, valor, alCambiar, opciones) {
+  const row = document.createElement("label"); row.className = "field";
+  const s = document.createElement("span"); s.textContent = etiqueta; row.appendChild(s);
+  let inp;
+  if (tipo === "select") {
+    inp = document.createElement("select");
+    opciones.forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; if (String(v) === String(valor)) o.selected = true; inp.appendChild(o); });
+    inp.onchange = () => { historial(); alCambiar(inp.value); };
+  } else if (tipo === "bool") {
+    inp = document.createElement("input"); inp.type = "checkbox"; inp.checked = !!valor; inp.style.justifySelf = "end"; inp.style.width = "auto";
+    inp.onchange = () => { historial(); alCambiar(inp.checked); };
+  } else {
+    inp = document.createElement("input"); inp.type = "number"; inp.step = "0.5"; inp.value = valor;
+    inp.onchange = () => { historial(); alCambiar(parseFloat(inp.value)); };
+  }
+  inp.id = "f_" + etiqueta.replace(/\W+/g, "_"); row.appendChild(inp); cont.appendChild(row);
+}
+const ETQ = { ancho: "Ancho (m)", fondo: "Fondo (m)", alto: "Alto (m)", cumbre: "Alto del tejado", puerta: "Lado de la puerta", chimenea: "Chimenea", chimenea_alto: "Alto de la chimenea", ruina: "En ruinas", hundido: "Tejado hundido", radio: "Radio (m)", rota: "Rota", largo: "Largo (m)", subida: "Subida (m)", lado: "Lado (m)", pisos: "Pisos" };
+function inspector() {
+  const cont = document.getElementById("inspCampos"); cont.innerHTML = "";
+  document.getElementById("inspVacio").hidden = !!seleccion;
+  if (!seleccion) return;
+  const rehacerP = () => { todo(); guardarLocal(); };
+  const h = document.createElement("h2"); cont.appendChild(h);
+  if (seleccion.kind === "obj") {
+    const o = M.objetos[seleccion.i];
+    if (!o) { seleccion = null; return inspector(); }
+    h.textContent = PIEZAS[o.tipo].nombre;
+    campo(cont, "X", "num", o.x, (v) => { o.x = v; rehacerP(); });
+    campo(cont, "Y", "num", o.y, (v) => { o.y = v; rehacerP(); });
+    campo(cont, "Altura fija (vacío = el suelo)", "num", o.z ?? "", (v) => { o.z = isNaN(v) ? null : v; rehacerP(); });
+    campo(cont, "Giro (grados)", "num", o.rot || 0, (v) => { o.rot = v; rehacerP(); });
+    Object.entries(o.params).forEach(([k, v]) => {
+      if (k === "puerta") campo(cont, ETQ[k], "select", v, (x) => { o.params[k] = x; rehacerP(); }, [["N", "Norte (+Y)"], ["S", "Sur"], ["E", "Este"], ["W", "Oeste"]]);
+      else if (typeof v === "boolean") campo(cont, ETQ[k] || k, "bool", v, (x) => { o.params[k] = x; rehacerP(); });
+      else campo(cont, ETQ[k] || k, "num", v, (x) => { o.params[k] = x; rehacerP(); });
+    });
+  } else if (seleccion.kind === "item") {
+    const it = M.items[seleccion.i]; h.textContent = "Objeto del suelo";
+    campo(cont, "Objeto", "select", it.id, (v) => { it.id = parseInt(v, 10); rehacerP(); }, OBJETOS);
+  } else if (seleccion.kind === "enemigo") {
+    const e = M.enemigos[seleccion.i]; h.textContent = "Enemigo";
+    campo(cont, "Tipo", "select", e.tipo, (v) => { e.tipo = v; rehacerP(); }, ENEMIGOS);
+  } else if (seleccion.kind === "inicio") {
+    h.textContent = "Inicio del jugador";
+    campo(cont, "Rumbo (grados)", "num", M.inicio.rumbo || 0, (v) => { M.inicio.rumbo = v; rehacerP(); });
+  } else h.textContent = "Punto de guardado";
+  const fila = document.createElement("div"); fila.className = "grid2";
+  if (seleccion.kind === "obj") {
+    const dup = document.createElement("button"); dup.textContent = "Duplicar";
+    dup.onclick = () => { historial(); const c = JSON.parse(JSON.stringify(M.objetos[seleccion.i])); c.x += 4; M.objetos.push(c); seleccion = { kind: "obj", i: M.objetos.length - 1 }; rehacerP(); inspector(); };
+    fila.appendChild(dup);
+  }
+  if (seleccion.kind !== "inicio") {
+    const del = document.createElement("button"); del.textContent = "Borrar"; del.className = "danger"; del.onclick = borrarSel; fila.appendChild(del);
+  }
+  cont.appendChild(fila);
+}
+function borrarSel() {
+  if (!seleccion) return;
+  const k = seleccion.kind;
+  if (k === "inicio") return;
+  historial();
+  if (k === "obj") M.objetos.splice(seleccion.i, 1);
+  else if (k === "item") M.items.splice(seleccion.i, 1);
+  else if (k === "enemigo") M.enemigos.splice(seleccion.i, 1);
+  else if (k === "guardado") M.guardado = null;
+  seleccion = null; todo(); inspector(); guardarLocal();
+}
+
+// ---------------------------------------------------------------- edición con el ratón
+const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
+let pintando = false, arrastre = null, alturaObjetivo = 0, ultimo = 0, rect = null;
+function rayo(ev) {
+  const r = renderer.domElement.getBoundingClientRect();
+  ptr.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ptr, camara);
+}
+function puntoSuelo() {
+  const hits = ray.intersectObjects(grupoMundo.children);
+  if (hits.length) { const h = hits[0]; return { x: h.point.x, y: -h.point.z, z: h.point.y }; }
+  planoMat.constant = 0; const p = new THREE.Vector3();
+  return ray.ray.intersectPlane(planoMat, p) ? { x: p.x, y: -p.z, z: 0 } : null;
+}
+function unidad() { return +document.getElementById("sBloque").value || 2.5; }
+function altoTecho() { return +document.getElementById("nTecho").value || 4; }
+function ajustar(h) { const u = unidad(); return Math.round(h / u + 1e-6) * u; }
+function topeCelda(i, j) { const c = celdaEn(i, j); return !c || c === "tapada" ? null : Math.max(...c.esq); }
+function celdaDe(p) { const [i, j] = cuadro(p.x, p.y); return [clamp(i, 0, M.n - 1), clamp(j, 0, M.n - 1)]; }
+function puntoPlano(h) {
+  planoMat.constant = -h; const p = new THREE.Vector3();
+  return ray.ray.intersectPlane(planoMat, p) ? { x: p.x, y: -p.z, z: h } : null;
+}
+// lo que hay bajo el ratón: el bloque tocado, si es su cara de arriba o un lado, y la casilla de delante
+function tocar() {
+  const hits = ray.intersectObjects(grupoMundo.children);
+  if (!hits.length) {
+    // nada construido bajo el ratón: el plano de obra a 0 m (la rejilla de abajo)
+    const q = puntoPlano(0);
+    if (!q) return null;
+    const lado = M.n * M.celda;
+    if (q.x < M.origen[0] || q.y < M.origen[1] || q.x > M.origen[0] + lado || q.y > M.origen[1] + lado) return null;
+    const c = celdaDe(q);
+    return { p: q, arriba: true, celda: c, frente: c, z: 0, vacio: true };
+  }
+  const h = hits[0], p = { x: h.point.x, y: -h.point.z, z: h.point.y };
+  const arriba = !h.face || Math.abs(h.face.normal.y) > 0.7;
+  const d = ray.ray.direction, dx = d.x, dy = -d.z, L = Math.hypot(dx, dy) || 1;
+  const dentro = celdaDe({ x: p.x + dx / L * 0.05, y: p.y + dy / L * 0.05 });
+  const fuera = celdaDe({ x: p.x - dx / L * 0.05, y: p.y - dy / L * 0.05 });
+  return { p, arriba, celda: arriba ? celdaDe(p) : dentro, frente: fuera, z: p.z };
+}
+function texturasObra() {
+  return { tS: PALETA[slots.suelo] === "vacio" ? "losas" : PALETA[slots.suelo], tP: PALETA[slots.pared] };
+}
+function ponerAltura(i, j, H) {
+  const k = i + "," + j, c = M.celdas[k], { tS, tP } = texturasObra();
+  M.celdas[k] = { f: +H.toFixed(3), tex: c && c.tex && !c.esc ? c.tex : tS, pared: c && c.pared && !c.esc ? c.pared : tP,
+    ...(c && c.techo != null && c.techo > H + 0.05 ? { techo: c.techo, ttex: c.ttex } : {}) };
+  cache.delete(k); marcar(i, j);
+}
+let obra = null;   // lo que se está construyendo con el ratón pulsado
+function caja3(i0, j0, i1, j1, z0, z1, color) {
+  const C = M.celda;
+  const x0 = M.origen[0] + Math.min(i0, i1) * C, y0 = M.origen[1] + Math.min(j0, j1) * C;
+  const x1 = M.origen[0] + (Math.max(i0, i1) + 1) * C, y1 = M.origen[1] + (Math.max(j0, j1) + 1) * C;
+  cajaSel.scale.set(x1 - x0, Math.max(0.08, z1 - z0), y1 - y0);
+  cajaSel.position.copy(V((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2));
+  cajaSel.material.color.set(color || 0xd6b46a); bordeSel.material.color.set(color || 0xd6b46a);
+  cajaSel.visible = true;
+}
+// la escalera entre el bloque a (altura ha) y el b (hb): las casillas de en medio, o la b si están pegadas
+function planEscalera(a, ha, b, hb) {
+  const di = b[0] - a[0], dj = b[1] - a[1];
+  if (!di && !dj) return null;
+  const ejeX = Math.abs(di) >= Math.abs(dj), run = ejeX ? di : dj, s = Math.sign(run), L = Math.abs(run);
+  const n = L >= 2 ? L - 1 : 1, primero = 1;
+  const perp0 = ejeX ? a[1] : a[0], perp1 = ejeX ? b[1] : b[0];
+  const celdas = [];
+  for (let q = Math.min(perp0, perp1); q <= Math.max(perp0, perp1); q++) for (let k = 0; k < n; k++) {
+    const pos = (ejeX ? a[0] : a[1]) + s * (primero + k);
+    const hs = ha + (hb - ha) * k / n, he = ha + (hb - ha) * (k + 1) / n;
+    let dir = ejeX ? (s > 0 ? "E" : "W") : (s > 0 ? "N" : "S");
+    let lo = hs, hi = he;
+    if (he < hs) { dir = { N: "S", S: "N", E: "W", W: "E" }[dir]; lo = he; hi = hs; }
+    celdas.push({ i: ejeX ? pos : q, j: ejeX ? q : pos, esc: [dir, +lo.toFixed(3), +hi.toFixed(3)] });
+  }
+  return { celdas, n, ha, hb };
+}
+function verEscalera(plan) {
+  if (!plan) { cajaSel.visible = false; flechaEsc.visible = false; return; }
+  const is = plan.celdas.map((c) => c.i), js = plan.celdas.map((c) => c.j);
+  const z0 = Math.min(plan.ha, plan.hb), z1 = Math.max(plan.ha, plan.hb);
+  caja3(Math.min(...is), Math.min(...js), Math.max(...is), Math.max(...js), z0, Math.max(z1, z0 + 0.1));
+  const d = plan.celdas[0].esc[0], v = { N: [0, 0, -1], S: [0, 0, 1], E: [1, 0, 0], W: [-1, 0, 0] }[d];
+  flechaEsc.setDirection(new THREE.Vector3(...v)); flechaEsc.position.copy(cajaSel.position.clone().add(new THREE.Vector3(0, (z1 - z0) / 2 + 0.6, 0)));
+  flechaEsc.visible = true;
+  document.getElementById("stCelda").textContent = plan.ha === plan.hb ? "Los dos bloques están a la misma altura"
+    : `Escalera de ${plan.ha.toFixed(2)} m a ${plan.hb.toFixed(2)} m · ${plan.n} casilla${plan.n > 1 ? "s" : ""} de largo`;
+}
+function rectCeldas() {
+  if (!rect) return null;
+  return [Math.min(rect.a[0], rect.b[0]), Math.min(rect.a[1], rect.b[1]), Math.max(rect.a[0], rect.b[0]), Math.max(rect.a[1], rect.b[1])];
+}
+function topeRect() {
+  const [i0, j0, i1, j1] = rectCeldas();
+  let t = -1e9;
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const h = topeCelda(i, j); if (h !== null) t = Math.max(t, h); }
+  return t === -1e9 ? 0 : t;
+}
+function actualizarCursorRect() {
+  if (!RECT.includes(herramienta) || !rect) { if (!BLOQUES.includes(herramienta)) cajaSel.visible = false; flechaEsc.visible = false; return; }
+  const [i0, j0, i1, j1] = rectCeldas(), t = topeRect();
+  let z0 = t - 0.05, z1 = t + 0.15;
+  if (herramienta === "techo" || herramienta === "sintecho") { z0 = t + altoTecho() - 0.1; z1 = z0 + 0.2; }
+  if (herramienta === "plano" && rect.H !== undefined) { z0 = rect.H - 0.05; z1 = rect.H + 0.15; }
+  caja3(i0, j0, i1, j1, z0, z1, herramienta === "hueco" || herramienta === "borrar" ? 0xd0503c : null);
+  document.getElementById("stCelda").textContent = `${i1 - i0 + 1} × ${j1 - j0 + 1} casillas`;
+}
+function aplicarRect() {
+  const [i0, j0, i1, j1] = rectCeldas();
+  const tT = PALETA[slots.techo], techo = topeRect() + altoTecho();
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+    const k = i + "," + j, c = M.celdas[k];
+    marcar(i, j);
+    if (herramienta === "plano") { ponerAltura(i, j, rect.H); const cc = M.celdas[k]; const { tS } = texturasObra(); cc.tex = tS; continue; }
+    if (herramienta === "hueco") M.celdas[k] = { vacio: true };
+    else if (herramienta === "borrar") {
+      // borra lo que se toca: el bloque construido; y si ya era terreno (o no queda nada), la casilla queda vacía
+      if (c && !c.terreno && !c.vacio) delete M.celdas[k];
+      else M.celdas[k] = { vacio: true };
+    }
+    else if (herramienta === "techo") {
+      if (c && !c.vacio) { c.techo = techo; c.ttex = tT; }
+      else if (!c) M.celdas[k] = { terreno: true, techo, ttex: tT };
+    } else if (herramienta === "sintecho") {
+      if (c) { delete c.techo; delete c.ttex; if (c.terreno) delete M.celdas[k]; }
+    }
+  }
+}
+// vista previa del bloque que se pondría o quitaría
+function previaBloque() {
+  const t = tocar(), u = unidad();
+  if (!t) { cajaSel.visible = false; return; }
+  if (herramienta === "bloque") {
+    if (t.arriba) { const [i, j] = t.celda, h = topeCelda(i, j) ?? 0; caja3(i, j, i, j, ajustar(h), ajustar(h) + u); }
+    else { const [i, j] = t.frente, layer = Math.floor(t.z / u + 1e-6); caja3(i, j, i, j, layer * u, (layer + 1) * u); }
+  } else if (herramienta === "quitar") {
+    const [i, j] = t.celda, h = topeCelda(i, j); if (h === null) { cajaSel.visible = false; return; }
+    caja3(i, j, i, j, ajustar(h) - u, ajustar(h), 0xd0503c);
+  } else {
+    const [i, j] = t.celda, h = topeCelda(i, j); if (h === null) { cajaSel.visible = false; return; }
+    caja3(i, j, i, j, h - 0.05, h + 0.15);
+  }
+  flechaEsc.visible = false;
+}
+function empezarBloque(ev) {
+  const t = tocar(), u = unidad();
+  if (!t) return false;
+  if (local.vista) ponerVista(false);
+  historial();
+  if (herramienta === "bloque") {
+    let i, j, H;
+    if (t.arriba) { [i, j] = t.celda; H = ajustar(topeCelda(i, j) ?? 0) + u; }
+    else { [i, j] = t.frente; H = (Math.floor(t.z / u + 1e-6) + 1) * u; }
+    const cur = topeCelda(i, j);
+    if (cur === null || cur < H - 1e-3) ponerAltura(i, j, H);
+    obra = { modo: "bloque", H, hechas: new Set([i + "," + j]) };
+  } else if (herramienta === "quitar") {
+    const [i, j] = t.celda, h = topeCelda(i, j); if (h === null) return false;
+    const H = ajustar(h) - u;
+    ponerAltura(i, j, H);
+    obra = { modo: "quitar", H, hechas: new Set([i + "," + j]) };
+  } else if (herramienta === "altura") {
+    const [i, j] = t.celda, h = topeCelda(i, j) ?? 0;
+    obra = { modo: "altura", i, j, H0: ajustar(h), y0: ev.clientY };
+  } else if (herramienta === "escalera") {
+    const [i, j] = t.celda, h = topeCelda(i, j); if (h === null) return false;
+    obra = { modo: "escalera", a: [i, j], ha: h, plan: null };
+  }
+  renderer.domElement.setPointerCapture(ev.pointerId);
+  construirMundoAhora();
+  return true;
+}
+function seguirBloque(ev) {
+  const u = unidad();
+  if (obra.modo === "bloque" || obra.modo === "quitar") {
+    // se arrastra sobre el plano de la altura del primer bloque: así sale un suelo plano
+    const p = puntoPlano(obra.modo === "bloque" ? obra.H : obra.H + u);
+    if (!p) return;
+    const [i, j] = celdaDe(p), k = i + "," + j;
+    if (obra.hechas.has(k)) return;
+    obra.hechas.add(k);
+    const cur = topeCelda(i, j);
+    if (obra.modo === "bloque" ? (cur === null || cur < obra.H - 1e-3) : (cur !== null && cur > obra.H + 1e-3)) { ponerAltura(i, j, obra.H); rehacerMundo(); }
+    caja3(i, j, i, j, obra.H - (obra.modo === "bloque" ? u : 0), obra.H + (obra.modo === "bloque" ? 0 : u), obra.modo === "quitar" ? 0xd0503c : null);
+  } else if (obra.modo === "altura") {
+    const pasos = Math.round((obra.y0 - ev.clientY) / 22);
+    const H = obra.H0 + pasos * u;
+    if (H !== obra.H) { obra.H = H; ponerAltura(obra.i, obra.j, H); rehacerMundo(); }
+    document.getElementById("stAlt").textContent = `${H.toFixed(2)} m`;
+    caja3(obra.i, obra.j, obra.i, obra.j, H - 0.05, H + 0.15);
+  } else if (obra.modo === "escalera") {
+    const t = tocar();
+    if (!t) return;
+    const b = t.celda, hb = topeCelda(b[0], b[1]);
+    if (hb === null) return;
+    obra.plan = planEscalera(obra.a, obra.ha, b, hb);
+    verEscalera(obra.plan);
+  }
+}
+function acabarBloque() {
+  if (obra.modo === "escalera") {
+    const plan = obra.plan;
+    if (!plan || Math.abs(plan.ha - plan.hb) < 0.01) { toast("Arrastra hasta un bloque de otra altura"); pasado.pop(); botonesHistorial(); }
+    else {
+      const { tS, tP } = texturasObra();
+      plan.celdas.forEach(({ i, j, esc }) => { M.celdas[i + "," + j] = { f: esc[2], tex: tS, pared: tP, esc }; marcar(i, j); });
+      toast(`Escalera de ${plan.ha.toFixed(2)} m a ${plan.hb.toFixed(2)} m`);
+    }
+    verEscalera(null);
+  }
+  obra = null;
+  construirMundoAhora(); construirPiezas(); guardarLocal();
+}
+let trazoColor = new Set();
+function vertExacto(p) {
+  const n = M.n, c = M.celda;
+  const vi = Math.round((p.x - M.origen[0]) / c), vj = Math.round((p.y - M.origen[1]) / c);
+  if (vi < 0 || vj < 0 || vi > n || vj > n) return null;
+  // las cuatro celdas que comparten la esquina, y qué esquina suya es (orden 00, 10, 11, 01)
+  const cand = [[vi - 1, vj - 1, 2], [vi, vj - 1, 3], [vi - 1, vj, 1], [vi, vj, 0]];
+  const alturas = [];
+  cand.forEach(([i, j, idx]) => { const A = celdaEn(i, j); if (A && A !== "tapada") alturas.push([i, j, idx, A.esq[idx], A.tipo === "terreno"]); });
+  if (!alturas.length) return null;
+  const h = alturas.reduce((m, a) => (Math.abs(a[3] - p.z) < Math.abs(m - p.z) ? a[3] : m), alturas[0][3]);
+  const dueños = alturas.filter((a) => Math.abs(a[3] - h) < 0.02);
+  return { vi, vj, h, dueños: dueños.map((a) => [a[0], a[1], a[2]]), terreno: dueños.some((a) => a[4]) };
+}
+function verticesPincel(p) {
+  const n = M.n, c = M.celda, R = +rRadio.value, out = [];
+  if (document.getElementById("sPincelColor").value === "exacto") {
+    const i = Math.round((p.x - M.origen[0]) / c), j = Math.round((p.y - M.origen[1]) / c);
+    if (i >= 0 && j >= 0 && i <= n && j <= n) out.push([i, j, 0]);
+    return out;
+  }
+  const [ci, cj] = cuadro(p.x, p.y), k = Math.ceil(R / c) + 1;
+  for (let j = cj - k; j <= cj + k + 1; j++) for (let i = ci - k; i <= ci + k + 1; i++) {
+    if (i < 0 || j < 0 || i > n || j > n) continue;
+    const d = Math.hypot(M.origen[0] + i * c - p.x, M.origen[1] + j * c - p.y);
+    if (d <= R) out.push([i, j, d]);
+  }
+  return out;
+}
+const puntosColor = new THREE.InstancedMesh(new THREE.SphereGeometry(0.16, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false, transparent: true, opacity: 0.9 }), 600);
+puntosColor.renderOrder = 12; puntosColor.count = 0; scene.add(puntosColor);
+function verPuntosColor(p) {
+  if (!p || herramienta !== "color") { puntosColor.count = 0; return; }
+  cursor.visible = document.getElementById("sPincelColor").value !== "exacto";
+  if (!cursor.visible) {
+    const v = vertExacto(p), m = new THREE.Matrix4();
+    if (!v) { puntosColor.count = 0; return; }
+    m.makeTranslation(M.origen[0] + v.vi * M.celda, v.h + 0.08, -(M.origen[1] + v.vj * M.celda)); puntosColor.setMatrixAt(0, m);
+    puntosColor.count = 1; puntosColor.instanceMatrix.needsUpdate = true; return;
+  }
+  const vs = verticesPincel(p).slice(0, 600), m = new THREE.Matrix4(), c = M.celda;
+  vs.forEach(([i, j], q) => {
+    let h = -1e9;
+    for (const [a, b] of [[i - 1, j - 1], [i, j - 1], [i - 1, j], [i, j]]) { const t = topeCelda(a, b); if (t !== null) h = Math.max(h, t); }
+    if (h === -1e9) h = 0;
+    m.makeTranslation(M.origen[0] + i * c, h + 0.08, -(M.origen[1] + j * c)); puntosColor.setMatrixAt(q, m);
+  });
+  puntosColor.count = vs.length; puntosColor.instanceMatrix.needsUpdate = true;
+}
+function pincel(p, dt) {
+  const R = +rRadio.value, F = +rFuerza.value, n = M.n, c = M.celda;
+  const [ci, cj] = cuadro(p.x, p.y), k = Math.ceil(R / c) + 1;
+  if (herramienta === "pintar") {
+    const t = texPintar(), nombre = PALETA[t];
+    for (let j = cj - k; j <= cj + k; j++) for (let i = ci - k; i <= ci + k; i++) {
+      if (i < 0 || j < 0 || i >= n || j >= n) continue;
+      const x = M.origen[0] + (i + 0.5) * c, y = M.origen[1] + (j + 0.5) * c;
+      if (Math.hypot(x - p.x, y - p.y) > R) continue;
+      const key = i + "," + j, cel = M.celdas[key];
+      marcar(i, j);
+      if (slotActivo === "suelo") {
+        if (t === 0) { M.texturas[idxC(i, j)] = 0; if (cel && !cel.terreno) delete M.celdas[key]; }
+        else if (cel && !cel.terreno && !cel.vacio) cel.tex = nombre;
+        else M.texturas[idxC(i, j)] = t;
+      } else if (slotActivo === "pared") {
+        if (cel && !cel.terreno && !cel.vacio) cel.pared = nombre;
+        else { if (!M.paredes) M.paredes = new Array(n * n).fill(0); M.paredes[idxC(i, j)] = t; }
+      } else if (cel && cel.techo != null) cel.ttex = nombre;
+    }
+    return;
+  }
+  if (herramienta === "color") {
+    if (!M.colores) M.colores = new Array((n + 1) * (n + 1)).fill(0x808080);
+    const pc = document.getElementById("cPintura").value, objetivo = [1, 3, 5].map((q) => parseInt(pc.substr(q, 2), 16));
+    const exacto = document.getElementById("sPincelColor").value === "exacto";
+    const mezclar = (v, f) => {
+      let rgb = [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+      let dest;
+      if (modoColor === "tenir") dest = objetivo.map((q) => q * 128 / 160);
+      else if (modoColor === "aclarar") dest = exacto ? rgb.map((q) => Math.min(255, q * 1.3 + 4)) : rgb.map((q) => Math.min(255, q * 1.6 + 10));
+      else if (modoColor === "oscurecer") dest = exacto ? rgb.map((q) => q * 0.65) : rgb.map((q) => q * 0.4);
+      else dest = [128, 128, 128];
+      rgb = rgb.map((q, z) => Math.round(clamp(q + (dest[z] - q) * f, 0, 255)));
+      return (rgb[0] << 16) | (rgb[1] << 8) | rgb[2];
+    };
+    if (exacto) {
+      const v = vertExacto(p); if (!v) return;
+      const kk = v.vi + "," + v.vj + "," + v.h.toFixed(2); if (trazoColor.has(kk)) return; trazoColor.add(kk);
+      v.dueños.forEach(([i, j, idx]) => {
+        const c0 = M.celdas[i + "," + j];
+        if (c0 && !c0.terreno && !c0.vacio) { if (!c0.cc) c0.cc = [0x808080, 0x808080, 0x808080, 0x808080]; c0.cc[idx] = mezclar(c0.cc[idx], 1); }
+        marcar(i, j);
+      });
+      if (v.terreno) { M.colores[idxV(v.vi, v.vj)] = mezclar(M.colores[idxV(v.vi, v.vj)], 1); marcarVertice(v.vi, v.vj); }
+      return;
+    }
+    // suave: las esquinas de los bloques que caen en el radio
+    const [ci2, cj2] = cuadro(p.x, p.y), kc = Math.ceil(R / c) + 1;
+    for (let j = cj2 - kc; j <= cj2 + kc; j++) for (let i = ci2 - kc; i <= ci2 + kc; i++) {
+      const c0 = M.celdas[i + "," + j]; if (!c0 || c0.terreno || c0.vacio) continue;
+      [[0, 0], [1, 0], [1, 1], [0, 1]].forEach(([dx, dy], idx) => {
+        const d = Math.hypot(M.origen[0] + (i + dx) * c - p.x, M.origen[1] + (j + dy) * c - p.y);
+        if (d > R) return;
+        if (!c0.cc) c0.cc = [0x808080, 0x808080, 0x808080, 0x808080];
+        c0.cc[idx] = mezclar(c0.cc[idx], Math.min(1, (0.5 + 0.5 * Math.cos(Math.PI * d / R)) * F * dt * 1.5));
+        marcar(i, j);
+      });
+    }
+    for (const [i, j, d] of verticesPincel(p)) {
+      marcarVertice(i, j);
+      const f = Math.min(1, (0.5 + 0.5 * Math.cos(Math.PI * d / R)) * F * dt * 1.5);
+      const v = M.colores[idxV(i, j)];
+      let rgb = [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+      let dest;
+      if (modoColor === "tenir") dest = objetivo.map((q) => q * 128 / 160);   // el color elegido, a la luz del juego
+      else if (modoColor === "aclarar") dest = rgb.map((q) => Math.min(255, q * 1.6 + 10));
+      else if (modoColor === "oscurecer") dest = rgb.map((q) => q * 0.4);
+      else dest = [128, 128, 128];
+      rgb = rgb.map((q, z) => Math.round(clamp(q + (dest[z] - q) * f, 0, 255)));
+      M.colores[idxV(i, j)] = (rgb[0] << 16) | (rgb[1] << 8) | rgb[2];
+    }
+    return;
+  }
+  const nuevo = {};
+  for (let j = cj - k; j <= cj + k + 1; j++) for (let i = ci - k; i <= ci + k + 1; i++) {
+    if (i < 0 || j < 0 || i > n || j > n) continue;
+    const x = M.origen[0] + i * c, y = M.origen[1] + j * c, d = Math.hypot(x - p.x, y - p.y);
+    if (d > R) continue;
+    const f = 0.5 + 0.5 * Math.cos(Math.PI * d / R);
+    let h = M.alturas[idxV(i, j)];
+    if (herramienta === "elevar") h += F * dt * f;
+    else if (herramienta === "bajar") h -= F * dt * f;
+    else if (herramienta === "aplanar") h += (alturaObjetivo - h) * Math.min(1, F * dt * f * 0.6);
+    else if (herramienta === "suavizar") {
+      const m = (hV(i - 1, j) + hV(i + 1, j) + hV(i, j - 1) + hV(i, j + 1)) / 4;
+      h += (m - h) * Math.min(1, F * dt * f * 0.6);
+    }
+    nuevo[idxV(i, j)] = h;
+    marcarVertice(i, j);
+  }
+  const paso = +rPaso.value;
+  for (const key in nuevo) M.alturas[key] = paso ? Math.round(nuevo[key] / paso) * paso : Math.round(nuevo[key] * 100) / 100;
+}
+function elegirMarcaOPieza() {
+  const hits = ray.intersectObjects([grupoMarcas, grupoPiezas], true);
+  for (const h of hits) {
+    let o = h.object; while (o && !o.userData.kind) o = o.parent;
+    if (o) return o.userData;
+  }
+  return null;
+}
+renderer.domElement.addEventListener("contextmenu", (e) => e.preventDefault());
+renderer.domElement.addEventListener("pointerdown", (ev) => {
+  if (paseo.activo) { paseo.mirando = true; paseo.px = ev.clientX; paseo.py = ev.clientY; return; }
+  if (ev.button !== 0) return;
+  rayo(ev);
+  if (herramienta !== "seleccionar") {
+    const m = elegirMarcaOPieza();
+    if (m && m.kind !== "obj") { historial(); seleccion = m; arrastre = { ...m }; construirPiezas(); inspector(); return; }
+  }
+  if (BLOQUES.includes(herramienta)) { empezarBloque(ev); return; }
+  if (herramienta === "seleccionar") {
+    seleccion = elegirMarcaOPieza();
+    if (seleccion) { historial(); arrastre = { ...seleccion }; }
+    construirPiezas(); inspector(); return;
+  }
+  if (RECT.includes(herramienta)) {
+    const t = tocar(); if (!t) return;
+    if (local.vista) ponerVista(false);
+    const fija = document.getElementById("nPlano").value.trim();
+    const c = t.celda; rect = { a: c, b: c.slice(), H: fija !== "" && !isNaN(+fija) ? +fija : (topeCelda(c[0], c[1]) ?? 0) };
+    renderer.domElement.setPointerCapture(ev.pointerId);
+    actualizarCursorRect(); return;
+  }
+  const p = puntoSuelo();
+  if (!p) return;
+  if (herramienta.startsWith("pieza:")) {
+    historial();
+    const tipo = herramienta.slice(6);
+    M.objetos.push({ tipo, x: Math.round(p.x * 2) / 2, y: Math.round(p.y * 2) / 2, rot: 0, params: JSON.parse(JSON.stringify(PIEZAS[tipo].params)) });
+    seleccion = { kind: "obj", i: M.objetos.length - 1 }; todo(); inspector(); guardarLocal(); return;
+  }
+  if (["inicio", "guardado", "item", "enemigo"].includes(herramienta)) {
+    historial();
+    if (herramienta === "inicio") { M.inicio.x = p.x; M.inicio.y = p.y; seleccion = { kind: "inicio", i: 0 }; }
+    else if (herramienta === "guardado") { M.guardado = { x: p.x, y: p.y }; seleccion = { kind: "guardado", i: 0 }; }
+    else if (herramienta === "item") { M.items.push({ id: 6, x: p.x, y: p.y }); seleccion = { kind: "item", i: M.items.length - 1 }; }
+    else { M.enemigos.push({ tipo: "escarabajo", x: p.x, y: p.y }); seleccion = { kind: "enemigo", i: M.enemigos.length - 1 }; }
+    construirPiezas(); inspector(); guardarLocal(); return;
+  }
+  historial();
+  if (local.vista) ponerVista(false);
+  trazoColor = new Set();
+  pintando = true; alturaObjetivo = alturaEn(p.x, p.y); ultimo = performance.now();
+  renderer.domElement.setPointerCapture(ev.pointerId);
+  pincel(p, 1 / 30); rehacerMundo();
+});
+renderer.domElement.addEventListener("pointermove", (ev) => {
+  if (paseo.activo) {
+    if (paseo.mirando) { paseo.yaw -= (ev.clientX - paseo.px) * 0.005; paseo.pitch = Math.max(-1.4, Math.min(1.4, paseo.pitch - (ev.clientY - paseo.py) * 0.005)); paseo.px = ev.clientX; paseo.py = ev.clientY; }
+    return;
+  }
+  rayo(ev);
+  if (arrastre) {
+    const p = puntoSuelo();
+    const ref = arrastre.kind === "obj" ? M.objetos[arrastre.i] : arrastre.kind === "item" ? M.items[arrastre.i]
+      : arrastre.kind === "enemigo" ? M.enemigos[arrastre.i] : arrastre.kind === "inicio" ? M.inicio : M.guardado;
+    if (ref && p) { ref.x = Math.round(p.x * 2) / 2; ref.y = Math.round(p.y * 2) / 2; construirPiezas(); }
+    return;
+  }
+  if (BLOQUES.includes(herramienta)) {
+    if (obra) seguirBloque(ev);
+    else {
+      previaBloque();
+      const t = tocar();
+      if (t) { const [i, j] = t.celda, h = topeCelda(i, j); document.getElementById("stCelda").textContent = `${i}, ${j}`; document.getElementById("stAlt").textContent = h === null ? "vacío" : `${h.toFixed(2)} m`; }
+    }
+    return;
+  }
+  if (RECT.includes(herramienta)) {
+    const t = tocar();
+    if (t) {
+      const c = t.celda;
+      if (rect) { rect.b = c; actualizarCursorRect(); }
+      else { rect = { a: c, b: c }; actualizarCursorRect(); rect = null; }
+    }
+    return;
+  }
+  const p = puntoSuelo();
+  if (p) {
+    cursor.position.copy(V(p.x, p.y, p.z + 0.05));
+    verPuntosColor(p);
+    const c = celdaDe(p);
+    document.getElementById("stCelda").textContent = `${c[0]}, ${c[1]}`;
+    document.getElementById("stAlt").textContent = `${alturaEn(p.x, p.y).toFixed(2)} m`;
+  }
+  if (pintando && p) {
+    const t = performance.now(), dt = Math.min(0.1, (t - ultimo) / 1000); ultimo = t;
+    pincel(p, dt); rehacerMundo();
+  } else if (arrastre && p) {
+    const ref = arrastre.kind === "obj" ? M.objetos[arrastre.i] : arrastre.kind === "item" ? M.items[arrastre.i]
+      : arrastre.kind === "enemigo" ? M.enemigos[arrastre.i] : arrastre.kind === "inicio" ? M.inicio : M.guardado;
+    if (ref) { ref.x = Math.round(p.x * 2) / 2; ref.y = Math.round(p.y * 2) / 2; construirPiezas(); }
+  }
+});
+window.addEventListener("pointerup", () => {
+  if (paseo.activo) { paseo.mirando = false; return; }
+  if (obra) { acabarBloque(); return; }
+  if (rect && RECT.includes(herramienta)) {
+    historial(); aplicarRect(); rect = null; actualizarCursorRect(); todo(); guardarLocal();
+  }
+  if (pintando || arrastre) { guardarLocal(); if (arrastre) { inspector(); construirMundoAhora(); } }
+  pintando = false; arrastre = null;
+});
+window.addEventListener("keydown", (ev) => {
+  if (ev.target.tagName === "INPUT" || ev.target.tagName === "SELECT" || ev.target.tagName === "TEXTAREA") return;
+  if (paseo.activo) { paseo.teclas[ev.key.toLowerCase()] = true; if (ev.key === "Escape") salirPaseo(); return; }
+  const k = ev.key.toLowerCase();
+  if ((ev.ctrlKey || ev.metaKey) && k === "z" && !ev.shiftKey) { deshacer(); ev.preventDefault(); return; }
+  if ((ev.ctrlKey || ev.metaKey) && (k === "y" || (k === "z" && ev.shiftKey))) { rehacer(); ev.preventDefault(); return; }
+  if (k === "g") { ponerRejilla(!rejilla); return; }
+  if (ev.key === "Escape" && rect) { rect = null; actualizarCursorRect(); return; }
+  if (!seleccion) return;
+  if (ev.key === "Delete" || ev.key === "Backspace") { borrarSel(); ev.preventDefault(); }
+  if ((k === "q" || k === "e") && seleccion.kind === "obj") {
+    historial();
+    const o = M.objetos[seleccion.i], paso = o.tipo === "casa" ? 90 : 15;
+    o.rot = (((o.rot || 0) + (k === "q" ? paso : -paso)) % 360 + 360) % 360; todo(); inspector(); guardarLocal();
+  }
+  if ((k === "q" || k === "e") && seleccion.kind === "inicio") {
+    historial();
+    M.inicio.rumbo = (((M.inicio.rumbo || 0) + (k === "q" ? 15 : -15)) % 360 + 360) % 360; construirPiezas(); inspector(); guardarLocal();
+  }
+});
+window.addEventListener("keyup", (ev) => { paseo.teclas[ev.key.toLowerCase()] = false; });
+function ponerRejilla(on) { rejilla = on; document.getElementById("bRejilla").classList.toggle("on", on); if (lineas) lineas.visible = on && !local.vista; rejillaObra.visible = on && !local.vista; }
+document.getElementById("bRejilla").onclick = () => ponerRejilla(!rejilla);
+
+// ---- paseo a 1,6 m: no sube escalones de más de 0,6 m ni entra en el vacío, como en el juego ----
+const paseo = { activo: false, yaw: 0, pitch: 0, teclas: {}, x: 0, y: 0, z: 0 };
+document.getElementById("bPaseo").onclick = () => {
+  if (paseo.activo) return salirPaseo();
+  cache = new Map(); calcularTapadas();
+  paseo.activo = true; paseo.x = M.inicio.x; paseo.y = M.inicio.y; paseo.z = alturaEn(paseo.x, paseo.y); paseo.yaw = (M.inicio.rumbo || 0) * Math.PI / 180; paseo.pitch = 0;
+  controles.enabled = false; cursor.visible = false; grupoMarcas.visible = false; planoNivel.visible = false; cajaSel.visible = false;
+  if (lineas) lineas.visible = false;
+  document.getElementById("walkhelp").hidden = false; document.getElementById("bPaseo").classList.add("on");
+};
+function salirPaseo() {
+  paseo.activo = false; controles.enabled = true; grupoMarcas.visible = true; document.getElementById("walkhelp").hidden = true;
+  document.getElementById("bPaseo").classList.remove("on"); camara.position.set(paseo.x + 30, paseo.z + 35, -paseo.y + 40);
+  controles.target.copy(V(paseo.x, paseo.y, paseo.z)); controles.update(); elegir(herramienta); ponerRejilla(rejilla);
+}
+function pisable(x, y, zActual) {
+  const [i, j] = cuadro(x, y), c = celdaEn(i, j);
+  if (!c) return null;
+  const z = c === "tapada" ? zActual : alturaEn(x, y);
+  return z - zActual > 0.6 ? null : z;
+}
+
+// ---------------------------------------------------------------- archivo
+function serializar() {
+  return JSON.stringify(Object.assign({}, M, { alturas: Array.from(M.alturas, (h) => Math.round(h * 100) / 100), texturas: Array.from(M.texturas) }));
+}
+function guardarLocal() {
+  if (local.vista || local.coll) { clearTimeout(guardarLocal.v); guardarLocal.v = setTimeout(pedirVista, 900); }
+  clearTimeout(guardarLocal.t);
+  guardarLocal.t = setTimeout(() => {
+    try { localStorage.setItem("editor_torre_mapa", serializar()); document.getElementById("stGuardado").textContent = "Borrador guardado en este navegador"; } catch (e) { /* sin almacenamiento */ }
+  }, 600);
+}
+function cargarCampos() {
+  M.paleta = M.paleta || PALETA.slice(); M.objetos = M.objetos || []; M.items = M.items || []; M.enemigos = M.enemigos || [];
+  M.celdas = M.celdas || {}; M.inicio = M.inicio || { x: 0, y: 0, rumbo: 0 };
+  M.niebla = M.niebla || [214, 218, 224]; M.niebla_k = M.niebla_k || 1400000; if (M.barandilla === undefined) M.barandilla = true;
+  if (M.borde_prof === undefined) M.borde_prof = 10; if (!M.pared_terreno) M.pared_terreno = "roca";
+  document.getElementById("sN").value = String(M.n);
+  document.getElementById("cNiebla").value = "#" + M.niebla.map((v) => v.toString(16).padStart(2, "0")).join("");
+  document.getElementById("rNiebla").value = M.niebla_k;
+  document.getElementById("cBarandilla").checked = !!M.barandilla;
+  document.getElementById("cCubierta").checked = !!M.cubierta;
+  document.getElementById("nBorde").value = M.borde_prof;
+  document.getElementById("sParedTerreno").value = M.pared_terreno;
+  aplicarNiebla(); etiquetas();
+}
+// texturas de King's Field II que trae el mapa (van en los huecos de las del 4); al cargar otro mapa vuelven las del 4
+let texturasCambiadas = [];
+function texturasDelMapa() {
+  const carga = new THREE.TextureLoader();
+  texturasCambiadas.forEach((nombre) => { if (!(M.texturas_kf2 || {})[nombre]) carga.load("/tex/" + nombre + ".png", (t) => { ponerTextura(nombre, t); construirPiezas(); }); });
+  texturasCambiadas = [];
+  Object.entries(M.texturas_kf2 || {}).forEach(([nombre, b64]) => {
+    texturasCambiadas.push(nombre);
+    carga.load("data:image/png;base64," + b64, (t) => { t.magFilter = THREE.NearestFilter; ponerTextura(nombre, t); construirPiezas(); });
+  });
+}
+function cargar(m) { M = m; seleccion = null; cargarCampos(); todo(); inspector(); texturasDelMapa(); }
+function nuevo(n) {
+  const m = mapaVacio(n);
+  const r = 22;
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const x = m.origen[0] + (i + 0.5) * m.celda, y = m.origen[1] + (j + 0.5) * m.celda;
+    if (Math.abs(x) < r && Math.abs(y) < r) m.texturas[j * n + i] = PALETA.indexOf("musgo");
+  }
+  m.inicio = { x: 0, y: -5, rumbo: 0 };
+  return m;
+}
+function plantillaPrologo() {
+  const m = mapaVacio(96);
+  m.borde_prof = 120;             // el risco del prólogo cae hasta la niebla
+  const T = (n) => PALETA.indexOf(n);
+  for (let j = 0; j < m.n; j++) for (let i = 0; i < m.n; i++) {
+    const x = m.origen[0] + (i + 0.5) * m.celda, y = m.origen[1] + (j + 0.5) * m.celda;
+    const a = Math.atan2(y, x), r = 30 * (0.9 + 0.2 * Math.sin(a * 3 + 1) * Math.cos(a * 2));
+    if (Math.hypot(x, y) < r) m.texturas[j * m.n + i] = T("musgo");
+  }
+  const caminos = [[-15, -7, -4, 2], [5, -8.75, -1, 2], [-7, 8.75, -3, 4], [-2, 2, 0, 31]];
+  for (let j = 0; j < m.n; j++) for (let i = 0; i < m.n; i++) {
+    if (!m.texturas[j * m.n + i]) continue;
+    const x = m.origen[0] + (i + 0.5) * m.celda, y = m.origen[1] + (j + 0.5) * m.celda;
+    for (const [ax, ay, bx, by] of caminos) {
+      const dx = bx - ax, dy = by - ay, t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)));
+      if (Math.hypot(x - ax - dx * t, y - ay - dy * t) < 1.9) m.texturas[j * m.n + i] = T("losas");
+    }
+    if (m.texturas[j * m.n + i] === T("musgo") && ruido(i, j) > 0.8) m.texturas[j * m.n + i] = T("grava");
+  }
+  for (let j = 0; j <= m.n; j++) for (let i = 0; i <= m.n; i++) {
+    const y = m.origen[1] + j * m.celda;
+    m.alturas[j * (m.n + 1) + i] = Math.max(0, Math.min(2.5, (-y - 18) * 0.25));
+  }
+  const P = (t, x, y, params, extra) => Object.assign({ tipo: t, x, y, rot: 0, params: Object.assign({}, PIEZAS[t].params, params || {}) }, extra || {});
+  m.objetos.push(P("casa", -15, -11.25, { ancho: 5, fondo: 7.5, alto: 8 }));
+  m.objetos.push(P("casa", 7.5, -8.75, { ancho: 5, fondo: 7.5, alto: 7, hundido: true }, { rot: 90 }));
+  m.objetos.push(P("casa", -11.25, 8.75, { ancho: 7.5, fondo: 7.5, alto: 6, ruina: true, chimenea: false }, { rot: 270 }));
+  for (let k = 0; k < 6; k++) m.objetos.push(P("columna", 17 + k * 0.4, -6 + k * 3.4, { alto: [2.2, 3.5, 6, 9.5, 11, 4][k], rota: true }));
+  m.objetos.push(P("portal", 0, 26, { ancho: 13, alto: 16 }));
+  m.objetos.push(P("murete", -21, 1.5, { largo: 6.5 }, { rot: 27 }));
+  m.objetos.push(P("murete", 16.5, -14, { largo: 6.4 }, { rot: 39 }));
+  m.objetos.push(P("puente", 0, 30, { largo: 142, subida: 3 }, { z: 0 }));
+  m.objetos.push(P("barbacana", 0, 172, {}, { z: 3 }));
+  m.objetos.push(P("torre", 0, 172 + 11.5 + 115, { radio: 115 }, { z: 3 }));
+  m.objetos.push(P("ruina", -62, 45, { lado: 22, pisos: 3 }, { z: 6 }));
+  m.objetos.push(P("ruina", 70, 70, { lado: 18, pisos: 4 }, { z: -4 }));
+  m.objetos.push(P("ruina", -48, 115, { lado: 14, pisos: 2 }, { z: -12 }));
+  m.inicio = { x: -15, y: -12.5, rumbo: 0 };
+  m.guardado = { x: -16.4, y: -13.4 };
+  m.items = [{ id: 6, x: -16.3, y: -9.0 }, { id: 6, x: -13.6, y: -13.6 }, { id: 151, x: 8.6, y: -10.5 }, { id: 251, x: -12.5, y: 9 }];
+  m.enemigos = [{ tipo: "planta", x: 18.5, y: 2 }, { tipo: "planta", x: -21, y: 6 }];
+  return m;
+}
+document.getElementById("bNuevo").onclick = () => { if (M) historial(); cargar(nuevo(+document.getElementById("sN").value)); guardarLocal(); toast("Mapa nuevo (Ctrl+Z para volver)"); };
+document.getElementById("bPlantilla").onclick = () => { if (M) historial(); cargar(plantillaPrologo()); guardarLocal(); toast("Plantilla del prólogo cargada (Ctrl+Z para volver)"); };
+document.getElementById("bAbrir").onclick = () => document.getElementById("fAbrir").click();
+document.getElementById("fAbrir").onchange = (ev) => {
+  const f = ev.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { try { const m = JSON.parse(r.result); historial(); cargar(m); guardarLocal(); toast("Abierto " + f.name); } catch (e) { toast("Ese archivo no es un mapa del editor"); } };
+  r.readAsText(f); ev.target.value = "";
+};
+document.getElementById("bGuardar").onclick = async () => {
+  const datos = serializar();
+  if (local.activo) {
+    try { await api("/api/guardar", datos); toast("Guardado mapa_torre.json en la carpeta del juego"); }
+    catch (e) { toast("No se ha podido guardar: " + e.message.slice(0, 80)); }
+    return;
+  }
+  let dl = null;
+  try { dl = window.claude && window.claude.use ? await window.claude.use("downloads") : null; } catch (e) { dl = null; }
+  if (dl) {
+    try { await dl.save({ filename: "mapa_torre.json", data: datos }); toast("Guardado mapa_torre.json"); return; }
+    catch (e) { if (e && e.code === "declined") { toast("No se ha guardado"); return; } }
+  }
+  document.getElementById("taJson").value = datos; document.getElementById("dlgJson").showModal();
+};
+document.getElementById("bCopiar").onclick = () => {
+  const ta = document.getElementById("taJson");
+  navigator.clipboard.writeText(ta.value).then(() => toast("Copiado"), () => { ta.focus(); ta.select(); toast("Selecciona y copia con Ctrl+C"); });
+};
+document.getElementById("bCerrar").onclick = () => document.getElementById("dlgJson").close();
+document.getElementById("bTex").onclick = () => document.getElementById("fTex").click();
+function ponerTextura(nombre, t) {
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  texturas[nombre] = t;
+  if (matTex[nombre]) { matTex[nombre].map = t; matTex[nombre].color.set(0xffffff); matTex[nombre].needsUpdate = true; }
+  swatches();
+}
+document.getElementById("fTex").onchange = (ev) => {
+  let n = 0;
+  for (const f of ev.target.files) {
+    const nombre = f.name.replace(/\.png$/i, "");
+    if (!PALETA.includes(nombre)) continue;
+    n++;
+    new THREE.TextureLoader().load(URL.createObjectURL(f), (t) => { t.magFilter = THREE.NearestFilter; ponerTextura(nombre, t); construirPiezas(); });
+  }
+  toast(n ? `${n} texturas del juego cargadas` : "No reconozco esos archivos: usa los .png de la carpeta kf4_texturas");
+  ev.target.value = "";
+};
+document.getElementById("sN").onchange = (ev) => {
+  const n = +ev.target.value; if (n === M.n) return;
+  historial();
+  const m = mapaVacio(n);
+  for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) {
+    const x = m.origen[0] + i * m.celda, y = m.origen[1] + j * m.celda;
+    const [a, b] = cuadro(x, y); m.alturas[j * (n + 1) + i] = hV(a, b);
+  }
+  // las casillas y la textura se conservan en su sitio del mundo
+  const di = Math.round((M.origen[0] - m.origen[0]) / m.celda), dj = Math.round((M.origen[1] - m.origen[1]) / m.celda);
+  for (let j = 0; j < M.n; j++) for (let i = 0; i < M.n; i++) {
+    const ni = i + di, nj = j + dj;
+    if (ni < 0 || nj < 0 || ni >= n || nj >= n) continue;
+    m.texturas[nj * n + ni] = M.texturas[idxC(i, j)];
+    const c = M.celdas[i + "," + j]; if (c) m.celdas[ni + "," + nj] = c;
+  }
+  Object.assign(m, { objetos: M.objetos, items: M.items, enemigos: M.enemigos, inicio: M.inicio, guardado: M.guardado, niebla: M.niebla, niebla_k: M.niebla_k, barandilla: M.barandilla, borde_prof: M.borde_prof, pared_terreno: M.pared_terreno, cubierta: M.cubierta });
+  cargar(m); guardarLocal();
+};
+document.getElementById("cNiebla").onchange = () => historial();
+document.getElementById("cNiebla").oninput = (ev) => { const h = ev.target.value; M.niebla = [1, 3, 5].map((k) => parseInt(h.substr(k, 2), 16)); aplicarNiebla(); guardarLocal(); };
+document.getElementById("rNiebla").onpointerdown = () => historial();
+document.getElementById("rNiebla").oninput = (ev) => { M.niebla_k = +ev.target.value; aplicarNiebla(); etiquetas(); guardarLocal(); };
+document.getElementById("cBarandilla").onchange = (ev) => { historial(); M.barandilla = ev.target.checked; guardarLocal(); };
+document.getElementById("cCubierta").onchange = (ev) => { historial(); M.cubierta = ev.target.checked; construirMundoAhora(true); guardarLocal(); };
+document.getElementById("nBorde").onchange = (ev) => { historial(); M.borde_prof = Math.max(1, +ev.target.value || 10); construirMundoAhora(true); guardarLocal(); };
+document.getElementById("sParedTerreno").onchange = (ev) => { historial(); M.pared_terreno = ev.target.value; construirMundoAhora(true); guardarLocal(); };
+
+// ---- memoria: estimación con lo que se ve y, en local, la cuenta exacta del generador ----
+const HUECO = 4521984;
+function ponerMemoria(bytes, hueco, exacto) {
+  const f = bytes / hueco, el = document.getElementById("mBarra");
+  el.style.width = Math.min(100, f * 100).toFixed(1) + "%";
+  el.className = f > 1 ? "lleno" : f > 0.9 ? "casi" : "";
+  const mb = (b) => (b / 1048576).toFixed(2).replace(".", ",");
+  document.getElementById("mTexto").textContent = `${exacto ? "" : "≈ "}${mb(bytes)} MB de ${mb(hueco)} MB (${Math.round(f * 100)} %)` + (exacto ? " · cuenta exacta" : " · estimación; «Comprobar» da la exacta");
+}
+function memoriaEstimada() {
+  // medido con el generador: ~1,78 MB fijos (tablas, guiones, texturas, enemigos), los modelos ocupan como
+  // mínimo su sitio original (1,35 MB) y la colisión el suyo (0,18 MB); unos 43 bytes por triángulo del juego,
+  // que trocea las caras ~2,3 veces más que esta vista
+  const piezas = M.objetos.reduce((s, o) => s + ({ casa: 2300, columna: 220, murete: 150, portal: 450, escaleras: 380, puente: 9000, barbacana: 3000, torre: 13500, ruina: 2700 }[o.tipo] || 450), 0);
+  const modelos = (trisEditor * 2.3 + piezas) * 43;
+  ponerMemoria(1.775e6 + Math.max(1.352e6, modelos) + Math.max(0.183e6, trisEditor * 8), HUECO, false);
+}
+document.getElementById("bComprobar").onclick = async () => {
+  const b = document.getElementById("bComprobar"), ul = document.getElementById("mAvisos");
+  b.disabled = true; b.textContent = "Comprobando…";
+  try {
+    const r = await api("/api/comprobar", serializar());
+    if (r.error) throw new Error(r.error);
+    ponerMemoria(r.bytes, r.hueco || HUECO, true);
+    ul.innerHTML = ""; ul.hidden = false;
+    ul.className = "avisos" + (r.avisos.length ? "" : " ok");
+    (r.avisos.length ? r.avisos : ["Todo bien: cabe y no hay avisos"]).forEach((a) => { const li = document.createElement("li"); li.textContent = a; ul.appendChild(li); });
+  } catch (e) { toast("No se ha podido comprobar: " + e.message.slice(0, 100)); }
+  b.disabled = false; b.textContent = "Comprobar el mapa";
+};
+
+// ---------------------------------------------------------------- editor local (EDITOR.bat)
+const local = { activo: false, vista: false, coll: false, grupo: new THREE.Group(), grupoColl: new THREE.Group(), pedido: 0 };
+scene.add(local.grupo); scene.add(local.grupoColl);
+async function api(ruta, cuerpo, binario) {
+  const r = await fetch(ruta, cuerpo === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: cuerpo });
+  if (!r.ok) throw new Error(await r.text());
+  return binario ? r.arrayBuffer() : r.json();
+}
+async function iniciarLocal() {
+  let est = null;
+  try { est = await api("/api/estado"); } catch (e) { return false; }
+  if (!est || !est.local) return false;
+  local.activo = true;
+  ["bVista", "bColision", "bJugar", "bComprobar"].forEach((id) => (document.getElementById(id).hidden = false));
+  document.getElementById("bTex").hidden = true;
+  document.getElementById("bGuardar").textContent = "Guardar";
+  document.getElementById("stLocal").textContent = est.iso ? "Conectado a " + est.iso : (est.error || "Sin ISO");
+  const carga = new THREE.TextureLoader();
+  (est.texturas || []).forEach((nombre) => carga.load("/tex/" + nombre + ".png", (t) => {
+    if ((M.texturas_kf2 || {})[nombre]) return;            // ese hueco lo ocupa una textura de King's Field II
+    ponerTextura(nombre, t); if (!local.vista) construirPiezas(); }));
+  if (est.mapa) { try { cargar(await api("/api/mapa")); } catch (e) { /* se queda el borrador */ } }
+  return true;
+}
+async function pedirVista() {
+  if (!local.vista && !local.coll) return;
+  const n = ++local.pedido;
+  document.getElementById("stGuardado").textContent = "Construyendo con el generador del juego…";
+  let buf;
+  try { buf = await api("/api/vista", serializar(), true); }
+  catch (e) { document.getElementById("stGuardado").textContent = "El generador ha fallado: " + e.message.slice(0, 120); return; }
+  if (n !== local.pedido) return;
+  const dv = new DataView(buf), lc = dv.getUint32(0, true);
+  const meta = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 4, lc)));
+  let off = 4 + lc;
+  [local.grupo, local.grupoColl].forEach((g) => g.children.slice().forEach((m) => { g.remove(m); m.geometry.dispose(); }));
+  let tris = 0;
+  meta.grupos.forEach((g) => {
+    const datos = new Float32Array(buf.slice(off, off + g.vertices * 32)); off += g.vertices * 32;
+    const pos = new Float32Array(g.vertices * 3), uv = new Float32Array(g.vertices * 2), col = new Float32Array(g.vertices * 3);
+    for (let k = 0; k < g.vertices; k++) {
+      pos.set(datos.subarray(k * 8, k * 8 + 3), k * 3); uv.set(datos.subarray(k * 8 + 3, k * 8 + 5), k * 2); col.set(datos.subarray(k * 8 + 5, k * 8 + 8), k * 3);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+    geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+    if (g.textura.startsWith("coll:")) {
+      const pared = g.textura === "coll:wall";
+      const mat = new THREE.MeshBasicMaterial({ color: pared ? 0xff4a3a : 0x4dff6a, transparent: true, opacity: pared ? 0.42 : 0.3, side: THREE.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+      local.grupoColl.add(new THREE.Mesh(geo, mat));
+      const wf = new THREE.LineSegments(new THREE.WireframeGeometry(geo), new THREE.LineBasicMaterial({ color: pared ? 0xffb0a0 : 0xb0ffbc, transparent: true, opacity: 0.6 }));
+      local.grupoColl.add(wf);
+      return;
+    }
+    const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, color: 0xffffff });
+    if (texturas[g.textura]) mat.map = texturas[g.textura];
+    else if (g.textura.startsWith("kf_")) {     // atlas de texturas de un mapa de King's Field (lo sirve el generador)
+      new THREE.TextureLoader().load("/tex/" + g.textura + ".png?" + n, (t) => {
+        t.flipY = false; t.magFilter = THREE.NearestFilter; texturas[g.textura] = t; mat.map = t; mat.needsUpdate = true; });
+    }
+    local.grupo.add(new THREE.Mesh(geo, mat));
+    tris += g.vertices / 3;
+  });
+  local.grupo.visible = local.vista; local.grupoColl.visible = local.coll;
+  document.getElementById("stGuardado").textContent = `Generador del juego: ${Math.round(tris).toLocaleString("es")} triángulos`;
+}
+function ponerVista(on) {
+  local.vista = on;
+  document.getElementById("bVista").classList.toggle("on", on);
+  local.grupo.visible = on;
+  grupoMundo.visible = !on; grupoPiezas.visible = !on;
+  if (lineas) lineas.visible = rejilla && !on;
+  if (on) pedirVista();
+}
+function ponerColision(on) {
+  local.coll = on;
+  document.getElementById("bColision").classList.toggle("on", on);
+  local.grupoColl.visible = on;
+  if (on) pedirVista();
+}
+document.getElementById("bVista").onclick = () => ponerVista(!local.vista);
+document.getElementById("bColision").onclick = () => ponerColision(!local.coll);
+document.getElementById("bJugar").onclick = async () => {
+  try { await api("/api/jugar", serializar()); toast("Generando la ISO y abriendo PCSX2…"); }
+  catch (e) { toast("No he podido lanzar el juego: " + e.message.slice(0, 80)); }
+};
+
+// ---------------------------------------------------------------- arranque y bucle
+function tamaño() {
+  const r = vp.getBoundingClientRect();
+  renderer.setSize(Math.max(1, r.width), Math.max(1, r.height), false);
+  renderer.domElement.style.width = "100%"; renderer.domElement.style.height = "100%";
+  camara.aspect = Math.max(1, r.width) / Math.max(1, r.height); camara.updateProjectionMatrix();
+}
+new ResizeObserver(tamaño).observe(vp);
+let previo = performance.now();
+function bucle(t) {
+  const dt = Math.min(0.05, (t - previo) / 1000); previo = t;
+  if (paseo.activo) {
+    const v = 7 * dt, k = paseo.teclas;
+    const fx = -Math.sin(paseo.yaw), fy = Math.cos(paseo.yaw);
+    let dx = 0, dy = 0;
+    if (k.w) { dx += fx * v; dy += fy * v; } if (k.s) { dx -= fx * v; dy -= fy * v; }
+    if (k.a) { dx -= fy * v; dy += fx * v; } if (k.d) { dx += fy * v; dy -= fx * v; }
+    if (dx || dy) {
+      let z = pisable(paseo.x + dx, paseo.y + dy, paseo.z);
+      if (z !== null) { paseo.x += dx; paseo.y += dy; paseo.z = z; }
+      else if ((z = pisable(paseo.x + dx, paseo.y, paseo.z)) !== null) { paseo.x += dx; paseo.z = z; }
+      else if ((z = pisable(paseo.x, paseo.y + dy, paseo.z)) !== null) { paseo.y += dy; paseo.z = z; }
+    }
+    camara.position.copy(V(paseo.x, paseo.y, paseo.z + 1.6));
+    const dir = V(fx * Math.cos(paseo.pitch), fy * Math.cos(paseo.pitch), Math.sin(paseo.pitch));
+    camara.lookAt(camara.position.clone().add(dir));
+  }
+  renderer.render(scene, camara);
+  requestAnimationFrame(bucle);
+}
+let inicial = null;
+try { const s = localStorage.getItem("editor_torre_mapa"); if (s) inicial = JSON.parse(s); } catch (e) { inicial = null; }
+swatches();
+cargar(inicial && inicial.alturas ? inicial : plantillaPrologo());
+elegir("plano"); tamaño(); requestAnimationFrame(bucle);
+if (location.protocol.startsWith("http") && /^(127\.0\.0\.1|localhost)$/.test(location.hostname)) iniciarLocal();
+if (location.protocol === "file:") {
+  document.getElementById("stLocal").textContent = "Abierto como archivo: para ver el juego de verdad, cierra esto y haz doble clic en EDITOR.bat";
+  document.getElementById("stLocal").style.color = "var(--accent)";
+}
+// para las pruebas automáticas
+window.__editor = { camara, controles, get M() { return M; }, construirMundo, celdaEn, perfil, alturaEn, historial, deshacer, rehacer, cargar, elegir, topeCelda,
+  ponerAltura(i, j, h) { historial(); ponerAltura(i, j, h); todo(); },
+  medirParcial(i, j, h) { ponerAltura(i, j, h); const t0 = performance.now(); construirMundoAhora(); return performance.now() - t0; },
+  escaleraPrueba(a, b) { historial(); const p = planEscalera(a, topeCelda(...a), b, topeCelda(...b)); const { tS, tP } = texturasObra(); p.celdas.forEach(({ i, j, esc }) => { M.celdas[i + "," + j] = { f: esc[2], tex: tS, pared: tP, esc }; }); todo(); return p; } };
+})();
+</script>
