@@ -1,4 +1,4 @@
-"""FIELDIV-ENGINE - lanzador.
+r"""FIELDIV-ENGINE - lanzador.
 
 Menú de consola que abre las herramientas de la carpeta engine\ (los .bat de siempre). Se compila a
 FIELDIV-ENGINE.exe con PyInstaller (.github/workflows/build.yml). Las herramientas siguen necesitando Python
