@@ -6,6 +6,7 @@ Alpha 0.1 - revision 3 (2026-10-26)
 - Secret walls: the sides of the opening stay in place when the wall rises (you could see through the frame),
   the wall stays open like in King's Field, and its light matches the walls next to it.
 - Enemy damage cap now only applies to the snake; every other enemy hits as in the original game.
+- The map editor is now Field4Editor: English by default, with an English/Español button.
 
 Alpha 0.1 - revision 2 (2026-10-26)
 -----------------------------------

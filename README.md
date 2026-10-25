@@ -20,7 +20,9 @@ King's Field games into KFIV, a map editor, and a HUD / controls patch.
 |---|---|
 | ![tunnel](docs/img/tunel.png) | ![equipment](docs/img/equipo_exp.png) |
 
-### Map editor
+### Field4Editor (map editor)
+
+Early stage: English by default, with an English / Español button.
 
 ![Map editor](docs/img/editor.png)
 
@@ -30,7 +32,7 @@ King's Field games into KFIV, a map editor, and a HUD / controls patch.
 2. Put **your own** King's Field IV ISO next to `FIELDIV-ENGINE.exe`.
 3. Open `FIELDIV-ENGINE.exe` and pick an option:
    - port a King's Field level and play it,
-   - map editor,
+   - Field4Editor (map editor),
    - cliff valley,
    - HUD / controls patch only (writes a patched copy; your original ISO is not changed),
    - changelog.

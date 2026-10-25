@@ -1,6 +1,6 @@
 @echo off
 cd /d "%~dp0"
-title Editor de La Torre (cierra esta ventana para salir)
+title Field4Editor (close this window to exit)
 set PY=
 where python >nul 2>nul && set PY=python
 if "%PY%"=="" where py >nul 2>nul && set PY=py

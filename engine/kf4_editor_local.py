@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-kf4_editor_local.py - El Editor de La Torre en tu PC, conectado a tu ISO de King's Field IV.
+kf4_editor_local.py - Field4Editor (el editor de mapas) en tu PC, conectado a tu ISO de King's Field IV.
 
 Doble clic en EDITOR.bat (o: python kf4_editor_local.py). Abre el editor en el navegador y:
   - carga las texturas directamente de la ISO (no hace falta exportarlas);
@@ -225,7 +225,7 @@ class Manejador(BaseHTTPRequestHandler):
 
 
 def main():
-    print("Editor de La Torre")
+    print("Field4Editor")
     cargar_texturas()
     if ESTADO["error"]:
         print("AVISO:", ESTADO["error"])

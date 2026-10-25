@@ -19,7 +19,7 @@ VERSION = "Alpha 0.1"
 
 OPCIONES = [
     ("1", "Portar un nivel de King's Field y jugarlo", "JUGAR_KF2.bat"),
-    ("2", "Editor de mapas", "EDITOR.bat"),
+    ("2", "Field4Editor (editor de mapas)", "EDITOR.bat"),
     ("3", "Generar el valle del acantilado y jugarlo", "JUGAR_VALLE.bat"),
     ("4", "Parche de HUD y controles para tu ISO (sin cambiar mapas)", "PARCHE_HUD.bat"),
     ("5", "Ver el changelog", None),

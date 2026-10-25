@@ -1,4 +1,4 @@
-<title>Editor de La Torre</title>
+<title>Field4Editor</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400&display=swap">
@@ -103,7 +103,7 @@ dialog textarea { width: 100%; height: 300px; background: var(--bg); color: var(
 
 <div class="app">
   <header>
-    <h1>Editor de La Torre</h1>
+    <h1>Field4Editor</h1>
     <button id="bNuevo" title="Mapa vacío con una meseta">Nuevo</button>
     <button id="bPlantilla" title="La aldea, el puente y la torre">Plantilla prólogo</button>
     <button id="bAbrir">Abrir .json</button>
@@ -1827,5 +1827,169 @@ window.__editor = { camara, controles, get M() { return M; }, construirMundo, ce
   ponerAltura(i, j, h) { historial(); ponerAltura(i, j, h); todo(); },
   medirParcial(i, j, h) { ponerAltura(i, j, h); const t0 = performance.now(); construirMundoAhora(); return performance.now() - t0; },
   escaleraPrueba(a, b) { historial(); const p = planEscalera(a, topeCelda(...a), b, topeCelda(...b)); const { tS, tP } = texturasObra(); p.celdas.forEach(({ i, j, esc }) => { M.celdas[i + "," + j] = { f: esc[2], tex: tS, pared: tP, esc }; }); todo(); return p; } };
+})();
+</script>
+<script>
+// ---------------------------------------------------------------- idioma (Field4Editor): inglés por defecto
+// Traduce lo que se ve (textos, title, placeholder) sin tocar la lógica: un observador cambia cada texto en
+// español que aparece en la página por el suyo en inglés. El botón ES/EN guarda la elección y recarga.
+(function () {
+  let lang = "en";
+  try { lang = localStorage.getItem("field4editor_lang") || "en"; } catch (e) {}
+  const EN = {
+    "Editor de La Torre": "Field4Editor", "Field4Editor": "Field4Editor",
+    "Mapa vacío con una meseta": "Empty map with a plateau", "Nuevo": "New",
+    "La aldea, el puente y la torre": "The village, the bridge and the tower", "Plantilla prólogo": "Prologue template",
+    "Abrir .json": "Open .json", "Guardar mapa_torre.json": "Save mapa_torre.json", "Deshacer": "Undo", "Rehacer": "Redo",
+    "Rejilla": "Grid", "Pasear a la altura del jugador": "Walk around at the player's height", "Paseo (1,6 m)": "Walk (1.6 m)",
+    "Los .png que saca EXPORTAR_TEXTURAS.bat de tu ISO": "The .png files EXPORTAR_TEXTURAS.bat extracts from your ISO",
+    "Texturas del juego": "Game textures", "El mapa tal como lo construye el generador para la ISO": "The map exactly as the generator builds it for the ISO",
+    "Vista del juego": "Game view", "Paredes en rojo y suelos en verde, tal como irán al juego": "Walls in red and floors in green, as they will go into the game",
+    "Colisión": "Collision", "Guarda, genera la ISO y abre PCSX2": "Saves, builds the ISO and opens PCSX2", "Probar en el juego": "Test in game",
+    "Construir con bloques": "Build with blocks", "Como en Minecraft:": "Like Minecraft:", "clic encima": "click on top",
+    "de un bloque pone otro encima;": "of a block puts another one on top;", "clic en un lado": "click on a side",
+    "lo pone al lado.": "puts it next to it.", "Mantén y arrastra": "Hold and drag",
+    "para hacer un suelo plano a esa altura. Donde no hay nada se construye sobre la rejilla de obra (0 m).": "to make a flat floor at that height. Where there is nothing, it builds on the work grid (0 m).",
+    "Cambiar la altura:": "Changing the height:",
+    "herramienta «Cambiar altura», pulsa un bloque y arrastra el ratón hacia arriba o hacia abajo. O escribe una «Altura del suelo plano» y arrastra un rectángulo con «Suelo plano».": "use the “Change height” tool, press a block and drag the mouse up or down. Or type a “Flat floor height” and drag a rectangle with “Flat floor”.",
+    "Alto del bloque": "Block height", "0,25 m": "0.25 m", "0,5 m": "0.5 m", "1,25 m": "1.25 m", "2,5 m (cubo)": "2.5 m (cube)",
+    "Alto del techo (m)": "Ceiling height (m)", "Altura del suelo plano (m)": "Flat floor height (m)",
+    "Terreno": "Terrain", "Pincel": "Brush", "Radio": "Radius", "Fuerza": "Strength", "Escalón de altura": "Height step",
+    "Texturas": "Textures", "Color de vértice": "Vertex color", "Color para pintar": "Paint color", "Pincel de color": "Color brush",
+    "Vértice exacto": "Exact vertex", "Suave (radio)": "Soft (radius)", "Pintar color": "Paint color",
+    "Los puntos blancos marcan los vértices que vas a pintar. Con": "The white dots mark the vertices you will paint. With",
+    "pintas solo la esquina más cercana: oscurece la esquina de un cubo y la cara hace el degradado sola. Con": "you only paint the nearest corner: darken a cube's corner and the face makes the gradient by itself. With",
+    "Suave": "Soft",
+    "pintas todo lo que cabe en el Radio. El juego guarda ese color en cada vértice; «Quitar color» lo deja como estaba.": "you paint everything within the Radius. The game stores that color in each vertex; “Remove color” puts it back as it was.",
+    "Piezas": "Pieces", "Marcas": "Markers", "El protagonista es la flecha": "The player is the", "azul": "blue arrow",
+    ": arrástrala con cualquier herramienta para moverlo, y con ella elegida, Q y E lo giran. Lo mismo con el guardado (turquesa), los objetos (amarillo) y los enemigos (rojo).": ": drag it with any tool to move it, and with it selected, Q and E turn it. The same goes for the save point (turquoise), items (yellow) and enemies (red).",
+    "Paseo · W A S D andar · arrastra para mirar · Esc salir": "Walk · W A S D to move · drag to look · Esc to exit",
+    "Selección": "Selection", "Con": "With", "Seleccionar": "Select",
+    "pulsa una pieza o marca. Arrástrala para moverla, Q y E la giran, Supr la borra.": "press a piece or marker. Drag it to move it, Q and E turn it, Delete removes it.",
+    "Memoria del mapa": "Map memory", "Monta el 099.map entero como Probar en el juego, sin tocar la ISO": "Builds the whole 099.map like Test in game, without touching the ISO",
+    "Comprobar el mapa": "Check the map",
+    "KF4 carga el mapa entero al entrar y no descarga nada mientras juegas: todo tiene que caber a la vez en el sitio del mapa (la barra). Lo que queda tras la niebla no se dibuja, por trozos de": "KF4 loads the whole map when you enter it: everything has to fit in the map's memory at once (the bar). What is behind the fog is not drawn, in chunks of",
+    "m. Pasar a otro mapa aún no está hecho.": "m. Moving to another map is not done yet.",
+    "Mapa": "Map", "Celdas por lado": "Cells per side", "Color de la niebla": "Fog color", "Distancia de la niebla": "Fog distance",
+    "Bajada de los bordes (m)": "Edge drop (m)", "Textura de los bordes del terreno": "Terrain edge texture",
+    "Barandilla invisible contra el vacío": "Invisible railing against the void", "Tapa por encima de los techos": "Cover above the ceilings",
+    "Atajos": "Shortcuts",
+    "Ctrl+Z deshacer · Ctrl+Y rehacer · G rejilla · clic derecho girar la cámara · rueda acercar · botón central desplazar · arrastrar la flecha azul mueve al protagonista.": "Ctrl+Z undo · Ctrl+Y redo · G grid · right click turns the camera · wheel zooms · middle button pans · dragging the blue arrow moves the player.",
+    "Herramienta": "Tool", "Casilla": "Cell", "Altura": "Height", "Triángulos": "Triangles",
+    "Este visor no deja guardar el archivo directamente. Copia el texto y guárdalo como mapa_torre.json en la carpeta del juego.": "This viewer can't save the file directly. Copy the text and save it as mapa_torre.json in the game folder.",
+    "Copiar": "Copy", "Cerrar": "Close",
+    // herramientas
+    "Suelo plano": "Flat floor", "Poner bloque": "Place block", "Quitar bloque": "Remove block", "Borrar": "Erase",
+    "Cambiar altura": "Change height", "Escalera": "Stairs", "Techo": "Ceiling", "Quitar techo": "Remove ceiling", "Hueco (vacío)": "Hole (void)",
+    "Elevar": "Raise", "Bajar": "Lower", "Suavizar": "Smooth", "Aplanar": "Flatten", "Pintar textura": "Paint texture", "Color": "Color",
+    "Inicio": "Start", "Guardado": "Save point", "Objeto": "Item", "Enemigo": "Enemy",
+    "Teñir": "Tint", "Aclarar": "Lighten", "Oscurecer": "Darken", "Quitar color": "Remove color",
+    "Suelo": "Floor", "Pared": "Wall",
+    // piezas, objetos, enemigos, texturas
+    "Casa": "House", "Columna": "Column", "Murete": "Low wall", "Portal": "Gateway", "Escalinata": "Staircase", "Puente": "Bridge",
+    "Barbacana": "Barbican", "Torre": "Tower", "Ruina de columnas": "Column ruin",
+    "Hierba": "Herb", "Jugo herbal": "Herb Juice", "Remedio": "Remedy", "Cachiporra": "Club", "Espada básica": "Basic Sword",
+    "Escudo de madera": "Wooden Shield", "Casco de cuero": "Leather Helm", "Chaleco de retazos": "Patchwork Vest", "Cristal de fuego": "Fire Crystal",
+    "Planta": "Plant", "Escarabajo": "Beetle", "Seta": "Mushroom", "Murciélago": "Bat",
+    "Vacío": "Void", "Losas": "Flagstones", "Sillar": "Ashlar", "Muro": "Wall stone", "Roca": "Rock", "Roca gris": "Grey rock",
+    "Musgo": "Moss", "Grava": "Gravel", "Piedra lisa": "Smooth stone", "Ladrillo": "Brick", "Estrías": "Grooves", "Madera": "Wood",
+    "Friso": "Frieze", "Nicho": "Niche", "Cornisa": "Cornice", "Chimenea": "Chimney", "Pisos": "Floors", "Rota": "Broken",
+    "Tejado hundido": "Collapsed roof", "En ruinas": "Ruined", "Tipo": "Type",
+    // inspector
+    "Alto (m)": "Height (m)", "Alto de la chimenea": "Chimney height", "Alto del tejado": "Roof height",
+    "Altura fija (vacío = el suelo)": "Fixed height (empty = the floor)", "Ancho (m)": "Width (m)", "Fondo (m)": "Depth (m)",
+    "Giro (grados)": "Rotation (degrees)", "Lado (m)": "Side (m)", "Lado de la puerta": "Door side", "Largo (m)": "Length (m)",
+    "Radio (m)": "Radius (m)", "Rumbo (grados)": "Heading (degrees)", "Subida (m)": "Rise (m)",
+    "Inicio del jugador": "Player start", "Objeto del suelo": "Floor item", "Punto de guardado": "Save point",
+    // ayudas
+    "Aplana el terreno a la altura donde empiezas a pintar.": "Flattens the terrain to the height where you start painting.",
+    "Arrastra hasta un bloque de otra altura": "Drag to a block at another height",
+    "Arrastra para quitar el techo de esas casillas.": "Drag to remove the ceiling from those cells.",
+    "Arrastra sobre casillas: techo a la altura del bloque más alto de la zona más el alto del techo. Con paredes alrededor, el interior queda en penumbra.": "Drag over cells: a ceiling at the height of the highest block in the area plus the ceiling height. With walls around, the inside is left in shadow.",
+    "Arrastra: abre el vacío. En el juego, caer ahí mata (la zona roja de abajo).": "Drag: opens the void. In the game, falling there kills you (the red area below).",
+    "Baja el terreno con el pincel.": "Lowers the terrain with the brush.",
+    "Clic en un bloque: le quita uno de alto. Arrastra para rebajar todo a esa altura.": "Click a block: removes one level. Drag to lower everything to that height.",
+    "Clic encima de un bloque: pone otro encima. Clic en un lado: lo pone al lado. Mantén pulsado y arrastra: hace un suelo plano a esa altura. Arriba usa la textura de Suelo y los lados la de Pared.": "Click on top of a block: puts another on top. Click on a side: puts it next to it. Hold and drag: makes a flat floor at that height. The top uses the Floor texture and the sides the Wall one.",
+    "Pincha o arrastra: borra lo que tocas. Un bloque desaparece entero; si ya no queda nada encima del terreno, la casilla se queda vacía.": "Click or drag: erases what you touch. A block goes away entirely; if nothing is left above the terrain, the cell is left empty.",
+    "Pincha una casilla y arrastra un rectángulo: todo queda plano a la altura de la casilla donde empezaste (o a la que escribas en «Altura del suelo plano»), con la textura de Suelo. Sobre el vacío se hace en la rejilla de obra.": "Click a cell and drag a rectangle: everything becomes flat at the height of the cell where you started (or the one you type in “Flat floor height”), with the Floor texture. Over the void it is built on the work grid.",
+    "Pinta el color de los vértices con el modo elegido (teñir, aclarar, oscurecer, quitar).": "Paints the vertex color with the chosen mode (tint, lighten, darken, remove).",
+    "Pinta la textura elegida. Con «Suelo» pinta suelos, con «Pared» las caras de los lados y con «Techo» los techos.": "Paints the chosen texture. With “Floor” it paints floors, with “Wall” the side faces and with “Ceiling” the ceilings.",
+    "Pulsa en el suelo para ponerla.": "Click on the ground to place it.",
+    "Pulsa en el suelo para ponerla. Luego, con Seleccionar, la mueves, giras (Q, E) y ajustas a la derecha.": "Click on the ground to place it. Then, with Select, you move it, turn it (Q, E) and adjust it on the right.",
+    "Pulsa un bloque (o una casilla vacía de la rejilla) y, sin soltar, arrastra el ratón hacia arriba o hacia abajo: sube o baja de bloque en bloque.": "Press a block (or an empty grid cell) and, holding, drag the mouse up or down: it goes up or down one block at a time.",
+    "Pulsa un bloque y, sin soltar, arrastra hasta otro de distinta altura. Al soltar sale la escalera entre los dos, con sus peldaños. Si arrastras también de lado, la escalera es más ancha.": "Press a block and, holding, drag to another one at a different height. When you let go, the stairs appear between them, with their steps. If you also drag sideways, the stairs are wider.",
+    "Pulsa una pieza o marca para editarla; arrástrala para moverla.": "Click a piece or marker to edit it; drag it to move it.",
+    "Sube el terreno con el pincel (no toca las casillas construidas).": "Raises the terrain with the brush (it doesn't touch built cells).",
+    "Suaviza el terreno.": "Smooths the terrain.",
+    // avisos
+    "Borrador guardado en este navegador": "Draft saved in this browser", "Construyendo con el generador del juego…": "Building with the game's generator…",
+    "Ese archivo no es un mapa del editor": "That file is not an editor map", "Generando la ISO y abriendo PCSX2…": "Building the ISO and opening PCSX2…",
+    "Guardado mapa_torre.json": "Saved mapa_torre.json", "Guardado mapa_torre.json en la carpeta del juego": "Saved mapa_torre.json in the game folder",
+    "Los dos bloques están a la misma altura": "Both blocks are at the same height", "Mapa nuevo (Ctrl+Z para volver)": "New map (Ctrl+Z to go back)",
+    "No reconozco esos archivos: usa los .png de la carpeta kf4_texturas": "I don't recognise those files: use the .png files from the kf4_texturas folder",
+    "No se ha guardado": "Not saved", "Plantilla del prólogo cargada (Ctrl+Z para volver)": "Prologue template loaded (Ctrl+Z to go back)",
+    "Selecciona y copia con Ctrl+C": "Select and copy with Ctrl+C", "Todo bien: cabe y no hay avisos": "All good: it fits and there are no warnings",
+    "caer al vacío mata": "falling into the void kills", "Copiado": "Copied", "Deshecho": "Undone", "Rehecho": "Redone", "Sin ISO": "No ISO",
+    "Abierto como archivo: para ver el juego de verdad, cierra esto y haz doble clic en EDITOR.bat": "Opened as a file: to see the real game, close this and double-click EDITOR.bat",
+    "Duplicar": "Duplicate", "Guardar": "Save", "libre": "free", "Abrir": "Open",
+  };
+  const REGLAS = [
+    [/^(\d+) × (\d+) casillas$/, "$1 × $2 cells"],
+    [/^Escalera de (.+) m a (.+) m · (\d+) casillas? de largo$/, "Stairs from $1 m to $2 m · $3 cell(s) long"],
+    [/^Escalera de (.+) m a (.+) m$/, "Stairs from $1 m to $2 m"],
+    [/^Generador del juego: (.+) triángulos$/, "Game generator: $1 triangles"],
+    [/^(\d+) texturas del juego cargadas$/, "$1 game textures loaded"],
+    [/^(≈ )?(.+) MB de (.+) MB \((\d+) %\) · cuenta exacta$/, "$1$2 MB of $3 MB ($4 %) · exact count"],
+    [/^(≈ )?(.+) MB de (.+) MB \((\d+) %\) · estimación; «Comprobar» da la exacta$/, "$1$2 MB of $3 MB ($4 %) · estimate; “Check” gives the exact one"],
+    [/^Conectado a (.+)$/, "Connected to $1"],
+    [/^Abierto (.+)$/, "Opened $1"],
+    [/^El generador ha fallado: (.*)$/s, "The generator failed: $1"],
+    [/^No se ha podido guardar: (.*)$/s, "Could not save: $1"],
+    [/^No se ha podido comprobar: (.*)$/s, "Could not check: $1"],
+    [/^No he podido lanzar el juego: (.*)$/s, "Could not launch the game: $1"],
+  ];
+  function tr(t) {
+    const k = t.trim();
+    if (!k) return null;
+    let r = EN[k];
+    if (r === undefined && k.startsWith("Poner ") && EN[k.slice(6)]) r = "Place " + EN[k.slice(6)];
+    if (r === undefined) for (const [re, s] of REGLAS) if (re.test(k)) { r = k.replace(re, s); break; }
+    if (r === undefined || r === k) return null;
+    if (r.includes(" MB of ")) r = r.replace(/(\d),(\d)/g, "$1.$2");      // 3,45 MB -> 3.45 MB
+    return t.replace(k, r);
+  }
+  function nodo(n) {
+    if (n.nodeType === 3) {
+      const p = n.parentNode && n.parentNode.nodeName;
+      if (p === "SCRIPT" || p === "STYLE" || p === "TEXTAREA") return;
+      const r = tr(n.nodeValue); if (r !== null) n.nodeValue = r;
+    } else if (n.nodeType === 1) {
+      for (const a of ["title", "placeholder", "aria-label"]) {
+        const v = n.getAttribute(a); if (v) { const r = tr(v); if (r !== null) n.setAttribute(a, r); }
+      }
+      if (n.nodeName === "SCRIPT" || n.nodeName === "STYLE" || n.nodeName === "TEXTAREA") return;
+      for (const c of n.childNodes) nodo(c);
+    }
+  }
+  // el botón de idioma
+  const b = document.createElement("button");
+  b.id = "bIdioma";
+  b.textContent = lang === "en" ? "Español" : "English";
+  b.title = lang === "en" ? "Cambiar el editor a español" : "Switch the editor to English";
+  b.onclick = () => { try { localStorage.setItem("field4editor_lang", lang === "en" ? "es" : "en"); } catch (e) {} location.reload(); };
+  const hdr = document.querySelector("header");
+  if (hdr) hdr.appendChild(b);
+  document.title = "Field4Editor";
+  const h1 = document.querySelector("header h1"); if (h1) h1.textContent = "Field4Editor";
+  if (lang !== "en") return;
+  document.documentElement.lang = "en";
+  nodo(document.body);
+  new MutationObserver((ms) => {
+    for (const m of ms) {
+      if (m.type === "characterData") nodo(m.target);
+      else if (m.type === "attributes") nodo(m.target);
+      else m.addedNodes.forEach(nodo);
+    }
+  }).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["title", "placeholder", "aria-label"] });
 })();
 </script>
