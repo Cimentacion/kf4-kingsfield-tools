@@ -24,7 +24,8 @@ import kf4_chr as kc
 MODELO_PULPO = 37            # chr/c0037.chr: en el IV es un archivo vacío de 32 bytes que nadie usa (el registro
                              # 37 usa el modelo 36); se le cambia el sitio en la tabla del DAT y el nombre no cambia
 REGISTRO_PULPO = 48          # chr.prm 48: registro vacío en el IV
-REGISTRO_BASE = 49           # la Flor oscura: su comportamiento, sonidos y el chorro
+REGISTRO_BASE = 2            # la babosa: su IA (se acerca y ataca de cerca), como el caracol. La de la Flor
+                             # oscura (49) era una torreta sin cuerpo a cuerpo: nunca daba latigazos
 ESC = 250.0 / 2048           # unidades del PS1 -> cm del IV, a la escala del grande (la clase 0 del nivel 0, escala 1)
 MINI = 65                    # chr.prm 65 (vacío en el IV): los pulpitos, el mismo modelo a la escala de su clase
 MINI_ESCALA = 38             # % (clases 18, 27 y 29 del nivel 0: escala 1536 / 4096)
@@ -39,7 +40,8 @@ CORTES_BRAZO = [700, 1600, 2700, 3800]
 # el eje de los brazos en (radio, altura): de donde salen del cuerpo a la punta
 EJE_BRAZO = [(700, 1800), (1400, 1300), (2000, 1850), (2600, 2900), (2950, 4000), (2975, 5233)]
 
-FOT = {"quieto": 120, "golpeado": 30, "golpe_fuerte": 50, "muerte": 60, "tinta": 60, "latigo": 50}
+FOT = {"quieto": 120, "golpeado": 30, "golpe_fuerte": 50, "muerte": 60, "tinta": 60, "latigo": 50, "arrastrar": 90}
+AVANCE = 120.0               # unidades del IV que avanza en un ciclo de arrastrarse (lo que mueve al bicho)
 
 
 def _ang(a, b):
@@ -274,6 +276,9 @@ def _poses(esq, nombre, f, total):
                 doblar = (-0.25 if tipo == "pata" else -0.35) * e + (0.25 if tipo == "brazo" else 0.1) * \
                     _campana(t, 0.67, 0.72, 0.95)
                 lado = 0.0
+            elif nombre == "arrastrar":  # las patas en ola, de dos en dos; los brazos, un poco
+                doblar = (0.28 if tipo == "pata" else 0.14) * math.sin(w * 2 + fase * 2.0 - k * 0.6)
+                lado = (0.10 if tipo == "pata" else 0.05) * math.sin(w * 2 + fase)
             else:                       # latigo: los brazos atrás y luego hacia delante, golpe hacia el 28
                 if tipo == "brazo":
                     atras = _campana(t, 0.0, 0.40, 0.55)
@@ -298,13 +303,16 @@ def _poses(esq, nombre, f, total):
         e = min(1.0, t * 1.4)
         cuerpo = [0.15 * e, 0.0, 0.25 * math.sin(e * 2)]
         dy = 45 * e * e
+    elif nombre == "arrastrar":
+        dy = 18 * math.sin(w * 2)
+        cuerpo = [0.05 * math.sin(w * 2), 0.06 * math.sin(w), 0.0]
     elif nombre == "tinta":
         cuerpo = [-0.25 * _campana(t, 0.45, 0.67, 0.85) + 0.15 * _campana(t, 0.67, 0.72, 0.95), 0, 0]
         dy = 12 * _campana(t, 0.4, 0.67, 0.9)
     else:
         cuerpo = [0.12 * _campana(t, 0.4, 0.58, 1.0) - 0.08 * _campana(t, 0.0, 0.4, 0.55), 0, 0]
     g[1] = tuple(cuerpo)
-    return g, dy
+    return g, dy, (-AVANCE * t if nombre == "arrastrar" else 0.0)
 
 
 def _campana(t, a, b, c):
@@ -333,7 +341,7 @@ def movimiento(esq, piv, nombre, total, paso=5):
     uno = v((1, 1, 1))
     curvas = []                      # por parte: [(pos, rot)] por fotograma
     for f in fots:
-        g, dy = _poses(esq, nombre, f, total)
+        g, dy, raiz = _poses(esq, nombre, f, total)
         fila = []
         for p in range(esq.n):
             if p == 0:
@@ -346,6 +354,8 @@ def movimiento(esq, piv, nombre, total, paso=5):
             if GIRO_180:            # el modelo va girado media vuelta (ver pulpo_chr): x y z cambian de signo
                 pos = (-pos[0], pos[1], -pos[2])
                 rot = (-rot[0], rot[1], -rot[2])
+            if p == 0:
+                pos = (0.0, 0.0, raiz)  # la raíz avanza hacia delante (-z del IV): así anda el bicho
             fila.append((pos, rot))
         curvas.append(fila)
     partes = []
@@ -389,8 +399,10 @@ def movimiento(esq, piv, nombre, total, paso=5):
 
 # motion 0..5; la animación del IV que va a cada uno (chr.prm 0x60): 0 y 13 quieto / en guardia, 14 golpe flojo,
 # 15 golpe fuerte, 16 muerte, 23 el ataque a distancia (la tinta), 20 el primer cuerpo a cuerpo (el latigazo)
-ORDEN_MOV = ["quieto", "golpeado", "golpe_fuerte", "muerte", "tinta", "latigo"]
-ANIMACION = {14: 1, 15: 2, 16: 3, 23: 4, 20: 5}
+ORDEN_MOV = ["quieto", "golpeado", "golpe_fuerte", "muerte", "tinta", "latigo", "arrastrar"]
+# las animaciones de la babosa (registro 2): 0 quieto, 3 andar, 13 en guardia, 14 y 15 golpeado, 16 muerte, 20 el
+# ataque de cerca (el latigazo)
+ANIMACION = {0: 0, 3: 6, 13: 0, 14: 1, 15: 2, 16: 3, 20: 5}
 
 
 def archivo_movimientos(esq, piv):
@@ -424,7 +436,7 @@ def pulpo_chr(flor, mo_t, vram):
         nrm[refs] += np.cross(b - a, c - a)
     nrm /= np.maximum(1e-9, np.linalg.norm(nrm, axis=1))[:, None]
     nrm = -nrm                      # el orden del PS1 deja la normal hacia dentro
-    plantilla = flor.partes[2]["bloques"][0]
+    plantilla = flor.partes[[i for i, p in enumerate(flor.partes) if p["bloques"]][0]]["bloques"][0]
     por_parte = [[] for _ in range(esq.n)]
     for clave, refs, uvs in tris:
         ps = {duenos[r] for r in refs}
@@ -530,8 +542,10 @@ def chr_con(flor, modelo, mov, tex):
 
 
 # ---------------- chr.prm ----------------
-def pulpo_prm(flor_rec):
-    r = bytearray(flor_rec)
+def pulpo_prm(base_rec):
+    """El registro del pulpo a partir del de la babosa (registro 2): su IA se acerca arrastrándose y ataca de cerca,
+    y el arrastrarse mueve al bicho con la raíz del movimiento (como el caracol)."""
+    r = bytearray(base_rec)
     struct.pack_into("<H", r, 0, MODELO_PULPO)
     struct.pack_into("<H", r, 0x0A, 400)          # vida
     struct.pack_into("<H", r, 0x0E, 450)          # experiencia (la del King's Field: 450)
@@ -539,39 +553,26 @@ def pulpo_prm(flor_rec):
     struct.pack_into("<H", r, 0x08, 250)          # alto contra el mapa
     struct.pack_into("<H", r, 0xEE, 250)          # alto del cuerpo
     r[0xD2] = 100                                 # escala
-    # animaciones: 0 quieto, 14 golpeado?, 15, 16 como la flor; 20 el latigazo (cuerpo a cuerpo), 23 la tinta
+    r[0x11] &= ~0x40                              # la babosa es semitransparente; el pulpo no
     ids = [0] * 0x20
     for anim, mov in ANIMACION.items():
         ids[anim] = mov
     r[0x60:0x80] = bytes(ids)
-    # el latigazo suena como la tinta (los sonidos van por animación: 0x110 cuántos, 0x1B0 dónde)
-    r[0x110 + 20] = r[0x110 + 23]
-    struct.pack_into("<i", r, 0x1B0 + 4 * 20, struct.unpack_from("<i", r, 0x1B0 + 4 * 23)[0])
-    # elegir: atacar 100, acercarse 100 (como la flor); los ataques: el latigazo (cuerpo a cuerpo 0) y la tinta
+    # el latigazo: el ataque de cerca de la babosa, en la ventana del movimiento nuevo y con el alcance de los brazos
     o = 0x240
-    r[o:o + 0x88] = bytes(0x88)
     r[o + 0] = 100            # peso
     r[o + 1] = 24             # se vuelve hacia el jugador hasta el fotograma 24
-    r[o + 2] = 15             # espera tras el ataque (con 40 tardaba mucho en volver a atacar)
+    r[o + 2] = 15             # espera tras el ataque
     r[o + 3] = 36             # fin de la ventana
-    # alcance: los brazos miden unas 640 unidades del IV; con 380 solo atacaba con el jugador pegado
-    struct.pack_into("<HHf", r, o + 4, 0, 700, math.radians(80))
+    # alcance: los brazos miden unas 640 unidades del IV
+    struct.pack_into("<HHf", r, o + 4, 0, 650, math.radians(80))
     h = o + 0x10
-    struct.pack_into("<9h", r, h, 0, 35, 0, 0, 0, 0, 15, 0, 0)  # golpe y agua (moderado: hay muchos)
+    struct.pack_into("<9h", r, h, 0, 35, 0, 0, 0, 0, 15, 0, 0)  # golpe y agua
     r[h + 0x1E] = 1                               # empuja
-    struct.pack_into("<HHHH", r, h + 0x20, 450, 80, 26, 34)
-    # la tinta: más corta que el chorro de la flor
-    struct.pack_into("<HH", r, 0x3D8 + 4, 150, 900)
-    # el chorro: el de la Flor oscura (efecto 148) dibuja con la textura de la propia flor, que en el pulpo ya no
-    # está (salía un papel sin textura); el del Aqualizard (160, un chorro de agua) usa las texturas comunes de los
-    # efectos (sfx.tmx). Sale de la boca (ancla 0) en el fotograma 40, como antes
-    r[0x3D8 + 0x10] = 160
-    # ...pero tampoco se veía bien en este mapa: las magias de los bichos (148, 160) usan texturas de efectos que el
-    # 4 solo carga en sus zonas. Las del jugador se pueden lanzar en cualquier sitio, así que sus texturas están
-    # siempre: el chorro es el Hidrocañón del jugador (magic.prm 58, nivel 1), desde lejos; de cerca, latigazos
-    r[0x3D8 + 0x10] = MAGIA_CHORRO
-    r[0x3D8] = 60                                 # peso (el latigazo, 100)
-    struct.pack_into("<HH", r, 0x3D8 + 4, 600, 2500)  # distancia mínima y máxima para escupir
+    struct.pack_into("<HHHH", r, h + 0x20, 450, 180, 26, 34)
+    # sin ataque a distancia: las magias de los bichos salían sin textura en este mapa, y la del jugador
+    # (Hidrocañón) también (sus texturas solo se cargan si la llevas puesta)
+    r[0x3D8] = 0
     return bytes(r)
 
 
@@ -585,5 +586,5 @@ def mini_prm(grande_rec):
     h = 0x240 + 0x10
     struct.pack_into("<9h", r, h, 0, 18, 0, 0, 0, 0, 8, 0, 0)          # golpe y agua: más flojo que el grande
     struct.pack_into("<HHf", r, 0x240 + 4, 0, 300, math.radians(80))     # alcance a su tamaño
-    struct.pack_into("<HHHH", r, h + 0x20, 120, 70, 26, 34)
+    struct.pack_into("<HHHH", r, h + 0x20, 160, 70, 26, 34)
     return bytes(r)

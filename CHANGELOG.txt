@@ -1,6 +1,14 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 25 (2026-10-26)
+------------------------------------
+- The Kraken used the Dark Flower's AI, a fixed turret with no melee attack: it never whipped, only shot.
+  It now uses the slime's AI, like the giant snail: it crawls towards the player (new crawl animation that
+  moves it) and whips with its arms up close. The baby Krakens too.
+- No ranged attack: the player's Hydro Cannon also came out untextured (its textures are only loaded when the
+  player has it equipped).
+
 Alpha 0.1 - revision 24 (2026-10-26)
 ------------------------------------
 - Too many baby Krakens: level 0 keeps 6, spread out over the level. The others are Head Eaters and some
