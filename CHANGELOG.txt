@@ -1,6 +1,14 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 23 (2026-10-26)
+------------------------------------
+- The Kraken shoots again, from 6 to 25 m: now it casts the player's Hydro Cannon (level 1). Player spell
+  textures are always loaded, unlike the enemy effects it used before (those came out untextured). Up close it
+  still whips.
+- Stronger idle animation for the Kraken and the baby Krakens: legs and arms sway and the body bobs (before
+  it barely moved and looked frozen).
+
 Alpha 0.1 - revision 22 (2026-10-26)
 ------------------------------------
 - Enemies now spawn facing the direction the map gives them (before it was random). Facings from the King's

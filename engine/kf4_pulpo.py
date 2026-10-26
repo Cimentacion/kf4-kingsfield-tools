@@ -257,9 +257,10 @@ def _poses(esq, nombre, f, total):
         for k, p in enumerate(cad):
             # "doblar" es subir / bajar la punta: giro alrededor del eje horizontal perpendicular a la pata
             if nombre == "quieto":
-                doblar = 0.10 * math.sin(w * 2 + fase - k * 0.7) if tipo == "pata" else \
-                    0.12 * math.sin(w * 2 + fase - k * 0.6)
-                lado = 0.05 * math.sin(w + fase * 1.7)
+                # (con 0,10 apenas se notaba: parecía quieto del todo)
+                doblar = 0.20 * math.sin(w * 2 + fase - k * 0.7) if tipo == "pata" else \
+                    0.30 * math.sin(w * 2 + fase - k * 0.6)
+                lado = 0.12 * math.sin(w + fase * 1.7)
             elif nombre in ("golpeado", "golpe_fuerte"):
                 e = math.sin(math.pi * t) * math.exp(-2 * t) * (1.7 if nombre == "golpe_fuerte" else 1)
                 doblar = -0.35 * e * (1 if tipo == "pata" else 0.4)
@@ -287,8 +288,8 @@ def _poses(esq, nombre, f, total):
             # pequeño giro como vector: doblar * (ex, 0, ez) + lado * (0, 1, 0) -> ángulos x, y, z (aproximación)
             g[p] = (doblar * ex, lado, doblar * ez)
     if nombre == "quieto":
-        dy = 6 * math.sin(w * 2)
-        cuerpo = [0.03 * math.sin(w), 0.04 * math.sin(w + 1), 0.0]
+        dy = 14 * math.sin(w * 2)
+        cuerpo = [0.07 * math.sin(w), 0.10 * math.sin(w + 1), 0.05 * math.sin(w * 2 + 0.5)]
     elif nombre in ("golpeado", "golpe_fuerte"):
         e = math.sin(math.pi * t) * math.exp(-2 * t) * (1.7 if nombre == "golpe_fuerte" else 1)
         cuerpo = [0.18 * e, 0.0, 0.0]
@@ -472,6 +473,7 @@ def _sombra(v, n):
     f = 0.40 + 0.55 * arriba ** 1.5 + 0.30 * alto
     return (min(255.0, 128 * f * 0.94), min(255.0, 128 * f), min(255.0, 128 * f * 1.02), 128.0)
 INVERTIR = True
+MAGIA_CHORRO = 58           # param/magic.prm: Hidrocañón (Hydro Cannon) nivel 1, la magia de agua del jugador
 # el Kraken del King's Field mira hacia +z (los dos brazos largos y los ojos están de ese lado) y los bichos del IV
 # miran hacia -z: sin girarlo salía mirando al lado contrario. Media vuelta alrededor del eje vertical (un giro, no
 # un espejo: las caras y las normales siguen igual) de los vértices, los huesos y los giros de los movimientos
@@ -564,9 +566,12 @@ def pulpo_prm(flor_rec):
     # está (salía un papel sin textura); el del Aqualizard (160, un chorro de agua) usa las texturas comunes de los
     # efectos (sfx.tmx). Sale de la boca (ancla 0) en el fotograma 40, como antes
     r[0x3D8 + 0x10] = 160
-    # ...pero tampoco se ve bien en este mapa (los efectos de muchos bichos usan texturas de efectos que el 4 solo
-    # carga en sus zonas): el pulpo no escupe, solo da latigazos
-    r[0x3D8] = 0
+    # ...pero tampoco se veía bien en este mapa: las magias de los bichos (148, 160) usan texturas de efectos que el
+    # 4 solo carga en sus zonas. Las del jugador se pueden lanzar en cualquier sitio, así que sus texturas están
+    # siempre: el chorro es el Hidrocañón del jugador (magic.prm 58, nivel 1), desde lejos; de cerca, latigazos
+    r[0x3D8 + 0x10] = MAGIA_CHORRO
+    r[0x3D8] = 60                                 # peso (el latigazo, 100)
+    struct.pack_into("<HH", r, 0x3D8 + 4, 600, 2500)  # distancia mínima y máxima para escupir
     return bytes(r)
 
 
