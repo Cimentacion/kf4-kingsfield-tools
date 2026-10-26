@@ -562,8 +562,10 @@ def pulpo_prm(base_rec):
     o = 0x240
     r[o + 0] = 100            # peso
     r[o + 1] = 24             # se vuelve hacia el jugador hasta el fotograma 24
-    r[o + 2] = 15             # espera tras el ataque
-    r[o + 3] = 36             # fin de la ventana
+    # (los bytes 2 y 3 no son "espera" ni "fin de la ventana": en todos los bichos del juego van a 0 o 1; con 15 y
+    # 36 el ataque de cerca no salía nunca. Se dejan como en la babosa)
+    r[o + 2] = 0
+    r[o + 3] = 0
     # alcance: los brazos miden unas 640 unidades del IV
     struct.pack_into("<HHf", r, o + 4, 0, 650, math.radians(80))
     h = o + 0x10

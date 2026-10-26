@@ -440,6 +440,10 @@ def _resto(lista, sin, cuenta, cambio, elegidos, objetos, altura_capa, vecinos, 
             puertas.append(d)
         else:
             alto = techo if techo else 3.0
+            # la pared secreta: el giro sale de su propio modelo (130: el paso va a lo largo de su x), no de las
+            # casillas de al lado (la de detrás de la pared no cuenta como paso y salía girada 90 grados: la losa
+            # del IV, con su colisión, quedaba atravesada y al subir la pared seguía habiendo una pared invisible)
+            giro = (o["giro"] / 4096 * 2 * math.pi + math.pi / 2) % math.pi
             d.update(tipo="secreta", giro=round(giro, 4), medida=[CELDA_M, round(alto, 3)])
             secretas.append(d)
     resumen = {

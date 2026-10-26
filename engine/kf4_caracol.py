@@ -309,7 +309,7 @@ def caracol_prm(base_rec):
     # el mordisco: el de la babosa, en la ventana del movimiento nuevo y con más alcance
     o = 0x240
     r[o + 1] = 18                                   # se encara contigo hasta el fotograma 18
-    r[o + 3] = 26
+    r[o + 3] = 0                                    # (con 26 el mordisco no salía: como en la babosa)
     struct.pack_into("<HHf", r, o + 4, 0, 200, math.pi / 2)
     h = o + 0x10
     struct.pack_into("<9h", r, h, 0, 14, 0, 0, 0, 0, 6, 0, 0)

@@ -1,6 +1,14 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 26 (2026-10-26)
+------------------------------------
+- Secret walls of the King's Field levels: the KFIV slab (with its collision) was turned 90 degrees from the
+  real wall. Once the wall went up there was still an invisible wall in the passage. The facing now comes from
+  the wall's own model. Doors were already right.
+- Kraken, baby Krakens and giant snail: two bytes of the melee attack record were set wrong (they are 0 or 1
+  in every enemy of the game). With them the attack never fired. They are now as in the slime.
+
 Alpha 0.1 - revision 25 (2026-10-26)
 ------------------------------------
 - The Kraken used the Dark Flower's AI, a fixed turret with no melee attack: it never whipped, only shot.
