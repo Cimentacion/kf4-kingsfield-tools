@@ -4630,48 +4630,62 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
     # (el DAT está entero por debajo de los 4 GB y el juego lo lee seguro); si no hay hueco, DUMMY.OUT (relleno de
     # 512 MB); y si tampoco, al final de la ISO (más allá de los 4 GB el lector de la PS2 se cuelga)
     destinos = {}
-    if grande or chr_pulpo:
-        n = n_mapa + n_pulpo
-        for lg in ("SPA", "ENG", "FRA", "GER", "ITA"):
-            d_off, tabo = _dat_table(iso, lg)
-            if not tabo:
+    destinos_pulpo = {}
+
+    def buscar_en_dat(tabo, n, ocupados):
+        """(offset en el DAT, nombres) de mapas seguidos que este mod no usa con n bytes, o None."""
+        ents = sorted(((v[3], v[2], k) for k, v in tabo.items()), key=lambda e: e[0])
+        # ni los vecinos de 099 (0, 4, 5, 8, 98) ni los primeros mapas: se cogen los de número más alto
+        libre = lambda k: (k.endswith(".map") and len(k) == 7 and k[:3].isdigit()
+                           and int(k[:3]) > 10 and int(k[:3]) not in (98, 99) and k not in ocupados)
+        orden = sorted(range(len(ents)), key=lambda a: -int(ents[a][2][:3]) if libre(ents[a][2]) else 0)
+        for a in orden:
+            if not libre(ents[a][2]):
                 continue
-            ents = sorted(((v[3], v[2], k) for k, v in tabo.items()), key=lambda e: e[0])
-            # ni los vecinos de 099 (0, 4, 5, 8, 98) ni los primeros mapas: se cogen los de número más alto
-            libre = lambda k: (k.endswith(".map") and len(k) == 7 and k[:3].isdigit()
-                               and int(k[:3]) > 10 and int(k[:3]) not in (98, 99))
-            mejor = None
-            orden = sorted(range(len(ents)), key=lambda a: -int(ents[a][2][:3]) if libre(ents[a][2]) else 0)
-            for a in orden:
-                if not libre(ents[a][2]):
-                    continue
-                b = a
-                while b < len(ents) and libre(ents[b][2]):
-                    if ents[b][0] + ents[b][1] - ents[a][0] >= n:
-                        mejor = (ents[a][0], [e[2] for e in ents[a:b + 1]])
-                        break
-                    if b + 1 < len(ents) and ents[b + 1][0] != ents[b][0] + ents[b][1]:
-                        break
-                    b += 1
-                if mejor:
+            b = a
+            while b < len(ents) and libre(ents[b][2]):
+                if ents[b][0] + ents[b][1] - ents[a][0] >= n:
+                    return ents[a][0], [e[2] for e in ents[a:b + 1]]
+                if b + 1 < len(ents) and ents[b + 1][0] != ents[b][0] + ents[b][1]:
                     break
-            if mejor and d_off + mejor[0] + n < (1 << 32):
-                destinos[lg] = (d_off + mejor[0], f"en su DAT, encima de {', '.join(mejor[1])}")
-                continue
-            c = s0.iso_files.get("DUMMY.OUT")
-            if c and c[1] >= n and c[0] >= d_off and c[0] + n < (1 << 32):
+                b += 1
+        return None
+
+    for lg in ("SPA", "ENG", "FRA", "GER", "ITA"):
+        d_off, tabo = _dat_table(iso, lg)
+        if not tabo:
+            continue
+        usados = []
+        dummy_libre = 0
+        c = s0.iso_files.get("DUMMY.OUT")
+        if grande:
+            m = buscar_en_dat(tabo, n_mapa, set())
+            if m and d_off + m[0] + n_mapa < (1 << 32):
+                destinos[lg] = (d_off + m[0], f"en su DAT, encima de {', '.join(m[1])}")
+                usados = m[1]
+            elif c and c[1] >= n_mapa and c[0] >= d_off and c[0] + n_mapa < (1 << 32):
                 destinos[lg] = (c[0], "dentro de DUMMY.OUT")
+                dummy_libre = n_mapa
             else:
                 destinos[lg] = (fin_original, "al final de la ISO (más allá de los 4 GB: puede colgarse)")
+        if chr_pulpo:
+            # el pulpo aparte del mapa (así el mapa sigue yendo donde iba), y nunca más allá de los 4 GB
+            m = buscar_en_dat(tabo, n_pulpo, set(usados))
+            if m and d_off + m[0] + n_pulpo < (1 << 32):
+                destinos_pulpo[lg] = (d_off + m[0], f"en su DAT, encima de {', '.join(m[1])}")
+            elif c and c[1] >= dummy_libre + n_pulpo and c[0] >= d_off and c[0] + dummy_libre + n_pulpo < (1 << 32):
+                destinos_pulpo[lg] = (c[0] + dummy_libre, "dentro de DUMMY.OUT")
+    if chr_pulpo and not destinos_pulpo:
+        log.append("AVISO: no hay sitio seguro para el modelo del pulpo: van serpientes en su lugar")
     with open(out, "r+b") as f:
         f.truncate(fin_original)
-        for pos in sorted({d for d, _ in destinos.values()}):
-            f.seek(pos)
-            if grande:
+        if grande:
+            for pos in sorted({d for d, _ in destinos.values()}):
+                f.seek(pos)
                 f.write(new_map + bytes((-len(new_map)) % 2048))
-            if chr_pulpo:
-                f.seek(pos + n_mapa)
-                f.write(chr_pulpo + bytes((-len(chr_pulpo)) % 2048))
+        for pos in sorted({d for d, _ in destinos_pulpo.values()}):
+            f.seek(pos)
+            f.write(chr_pulpo + bytes((-len(chr_pulpo)) % 2048))
         total = f.seek(0, 2)
         f.seek(16 * 2048 + 80)            # tamaño del volumen (descriptor primario), por si algo lo mira
         f.write(struct.pack("<I", total // 2048) + struct.pack(">I", total // 2048))
@@ -4679,8 +4693,10 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
         log.append(f"Mapa de {len(new_map) // 1024} KB: no cabe en su hueco del DAT ({hueco0 // 1024} KB)")
         for lg, (pos, donde) in destinos.items():
             log.append(f"  {lg}: {donde} (byte {pos} de la ISO)")
-    if chr_pulpo:
-        log.append(f"Pulpo: chr/c{kf4_pulpo.MODELO_PULPO:04d}.chr de {len(chr_pulpo) // 1024} KB detrás del mapa")
+    if destinos_pulpo:
+        log.append(f"Pulpo: chr/c{kf4_pulpo.MODELO_PULPO:04d}.chr de {len(chr_pulpo) // 1024} KB")
+        for lg, (pos, donde) in destinos_pulpo.items():
+            log.append(f"  {lg}: {donde} (byte {pos} de la ISO)")
     for lang in ("SPA", "ENG", "FRA", "GER", "ITA"):
         dat_off, tab = _dat_table(out, lang)
         if tab is None:
@@ -4698,9 +4714,9 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
                 f.seek(rec + 0x34)
                 f.write(struct.pack("<III", len(new_map), alloc, off))
             nombre_pulpo = f"chr/c{kf4_pulpo.MODELO_PULPO:04d}.chr"
-            if chr_pulpo and nombre_pulpo in orig and lang in destinos:
+            if chr_pulpo and nombre_pulpo in orig and lang in destinos_pulpo:
                 f.seek(orig[nombre_pulpo][0] + 0x34)
-                f.write(struct.pack("<III", len(chr_pulpo), n_pulpo, destinos[lang][0] + n_mapa - dat_off))
+                f.write(struct.pack("<III", len(chr_pulpo), n_pulpo, destinos_pulpo[lang][0] - dat_off))
             elif nombre_pulpo in orig:
                 f.seek(orig[nombre_pulpo][0] + 0x34)
                 f.write(struct.pack("<III", *orig[nombre_pulpo][1:4]))
@@ -4764,7 +4780,10 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
                 if pulpo:
                     chr_nuevo = bytearray(chr_nuevo)
                     r0 = kf4_pulpo.REGISTRO_PULPO * 0x450
-                    chr_nuevo[r0:r0 + 0x450] = pulpo[1]
+                    if lang in destinos_pulpo:
+                        chr_nuevo[r0:r0 + 0x450] = pulpo[1]
+                    else:          # sin sitio para su modelo: el registro 48 es la serpiente (13)
+                        chr_nuevo[r0:r0 + 0x450] = chr_nuevo[13 * 0x450:14 * 0x450]
                     chr_nuevo = bytes(chr_nuevo)
                 f.seek(dat_off + oc)
                 f.write(chr_nuevo)
@@ -4873,6 +4892,10 @@ def preparar_pulpo(src, v, log):
     tipo = f"chr:{kf4_pulpo.REGISTRO_PULPO}"
     enemigos = getattr(v, "enemigos", [])
     if not any(t == tipo for t, _ in enemigos):
+        return None
+    if "pulpo" in QUITAR:              # prueba: sin el pulpo (serpientes como antes)
+        v.enemigos = [("chr:13" if t == tipo else t, p) for t, p in enemigos]
+        log.append("PRUEBA: sin el pulpo (van serpientes en su lugar)")
         return None
     try:
         import kf4_chr

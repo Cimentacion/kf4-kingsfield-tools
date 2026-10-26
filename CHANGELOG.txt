@@ -1,6 +1,13 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 10 (2026-10-26)
+------------------------------------
+- Fix attempt for the level not loading after revision 9 (black screen): the Kraken's model no longer goes
+  right after the map in the disc image (that could push the map to a place the PS2 cannot read); it gets its
+  own spot, and if there is none the Krakens become snakes again instead of hanging the game.
+- PROBAR_SIN_PULPO.bat: builds the same level with snakes instead of the Kraken, to tell whether it is the cause.
+
 Alpha 0.1 - revision 9 (2026-10-26)
 -----------------------------------
 - New enemy: the King's Field Kraken (the octopus). Until now the level used KFIV's snake in its place. It uses
