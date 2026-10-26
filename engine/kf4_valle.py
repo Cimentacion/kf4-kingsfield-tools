@@ -2361,9 +2361,10 @@ def panel_kf(t, tris):
     struct.pack_into("<4f", b, 0x00, cx, y_pie, cz, 0.0)
     struct.pack_into("<4f", b, 0x10, 0.0, ang, 0.0, 0.0)
     struct.pack_into("<4f", b, 0x20, sx, sy, sz, 1.0)
-    # se cierra sola al alejarse, como las puertas del 4 (door.c: MapObject_UpdateOpenDoor la cierra si este campo
-    # es 0 y el jugador está más lejos que su alcance + 1 m)
-    b[0x46] = 0
+    # que no la cierre el 4 por su cuenta (door.c: MapObject_UpdateOpenDoor la cierra si este campo es 0 y el jugador
+    # está más lejos que su alcance + 1 m, y su alcance es pequeño: se cerraba estando al lado). La cierra su guion,
+    # cuando te alejas PANEL_CIERRE (_guion_panel)
+    b[0x46] = 1
     # el movimiento: la losa sube 280 (el juego suma ese desplazamiento a la posición sin escalarlo,
     # map_object/door.c); la pared del King's Field es más alta: que suba toda su altura
     mov = t["movimiento"]
@@ -2505,6 +2506,8 @@ PANEL_ID0 = 200                  # ids de objeto (MapObject_GetById, byte 0x3A) 
 PANEL_TEMBLOR = (2.5, 75)        # alcance y fotogramas del temblor de la cámara (000 usa 8.0, 30 en un terremoto)
 PANEL_VIBRACION = (64, 75)       # fuerza y fotogramas de la vibración del mando (los de 099: 64, 15)
 PANEL_SONIDO = 0x0D              # sonido común (el de los movimientos 6 y 7 de la losa del 4)
+PANEL_CIERRE = 800               # cm: se cierra cuando te alejas más que esto
+PANEL_ESPERA = 150               # fotogramas abierta como mínimo antes de mirar la distancia
 GUIONES_PANEL = []               # [(etiqueta, id, posición)] de este mapa (colocar_objetos_kf los llena)
 
 
@@ -2522,6 +2525,27 @@ def _guion_panel(etiqueta, ident, pos, puerta=False):
         w += [(144 << 16) | 2, F, fl(PANEL_TEMBLOR[0]), E, PANEL_TEMBLOR[1]]      # ShakeCamera
         w += [(198 << 16) | 3, E, PANEL_VIBRACION[0], E, PANEL_VIBRACION[1], E, 0]   # RumblePad
     w += [(160 << 16) | 6, E, 0, E, PANEL_SONIDO, F, fl(0.0), F, fl(x), F, fl(y - 150.0), F, fl(z)]   # PlaySoundAt
+    # se cierra cuando el jugador se aleja más de PANEL_CIERRE cm (el cierre del 4, por su alcance, la bajaba
+    # enseguida aunque estuvieras al lado): espera, mira la distancia cada medio segundo y entonces la cierra
+    LX, LZ, D1, D2 = (0x60002, 0), (0x60002, 4), (0x60002, 8), (0x60002, 12)   # variables float del hilo
+    PX, PZ = (0x60201, 0), (0x60201, 8)                                         # posición del jugador (x, z)
+    SUB, MUL, ADD, FIN = (1 << 8) | 4, (2 << 8) | 4, (0 << 8) | 4, 0xFF
+
+    def set_(dest, a, op, b):
+        return [0x196 << 16, dest[0], dest[1], a[0], a[1], op, b[0], b[1], FIN]
+    w += [(1 << 16) | 1, E, PANEL_ESPERA]                                        # Wait
+    bucle = len(w)
+    w += set_(LX, PX, SUB, (F, fl(x)))
+    w += set_(LZ, PZ, SUB, (F, fl(z)))
+    w += set_(D1, LX, MUL, LX)
+    w += set_(D2, LZ, MUL, LZ)
+    w += set_(D1, D1, ADD, D2)
+    cerrar = [(182 << 16) | 2, E, ident, E, 0, 0x191 << 16]                    # SignalMapObject id 0: se cierra
+    w += [(0x192 << 16) | (1 << 8), len(cerrar), D1[0], D1[1], 2, F, fl(float(PANEL_CIERRE) ** 2)]   # si d² >
+    w += cerrar
+    w += [(1 << 16) | 1, E, 30]                                                  # si no: espera 30 y vuelve
+    salto = len(w)
+    w += [(0x197 << 16) | ((bucle - (salto + 1)) & 0xFFFF)]
     w += [0x191 << 16]
     return w
 

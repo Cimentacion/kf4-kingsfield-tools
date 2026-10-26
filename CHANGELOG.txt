@@ -1,6 +1,13 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 8 (2026-10-26)
+-----------------------------------
+- Secret walls and doors stay open while you are near: they only close once you walk about 8 m away (they closed
+  after a moment even with you standing next to them).
+- New EXTRAER_CHR.bat: copies KFIV's enemy files from your ISO into chr_kf4.zip, to study them for porting the
+  King's Field Kraken (the octopus that guards the secret door).
+
 Alpha 0.1 - revision 7 (2026-10-26)
 -----------------------------------
 - Enemies use KFIV's dynamic enemy slots (like the original map 008): each enemy type is loaded when one of its
