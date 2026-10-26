@@ -1,6 +1,13 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 12 (2026-10-26)
+------------------------------------
+- The level loads again: the new close-when-far script of revision 8 was what hung it (found with the test
+  builds). Secret walls and doors are back to closing like in revision 7 (KFIV closes them itself) until the
+  cause is found; PROBAR_CIERRE_guion0.bat and PROBAR_CIERRE_abierta.bat are the two tests for that.
+- The Kraken stays in.
+
 Alpha 0.1 - revision 11 (2026-10-26)
 ------------------------------------
 - Fixed the level not loading (black screen) since revision 8. The new close-when-far script of the secret walls

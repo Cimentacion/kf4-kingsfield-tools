@@ -2373,7 +2373,9 @@ def panel_kf(t, tris):
     # que no la cierre el 4 por su cuenta (door.c: MapObject_UpdateOpenDoor la cierra si este campo es 0 y el jugador
     # está más lejos que su alcance + 1 m, y su alcance es pequeño: se cerraba estando al lado). La cierra su guion,
     # cuando te alejas PANEL_CIERRE (_guion_panel)
-    b[0x46] = 0 if "cierre" in QUITAR else 1      # prueba: --quitar cierre, como en la revisión 7
+    # CIERRE: "motor" (como en la revisión 7: lo cierra el 4 por su alcance), "guion" (lo cierra su guion a
+    # PANEL_CIERRE; el mapa no cargaba así, se está buscando por qué), o las pruebas "guion0" / "abierta"
+    b[0x46] = 0 if CIERRE in ("motor", "guion0") else 1
     # el movimiento: la losa sube 280 (el juego suma ese desplazamiento a la posición sin escalarlo,
     # map_object/door.c); la pared del King's Field es más alta: que suba toda su altura
     mov = t["movimiento"]
@@ -2516,6 +2518,7 @@ PANEL_TEMBLOR = (2.5, 75)        # alcance y fotogramas del temblor de la cámar
 PANEL_VIBRACION = (64, 75)       # fuerza y fotogramas de la vibración del mando (los de 099: 64, 15)
 PANEL_SONIDO = 0x0D              # sonido común (el de los movimientos 6 y 7 de la losa del 4)
 PANEL_CIERRE = 800               # cm: se cierra cuando te alejas más que esto
+CIERRE = os.environ.get("KF_CIERRE", "motor")   # ver panel_kf
 PANEL_ESPERA = 150               # fotogramas abierta como mínimo antes de mirar la distancia
 GUIONES_PANEL = []               # [(etiqueta, id, posición)] de este mapa (colocar_objetos_kf los llena)
 
@@ -2544,7 +2547,7 @@ def _guion_panel(etiqueta, ident, pos, puerta=False):
         # el operando de la palabra "set" es cuántas palabras la siguen (Script_SkipWord salta eso: con 0, quien
         # buscara una etiqueta más abajo se perdía dentro del guion y el juego se colgaba al cargar el mapa)
         return [(0x196 << 16) | 8, dest[0], dest[1], a[0], a[1], op, b[0], b[1], FIN]
-    if "cierre" in QUITAR:          # prueba: sin el bucle que la cierra (la cierra el 4, como en la revisión 7)
+    if CIERRE not in ("guion", "guion0"):     # sin el bucle que la cierra
         return w + [0x191 << 16]
     w += [(1 << 16) | 1, E, PANEL_ESPERA]                                        # Wait
     bucle = len(w)
