@@ -62,7 +62,7 @@ VIDA = {13: 200, 2: 60, 3: 60, 6: 100, 10: 54, 11: 105, 12: 750, 16: 550, 18: 1,
 # también cuelgan (probado: solo 8 del 39 y no carga); los termitas son el escarabajo 11, el de 099
 JEFES = {19, 39, 15, 17, 20, 22, 23, 32, 34, 45, 47, 55, 57, 61, 64, 71, 72, 73, 74, 75, 76, 78, 138, 151, 155, 156, 157,
          158, 159}
-MAX_TIPOS = 4          # huecos de pool por mapa que se usan (cada tipo de enemigo ocupa uno)
+MAX_TIPOS = 12         # tipos de enemigo por mapa (con el hueco de pool 0xFF el 4 los carga y descarga según cerca)
 MAX_ENEMIGOS = 120     # el 4 admite 128 por mapa (entity_pool[2][0x80]) y 60 activos a la vez (los cercanos)
 
 # --- objetos que se cogen: id de KF -> objeto del 4 (item_nam.prm) ---

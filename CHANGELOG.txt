@@ -1,6 +1,14 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 7 (2026-10-26)
+-----------------------------------
+- Enemies use KFIV's dynamic enemy slots (like the original map 008): each enemy type is loaded when one of its
+  enemies is near and dropped when none is, so a ported level is no longer limited to 4 enemy types. The test level
+  now keeps 7 KFIV enemy types instead of turning the extra ones into others.
+- Collision packed much smaller: flat rectangles on the same plane are joined and triangles are chained into strips
+  (2.6 MB -> 2.0 MB on the test level). The map now leaves about 0.8 MB free.
+
 Alpha 0.1 - revision 6 (2026-10-26)
 -----------------------------------
 - Secret walls: fixed the dark strip on the floor of the opening (the underside of the wall was left on the

@@ -1489,8 +1489,147 @@ def recortar_texturas(out, log):
 
 
 # ======================= Escritura de CSK (colisión) =======================
+FUSIONAR_COLISION = True      # juntar los rectángulos de colisión del mismo plano en otros más grandes (--quitar fusion)
+
+
+def _fusionar_rectangulos(tiras):
+    """Las tiras de 4 puntos que son rectángulos alineados con los ejes (suelos de casilla, paredes rectas) se juntan
+    con las de su mismo plano que comparten un lado entero: el mismo suelo o pared con muchas menos tiras (cada tira
+    son 32 bytes de cabecera + 16 por punto; los niveles del King's Field traen las casillas en trozos pequeños).
+    Las demás tiras se quedan como están. Devuelve la lista nueva."""
+    grupos = collections.defaultdict(list)
+    otras = []
+    for t in tiras:
+        if len(t) != 4:
+            otras.append(t)
+            continue
+        a, b, c, d = t
+        hecho = False
+        for eje in range(3):          # el plano: la coordenada que es igual en los 4 puntos
+            if max(p[eje] for p in t) - min(p[eje] for p in t) > 1e-4:
+                continue
+            ua, va = [k for k in range(3) if k != eje]
+            us = sorted({round(p[ua], 4) for p in t})
+            vs = sorted({round(p[va], 4) for p in t})
+            if len(us) != 2 or len(vs) != 2:
+                break
+            esquinas = {(round(p[ua], 4), round(p[va], 4)) for p in t}
+            if len(esquinas) != 4:
+                break
+            # sentido (la normal del primer triángulo, como la tira original)
+            e1 = [b[k] - a[k] for k in range(3)]
+            e2 = [c[k] - a[k] for k in range(3)]
+            nrm = e1[(eje + 1) % 3] * e2[(eje + 2) % 3] - e1[(eje + 2) % 3] * e2[(eje + 1) % 3]
+            clave = (eje, round(a[eje], 4), nrm > 0)
+            grupos[clave].append([us[0], us[1], vs[0], vs[1]])
+            hecho = True
+            break
+        if not hecho:
+            otras.append(t)
+    out = list(otras)
+    for (eje, nivel, positivo), rects in grupos.items():
+        ua, va = [k for k in range(3) if k != eje]
+        for _ in range(2):
+            for direccion in (0, 1):          # juntar a lo largo de u (mismo v0, v1) y luego de v
+                rects.sort(key=lambda r: (r[2], r[3], r[0]) if direccion == 0 else (r[0], r[1], r[2]))
+                juntos = []
+                for r in rects:
+                    if juntos:
+                        q = juntos[-1]
+                        if direccion == 0 and q[2] == r[2] and q[3] == r[3] and abs(q[1] - r[0]) < 1e-4:
+                            q[1] = r[1]
+                            continue
+                        if direccion == 1 and q[0] == r[0] and q[1] == r[1] and abs(q[3] - r[2]) < 1e-4:
+                            q[3] = r[3]
+                            continue
+                    juntos.append(list(r))
+                rects = juntos
+        for u0, u1, v0, v1 in rects:
+            def P(u, v):
+                p = [0.0, 0.0, 0.0]
+                p[eje], p[ua], p[va] = nivel, u, v
+                return tuple(p)
+            orden = [P(u0, v0), P(u1, v0), P(u0, v1), P(u1, v1)]
+            # el mismo sentido que las tiras de las que sale
+            e1 = [orden[1][k] - orden[0][k] for k in range(3)]
+            e2 = [orden[2][k] - orden[0][k] for k in range(3)]
+            nrm = e1[(eje + 1) % 3] * e2[(eje + 2) % 3] - e1[(eje + 2) % 3] * e2[(eje + 1) % 3]
+            if (nrm > 0) != positivo:
+                orden = [orden[0], orden[2], orden[1], orden[3]]
+            out.append(orden)
+    return out
+
+
+TIRA_COLISION_MAX = 48        # puntos como mucho por tira de colisión
+TIRA_SENTIDO = False          # True: solo encadenar triángulos que conservan su sentido (los de los modelos del King's
+# Field vienen con sentidos mezclados y casi no se juntaba nada; la colisión del 4 ya recibía tiras con sentidos
+# mezclados y funcionaba, así que no lo tiene en cuenta)
+
+
+def _tiras_colision(tiras):
+    """Las tiras de colisión (de 3 o más puntos) pasadas a triángulos y vueltas a juntar en tiras largas: cada
+    triángulo de más cuesta un punto (16 bytes) en vez de una tira entera (32 + 48). Solo se encadena un triángulo
+    si, con el cambio de sentido de las tiras (impar: los dos primeros al revés), queda con su sentido de antes."""
+    def k(p):
+        return (round(p[0], 3), round(p[1], 3), round(p[2], 3))
+    tris = []
+    for t in tiras:
+        for i in range(len(t) - 2):
+            a, b, c = (t[i], t[i + 1], t[i + 2]) if i % 2 == 0 else (t[i + 1], t[i], t[i + 2])
+            if len({k(a), k(b), k(c)}) == 3:
+                tris.append((a, b, c))
+    claves = [tuple(k(v) for v in t) for t in tris]
+    por_arista = collections.defaultdict(list)
+    for i, kk in enumerate(claves):
+        for x, y in ((0, 1), (1, 2), (2, 0)):
+            por_arista[frozenset((kk[x], kk[y]))].append(i)
+
+    def mismo_sentido(t1, t2):
+        return t2 in (t1, (t1[1], t1[2], t1[0]), (t1[2], t1[0], t1[1]))
+    usado = [False] * len(tris)
+    out = []
+    for i0 in range(len(tris)):
+        if usado[i0]:
+            continue
+        usado[i0] = True
+        tira = list(tris[i0])
+        kt = list(claves[i0])
+        # el primer triángulo, girado para que su último lado sea el que tiene un vecino libre (girarlo no le cambia
+        # el sentido)
+        for _ in range(3):
+            if any(not usado[j] for j in por_arista[frozenset((kt[1], kt[2]))]):
+                break
+            tira = tira[1:] + tira[:1]
+            kt = kt[1:] + kt[:1]
+        while len(tira) < TIRA_COLISION_MAX:
+            a, b = kt[-2], kt[-1]
+            par = (len(tira) - 2) % 2 == 0          # índice del triángulo que se añadiría
+            sig = None
+            for j in por_arista[frozenset((a, b))]:
+                if usado[j]:
+                    continue
+                kj = claves[j]
+                ter = next(q for q in range(3) if kj[q] not in (a, b))
+                nuevo = (a, b, kj[ter]) if par else (b, a, kj[ter])
+                if not TIRA_SENTIDO or mismo_sentido(kj, nuevo):
+                    sig = (j, ter)
+                    break
+            if sig is None:
+                break
+            j, ter = sig
+            usado[j] = True
+            tira.append(tris[j][ter])
+            kt.append(claves[j][ter])
+        out.append(tira)
+    return out
+
+
 def build_csk(coll, origin, stats):
     """coll: {'wall': [tiras], 'floor': [tiras]} -> bytes de una malla de colisión."""
+    if FUSIONAR_COLISION:
+        antes = sum(len(v) for v in coll.values())
+        coll = {k: _tiras_colision(_fusionar_rectangulos(v)) for k, v in coll.items()}
+        stats["coll_fusion"] += antes - sum(len(v) for v in coll.values())
     pts = []
     idx = {}
 
@@ -1915,6 +2054,7 @@ LUZ_PANEL = 26        # la pared secreta del King's Field: su luz va en sus colo
 LUZ_OBJETOS_KF_COLORES = [(0.30, 0.27, 0.20, 0.0), (0.12, 0.10, 0.07, 0.0), (0.05, 0.05, 0.05, 0.0),
                           (0.30, 0.28, 0.24, 1.0)]
 MAX_POOLS = 4         # huecos de pool de enemigos que se usan (026 usa 5; 4 es lo probado en el valle)
+POOL_DINAMICO = True  # todos los enemigos con hueco 0xFF (el juego los carga y descarga según cerca: sin límite de tipos)
 DISTANCIA_ENEMIGOS = 4500   # cm: a esta distancia del jugador se cargan y aparecen
 MAX_SPAWNS = 120      # el 4: 128 entidades por mapa y 256 ids de spawn (entity_world.c); el cuelgue que se vio con 46 era el banco de sonido movido
 
@@ -2653,6 +2793,12 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
     for t, _ in frec.most_common():
         if t not in pools:
             pools[t] = libres.pop(0) if libres else None
+    if POOL_DINAMICO:
+        # hueco de pool 0xFF: el juego da a cada tipo el primer bloque libre (o el que lleva más tiempo sin usarse)
+        # cuando un enemigo suyo está cerca y lo suelta cuando no queda ninguno (entity_pool.c, Entity_StartLoadsInRange):
+        # los tipos se cargan y se descargan solos según dónde estés, sin el límite de 4-5 por mapa. Lo usan los mapas
+        # originales con muchos tipos (008: 6 tipos, todos en 0xFF)
+        pools = {t: 0xFF for t in frec}
     quitados = collections.Counter()
     enemigos = []
     for tipo, pos in valle.enemigos:
@@ -4720,6 +4866,9 @@ def main():
     if "luz" in QUITAR:
         kf_malla.LUZ_SUAVE = False
         kf_malla.LUZ_INTERIOR = False
+    if "fusion" in QUITAR:            # prueba: la colisión sin juntar (como antes)
+        global FUSIONAR_COLISION
+        FUSIONAR_COLISION = False
     if "texturas" in QUITAR:
         kf_malla.ESCRITURA_PARCIAL = False
     if args:
