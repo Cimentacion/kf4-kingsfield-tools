@@ -459,6 +459,7 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
     # el nivel del agua (el más repetido entre las casillas de agua/vacío): por debajo, todo se funde a negro
     vac = [round(v, 2) for k, v in datos.topes.items() if k not in datos.suelo and k not in datos.roca]
     nivel_agua = collections.Counter(vac).most_common(1)[0][0] if vac else None
+    editor.kf_nivel_agua = nivel_agua         # para poner los peces bajo el agua (kf4_editor)
     clave_negra = None
     trozo_de = _trozos(editor, datos, pad, h0) if colision else \
         (lambda x, z: ("G", (x + pad) // editor.trozo, (z + pad) // editor.trozo))

@@ -526,4 +526,7 @@ def pulpo_prm(flor_rec):
     # está (salía un papel sin textura); el del Aqualizard (160, un chorro de agua) usa las texturas comunes de los
     # efectos (sfx.tmx). Sale de la boca (ancla 0) en el fotograma 40, como antes
     r[0x3D8 + 0x10] = 160
+    # ...pero tampoco se ve bien en este mapa (los efectos de muchos bichos usan texturas de efectos que el 4 solo
+    # carga en sus zonas): el pulpo no escupe, solo da latigazos
+    r[0x3D8] = 0
     return bytes(r)

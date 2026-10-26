@@ -2079,6 +2079,20 @@ def _limpiar_spawn(sp, pool):
     return bytes(b)
 
 
+def _spawn_pez(sp):
+    """Spawn de pez: reaparece siempre (spawn_flags: bits 59-61 a 0, sin límite de muertes; probabilidad 100) y no
+    se aleja ni sube mucho de donde nace (bajo el agua)."""
+    b = bytearray(sp)
+    f = struct.unpack_from("<Q", b, 0x38)[0]
+    f &= ~((7 << 59) | (0xFF << 40))
+    struct.pack_into("<Q", b, 0x38, f)
+    struct.pack_into("<H", b, 0x4C, 500)       # radio por el que nada (cm)
+    struct.pack_into("<H", b, 0x50, 1800)      # reaparece cuando vuelves a 18 m
+    b[0x52] = 100
+    struct.pack_into("<H", b, 0x56, 60)        # sube y baja 60 cm como mucho
+    return bytes(b)
+
+
 def plantillas_chr(src, registros, log):
     """{"chr:N": spawn} para registros de chr.prm cualesquiera (los mapas portados de otros King's Field).
     Se copia un spawn real de ese registro de cualquier mapa del disco (lleva su modo de IA, radio, vuelo...);
@@ -2100,11 +2114,14 @@ def plantillas_chr(src, registros, log):
     import kf4_pulpo
     for r in registros:
         sp = spawns.get(r)
-        if r == kf4_pulpo.REGISTRO_PULPO:       # el pulpo: registro nuevo, con el spawn de la Flor oscura
-            sp = spawns.get(kf4_pulpo.REGISTRO_BASE) or por_tipo.get(tipo_de.get(kf4_pulpo.REGISTRO_BASE))
+        base = {kf4_pulpo.REGISTRO_PULPO: kf4_pulpo.REGISTRO_BASE, PEZ: PEZ_BASE}.get(r)
+        if base is not None:                    # registros nuevos (el pulpo, el pez): el spawn del bicho del que salen
+            sp = spawns.get(base) or por_tipo.get(tipo_de.get(base))
             if sp is not None:
                 b = bytearray(sp)
                 struct.pack_into("<H", b, 0x30, r)
+                if r == PEZ:
+                    b = bytearray(_spawn_pez(bytes(b)))
                 out[f"chr:{r}"] = _limpiar_spawn(bytes(b), 0)
                 continue
         if sp is None:
@@ -4661,7 +4678,7 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
     grande = len(new_map) > hueco0
     # el pulpo (kf4_pulpo): su .chr va detrás del mapa grande (o solo, si el mapa cabe en su hueco) y el registro
     # chr/c0037.chr (vacío en el juego) apunta allí
-    chr_pulpo = pulpo[0] if pulpo else None
+    chr_pulpo = pulpo[0] if pulpo and pulpo[0] else None
     n_mapa = (len(new_map) + 2047) // 2048 * 2048 if grande else 0
     n_pulpo = (len(chr_pulpo) + 2047) // 2048 * 2048 if chr_pulpo else 0
     if len(new_map) > MAPA_MAXIMO:
@@ -4820,11 +4837,11 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
                 chr_nuevo, n_bajados = rebajar_dano(chr_orig) if DANO_MAX_GOLPE else (chr_orig, 0)
                 if pulpo:
                     chr_nuevo = bytearray(chr_nuevo)
-                    r0 = kf4_pulpo.REGISTRO_PULPO * 0x450
-                    if lang in destinos_pulpo:
-                        chr_nuevo[r0:r0 + 0x450] = pulpo[1]
-                    else:          # sin sitio para su modelo: el registro 48 es la serpiente (13)
-                        chr_nuevo[r0:r0 + 0x450] = chr_nuevo[13 * 0x450:14 * 0x450]
+                    for reg, rec in pulpo[1].items():
+                        r0 = reg * 0x450
+                        if reg == kf4_pulpo.REGISTRO_PULPO and lang not in destinos_pulpo:
+                            rec = chr_nuevo[13 * 0x450:14 * 0x450]   # sin sitio para su modelo: la serpiente
+                        chr_nuevo[r0:r0 + 0x450] = rec
                     chr_nuevo = bytes(chr_nuevo)
                 f.seek(dat_off + oc)
                 f.write(chr_nuevo)
@@ -4927,36 +4944,77 @@ def hueco_mapa(iso, lang="SPA"):
     return MAPA_MAXIMO
 
 
-def preparar_pulpo(src, v, log):
-    """(chr, registro de chr.prm) del pulpo si el mapa lo lleva; si no se puede hacer, sus enemigos pasan a ser
-    la serpiente (como antes)."""
-    tipo = f"chr:{kf4_pulpo.REGISTRO_PULPO}"
+PEZ = 26                 # chr.prm 26: registro vacío del IV; el pez de los mapas portados (copia del Seafang)
+PEZ_BASE = 43             # Seafang (chr/c0043): nada bajo el agua (seafang.c)
+PEZ_VIDA, PEZ_EXP, PEZ_GOLPE = 30, 5, 10     # muere de dos golpes, da 5 de experiencia, quita unos 10
+REGISTRO_BASE = {}        # registro nuevo -> registro del IV del que sale su spawn (plantillas_chr)
+
+
+def registro_pez(base):
+    """El registro del pez: el del Seafang con poca vida, poca experiencia y golpes de unos PEZ_GOLPE."""
+    r = bytearray(base)
+    struct.pack_into("<H", r, 0x0A, PEZ_VIDA)
+    struct.pack_into("<H", r, 0x0E, PEZ_EXP)
+    for a in range(3):
+        o = 0x240 + a * 0x88
+        for j in range(3):
+            p = o + 0x10 + j * 0x28
+            fs = list(struct.unpack_from("<9h", r, p))
+            if _dano(fs) <= PEZ_GOLPE:
+                continue
+            lo, hi = 0.0, 1.0
+            for _ in range(30):
+                k = (lo + hi) / 2
+                if _dano([f * k for f in fs]) > PEZ_GOLPE:
+                    hi = k
+                else:
+                    lo = k
+            struct.pack_into("<9h", r, p, *[max(1, round(f * lo)) if f > 0 else f for f in fs])
+    struct.pack_into("<HH", r, 0x232, 0xFFFF, 0xFFFF)      # no suelta objetos (reaparece siempre)
+    struct.pack_into("<H", r, 0x230, 0)
+    return bytes(r)
+
+
+def preparar_registros(src, v, log):
+    """(chr del pulpo o None, {registro: 0x450 bytes}) con los bichos nuevos que lleve el mapa: el pulpo (48) y el
+    pez (26). Si el pulpo no se puede hacer, va la serpiente en su lugar."""
     enemigos = getattr(v, "enemigos", [])
-    if not any(t == tipo for t, _ in enemigos):
+    tipos = {t for t, _ in enemigos}
+    prm = src.read("param/chr.prm")
+    regs = {}
+    datos = None
+    if f"chr:{PEZ}" in tipos:
+        b = PEZ_BASE * 0x450
+        regs[PEZ] = registro_pez(prm[b:b + 0x450])
+        REGISTRO_BASE[PEZ] = PEZ_BASE
+        n = sum(1 for t, _ in enemigos if t == f"chr:{PEZ}")
+        log.append(f"Peces: {n} (el Seafang del IV, {PEZ_VIDA} de vida, {PEZ_EXP} de experiencia, golpes de unos "
+                   f"{PEZ_GOLPE}; nadan bajo el agua y reaparecen siempre)")
+    tipo = f"chr:{kf4_pulpo.REGISTRO_PULPO}"
+    if tipo in tipos:
+        try:
+            if "pulpo" in QUITAR:
+                raise RuntimeError("prueba: --quitar pulpo")
+            import kf4_chr
+            if getattr(v, "kf_mo", None) is None:
+                raise RuntimeError("no tengo el MO.T del King's Field (los modelos de los bichos)")
+            flor = kf4_chr.Chr(src.read(f"chr/c{kf4_pulpo.REGISTRO_BASE:04d}.chr"))
+            datos, esq = kf4_pulpo.pulpo_chr(flor, v.kf_mo, v.kf_vram)
+            if len(datos) > 0x80000:
+                raise RuntimeError(f"el modelo ocupa {len(datos)} bytes, más que un bloque de pool")
+            b = kf4_pulpo.REGISTRO_BASE * 0x450
+            regs[kf4_pulpo.REGISTRO_PULPO] = kf4_pulpo.pulpo_prm(prm[b:b + 0x450])
+            REGISTRO_BASE[kf4_pulpo.REGISTRO_PULPO] = kf4_pulpo.REGISTRO_BASE
+            n = sum(1 for t, _ in enemigos if t == tipo)
+            log.append(f"Pulpo (Kraken del King's Field): {n}, con su modelo, {esq.n} huesos y "
+                       f"{len(kf4_pulpo.ORDEN_MOV)} movimientos ({len(datos) // 1024} KB); latigazos de cerca")
+        except Exception as e:
+            v.enemigos = [("chr:13" if t == tipo else t, p) for t, p in v.enemigos]
+            log.append(f"AVISO: no hay pulpo ({e}); va la serpiente en su lugar")
+            datos = None
+    if not regs:
         return None
-    if "pulpo" in QUITAR:              # prueba: sin el pulpo (serpientes como antes)
-        v.enemigos = [("chr:13" if t == tipo else t, p) for t, p in enemigos]
-        log.append("PRUEBA: sin el pulpo (van serpientes en su lugar)")
-        return None
-    try:
-        import kf4_chr
-        if getattr(v, "kf_mo", None) is None:
-            raise RuntimeError("no tengo el MO.T del King's Field (los modelos de los bichos)")
-        flor = kf4_chr.Chr(src.read(f"chr/c{kf4_pulpo.REGISTRO_BASE:04d}.chr"))
-        datos, esq = kf4_pulpo.pulpo_chr(flor, v.kf_mo, v.kf_vram)
-        if len(datos) > 0x80000:
-            raise RuntimeError(f"el modelo ocupa {len(datos)} bytes, más que un bloque de pool")
-        prm = src.read("param/chr.prm")
-        b = kf4_pulpo.REGISTRO_BASE * 0x450
-        reg = kf4_pulpo.pulpo_prm(prm[b:b + 0x450])
-        n = sum(1 for t, _ in enemigos if t == tipo)
-        log.append(f"Pulpo (Kraken del King's Field): {n} con su modelo, {esq.n} huesos y {len(kf4_pulpo.ORDEN_MOV)} movimientos "
-                   f"({len(datos) // 1024} KB); se porta como la Flor oscura del IV y además da latigazos")
-        return datos, reg
-    except Exception as e:
-        v.enemigos = [("chr:13" if t == tipo else t, p) for t, p in enemigos]
-        log.append(f"AVISO: no pude hacer el pulpo ({e}); va la serpiente en su lugar")
-        return None
+    return datos, regs
 
 
 def main():
@@ -5059,7 +5117,7 @@ def main():
     log.append(f"Zona colocada en las coordenadas del Palacio de Oath (desplazamiento {OFFSET[0]:.0f}, {OFFSET[1]:.0f}, {OFFSET[2]:.0f})")
     log.append(f"Ventanas: {len(v.ventanas)}  puertas: {len(v.puertas)}  enemigos pedidos: "
                f"{len(getattr(v, 'enemigos', []))}")
-    pulpo = preparar_pulpo(src, v, log)
+    pulpo = preparar_registros(src, v, log)
     new_map, stats = generar_mapa(src, v, rumbo, log, d099, d031, cruz)
     if zona == "editor" and getattr(v, "kf_atlas", None) is not None:
         # si no cabe en la memoria de mapas se repite: primero quitando las caras que la roca tapa entera, luego
@@ -5080,7 +5138,7 @@ def main():
             v = kf4_editor.MapaEditor(semilla, ruta)
             v.construir()
             fijar_offset(v)
-            pulpo = preparar_pulpo(src, v, [])
+            pulpo = preparar_registros(src, v, [])
             new_map, stats = generar_mapa(src, v, rumbo, log, d099, d031, cruz)
     with open(os.path.join(outdir, "099.map"), "wb") as o:
         o.write(new_map)

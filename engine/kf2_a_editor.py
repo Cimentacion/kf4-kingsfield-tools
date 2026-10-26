@@ -649,8 +649,10 @@ def poner_enemigos_kf1(m, arch, nivel):
             return None
         return (c["techo_h"] - c["h"]) * ALTURA_M
     ox, oy = m["origen"]
+    def es_agua(x, z):                   # el mar y el agua honda (casillas sin suelo): ahí van los peces
+        return "vacio" in celdas.get((x, z), {})
     enemigos, items, resto, res = kf1_objetos.para_editor(arch["FDAT.T"], nivel, pad, ox, oy, CELDA, altura_capa,
-                                                          vecinos, techo_de)
+                                                          vecinos, techo_de, es_agua)
     m["enemigos"], m["items"] = enemigos, items
     m["kf_objetos"] = resto              # cofres (con lo que llevan dentro), puertas y paredes que se abren
     print("Enemigos: " + (", ".join(f"{n} {t}" for t, n in res["enemigos"].most_common()) or "ninguno"))

@@ -1,6 +1,18 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 15 (2026-10-26)
+------------------------------------
+- King's Field level 0 gets its enemies from a hand-made list instead of the automatic look-alikes:
+  c0004 is the most common one, slimes (c0002) with one poison slime (c0003), skeletons (c0050) and the plant
+  (c0000) where the skeletons were, bats (c0010) in the caves with a mushroom (c0087) where several bats meet,
+  and a single Kraken, the one next to the secret wall.
+- Fish in the water: KFIV's Seafang (c0043) as a new enemy type, with 30 HP (two hits), about 10 damage per
+  bite and 5 EXP. They always respawn and swim 1.6 m under the surface, where the original level had its water
+  enemies (they were spiders before).
+- The Kraken no longer spits (no enemy spit shows its texture on this map); it only whips.
+- Re-port the level (JUGAR_KF2.bat) to get the new enemies.
+
 Alpha 0.1 - revision 14 (2026-10-26)
 ------------------------------------
 - Kraken: its ranged attack is now a water jet (the Aqualizard's). The Dark Flower's spores it used before draw

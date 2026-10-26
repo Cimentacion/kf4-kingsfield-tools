@@ -147,7 +147,24 @@ def _fino(f):
     return min(max(f, 0), 2047) / 2048.0
 
 
-def para_editor(fdat, nivel, pad, ox, oy, celda, altura_capa=None, vecinos=None, techo_de=None):
+# Reparto a mano por nivel (lo que pidió el jugador para cada nivel, con los modelos del 4 que él eligió):
+#   en el agua siempre el pez; para el resto, clase del King's Field -> registro del 4 (lista = se van turnando)
+REPARTO = {
+    0: {
+        "agua": 26,                      # pez (copia del Seafang, chr/c0043): kf4_valle.PEZ
+        "agua_modelos": {2, 4, 5},       # Sigill, Baltail y el 5 sin nombre: los que el nivel pone en el mar
+        0: [2], "slime_raro": 3,         # Green Slime -> slime (c0002), uno de ellos el venenoso (c0003)
+        14: [4],                         # Head Eater -> c0004, el que más sale
+        29: [4], "pulpo": 48,            # Kraken (en tierra) -> c0004, menos el de la puerta secreta: el pulpo
+        21: [50, 0, 4],                  # Skeleton -> esqueleto (c0050), la planta (c0000) y c0004, por turnos
+        16: [10], 4: [10],               # S-Knight y los Baltail de tierra -> murciélago (c0010), en las cuevas
+        2: [4],                          # Sigill de tierra -> c0004
+        "grupo": (10, 87, 15.0),         # donde hay varios murciélagos (a menos de 15 m) va una seta (c0087)
+    },
+}
+
+
+def para_editor(fdat, nivel, pad, ox, oy, celda, altura_capa=None, vecinos=None, techo_de=None, es_agua=None):
     """Listas 'enemigos', 'items' y 'kf_objetos' (cofres, puertas, paredes que se abren) del JSON del editor,
     y un resumen.
     altura_capa(columna, fila, capa) -> metros o None: la altura del suelo de esa capa (puentes, pisos altos).
@@ -162,6 +179,10 @@ def para_editor(fdat, nivel, pad, ox, oy, celda, altura_capa=None, vecinos=None,
         Y = oy + (e["x"] + pad + _fino(e["fx"])) * celda
         return round(X, 3), round(Y, 3)
 
+    reparto = REPARTO.get(nivel) if es_agua else None
+    if reparto:
+        return _para_editor_reparto(enemigos, objetos, reparto, nivel, pad, ox, oy, celda, altura_capa, vecinos,
+                                    techo_de, es_agua, pos)
     # tipos: los MAX_TIPOS registros más repetidos; el resto pasa al de vida más parecida
     cuenta = collections.Counter(ENEMIGOS[e["modelo"]][1] for e in enemigos if e["modelo"] in ENEMIGOS)
     elegidos = [r for r, _ in cuenta.most_common(MAX_TIPOS)]
@@ -192,6 +213,65 @@ def para_editor(fdat, nivel, pad, ox, oy, celda, altura_capa=None, vecinos=None,
         lista.append(d)
     if len(lista) > MAX_ENEMIGOS:        # repartidos por todo el nivel, no solo los primeros de la lista
         lista = [lista[i * len(lista) // MAX_ENEMIGOS] for i in range(MAX_ENEMIGOS)]
+    return _resto(lista, sin, cuenta, cambio, elegidos, objetos, altura_capa, vecinos, techo_de, pos)
+
+
+def _para_editor_reparto(enemigos, objetos, R, nivel, pad, ox, oy, celda, altura_capa, vecinos, techo_de, es_agua,
+                         pos):
+    """Los enemigos de un nivel con reparto a mano (REPARTO)."""
+    secretas = [pos(o) for o in objetos if o["id"] in PUERTAS_SECRETAS]
+    candidatos = [i for i, e in enumerate(enemigos) if e["modelo"] == 29 and not es_agua(e["y"], e["x"])]
+    pulpo = None
+    if candidatos and secretas and R.get("pulpo"):
+        def dist(i):
+            X, Y = pos(enemigos[i])
+            return min(math.hypot(X - a, Y - b) for a, b in secretas)
+        pulpo = min(candidatos, key=dist)
+    turno = collections.Counter()
+    sin = collections.Counter()
+    lista = []
+    slime_raro = False
+    for i, e in enumerate(enemigos):
+        m = e["modelo"]
+        nombre = ENEMIGOS.get(m, (f"modelo {m}",))[0]
+        agua = es_agua(e["y"], e["x"])
+        if agua and m in R["agua_modelos"]:
+            reg = R["agua"]
+        elif i == pulpo:
+            reg = R["pulpo"]
+        elif m in R and isinstance(R[m], list):
+            regs = R[m]
+            reg = regs[turno[m] % len(regs)]
+            turno[m] += 1
+            if m == 0 and not slime_raro and turno[m] == 4:
+                reg, slime_raro = R["slime_raro"], True
+        else:
+            sin[m] += 1
+            continue
+        X, Y = pos(e)
+        d = {"tipo": f"chr:{reg}", "x": X, "y": Y, "kf": nombre, "giro": round(e["giro"] / 4096 * 6.2832, 3)}
+        if agua:
+            d["agua"] = True                 # kf4_editor lo pone bajo la superficie del agua
+        elif altura_capa:
+            z = altura_capa(e["y"], e["x"], e["capa"])
+            if z is not None:
+                d["z"] = round(z, 3)
+        lista.append(d)
+    murc, seta, radio = R["grupo"]
+    hechos = []
+    for d in lista:
+        if d["tipo"] != f"chr:{murc}":
+            continue
+        cerca = [o for o in lista if o is not d and o["tipo"] == f"chr:{murc}"
+                 and math.hypot(o["x"] - d["x"], o["y"] - d["y"]) < radio]
+        if len(cerca) >= 1 and all(math.hypot(h["x"] - d["x"], h["y"] - d["y"]) >= radio for h in hechos):
+            d["tipo"] = f"chr:{seta}"
+            hechos.append(d)
+    cuenta = collections.Counter(int(d["tipo"][4:]) for d in lista)
+    return _resto(lista, sin, cuenta, {}, sorted(cuenta), objetos, altura_capa, vecinos, techo_de, pos)
+
+
+def _resto(lista, sin, cuenta, cambio, elegidos, objetos, altura_capa, vecinos, techo_de, pos):
     items, cofres, puertas, secretas = [], [], [], []
     en_cofre = {(o["x"], o["y"]) for o in objetos if o["id"] in COFRES or o["id"] in BARRILES}
     contenido = {}                       # casilla del cofre -> objeto del 4 que hay dentro

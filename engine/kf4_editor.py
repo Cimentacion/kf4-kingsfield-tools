@@ -29,6 +29,8 @@ PENDIENTE_MURO = 1.0     # por encima de 1 m de subida por metro, la celda es pa
 ESCALON = 0.35           # un desnivel mayor entre casillas vecinas es pared en la colisión
 
 
+PEZ_HONDO = 1.6        # m bajo la superficie del agua a los que nadan los peces de un mapa portado
+
 class Constructor(kp.Prologo):
     """Un prólogo vacío: solo se usan sus funciones de construcción, cada pieza en su propio Geo."""
 
@@ -446,6 +448,7 @@ class MapaEditor(kp.Prologo):
             kinds["wall"] = resto + nuevas
 
     def malla_kf(self, km):
+        self.kf_nivel_agua = None
         import kf2_a_editor as ka
         import kf_malla
         try:      # MO.T: los modelos de los objetos de decorado (barriles, mesas, la fuente...)
@@ -744,6 +747,8 @@ class MapaEditor(kp.Prologo):
         g = m.get("guardado")
         self.guardado = (float(g["x"]), float(g["y"]), self.altura(float(g["x"]), float(g["y"]))) if g else None
         def z_de(e):          # "z" la trae un mapa portado (la altura de la capa donde está); si no, el suelo
+            if e.get("agua") and getattr(self, "kf_nivel_agua", None) is not None:
+                return self.kf_nivel_agua - PEZ_HONDO       # los peces: bajo la superficie del agua
             z = float(e["z"]) if e.get("z") is not None else self.altura(float(e["x"]), float(e["y"]))
             return z + (2.5 if e.get("vuela") else 0.0)
         self.objetos = [(int(it["id"]), (float(it["x"]), float(it["y"]), z_de(it))) for it in m.get("items", [])]
