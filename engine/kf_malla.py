@@ -259,6 +259,7 @@ def _piezas(datos, editor, pad, h0):
     _SECRETA_ACTUAL[0] = None
 
 
+_DEPURA = [float(v) for v in __import__('os').environ.get('KF_DEPURA', '').split(',')] if __import__('os').environ.get('KF_DEPURA') else None
 _SECRETA_ACTUAL = [None]   # (id, posición) de la pared secreta que está dando _piezas (para sacar la que sube)
 
 
@@ -407,6 +408,7 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
     suelo_tex = {}            # casilla -> (clave, u0, v0, du, dv) de una cara de suelo suya (para los huecos)
     suelo_alt = {}
     paneles = {}              # posición de la puerta secreta -> [(textura, triángulo)] de la pared que sube
+    secreta_fijas = {}        # caras fijas de los modelos de pared secreta (suelo, techo, marco): pos -> [(grupo, tri)]
     suelos_secreta = set()    # casillas bajo el suelo de los modelos de pared secreta (se les pone suelo)
     con_suelo = set()         # casillas con alguna cara de suelo (mirando arriba)
     editor.kf_paneles = paneles
@@ -514,6 +516,8 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
                 n = _norm(_cross(_sub(b, a), _sub(c, a)))
             uv = [((ax + min(u - cu, lado)) / W, (ay + min(vv - cv, lado)) / H) for (u, vv) in uvs]
             sec = _SECRETA_ACTUAL[0]
+            if sec and nrm_ps is not None and nrm_ps[1] > 0 and all(abs(p_[2] - sec[1][2]) < 0.05 for p_ in P):
+                continue     # la cara de debajo de la pared (a ras de suelo, mirando abajo): se veía como una franja negra
             if sec and nrm_ps is not None and nrm_ps[1] != 0 and not agua:
                 # suelo y techo del modelo de la pared secreta: 1 cm por debajo (el techo, 2 por encima) del de las
                 # casillas de al lado, que también lo tienen: si no, los dos parpadeaban en la unión
@@ -580,13 +584,18 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
             else:
                 ch = trozo_de(x, z)
             vs = [(P[k], uv[k], cols[k], n) for k in range(len(P))]
+            if _DEPURA and abs(sum(p_[0] for p_ in P) / len(P) - _DEPURA[0]) < 0.4 and \
+                    abs(sum(p_[1] for p_ in P) / len(P) - _DEPURA[1]) < 1.5 and n[2] > 0.7:
+                print("DEPURA", x, z, rot, bool(sec), region, [round(c_[0]) for c_ in cols], [tuple(round(q, 2) for q in p_) for p_ in P])
             # PS1: un cuadrilátero son los triángulos 0-1-2 y 1-3-2
             for tri in ((0, 1, 2), (1, 3, 2)) if len(P) == 4 else ((0, 1, 2),):
                 t3 = tuple(vs[k] for k in tri)
                 if bajo_mar and max(v[0][2] for v in t3) < nivel_agua - FUNDIDO_AGUA:
                     caras["negras"] += 1         # ya negro del todo, delante del fondo negro: no hace falta
                     continue
-                if rot < 0:
+                if sec:
+                    secreta_fijas.setdefault(sec[1], []).append(((ch, clave), t3))   # color de lo de al lado (abajo)
+                elif rot < 0:
                     por_grupo[(ch, clave)].append(t3)     # objeto de decorado: pequeño, sin trocear
                 elif bajo_mar and max(v[0][2] for v in t3) < nivel_agua - 0.5:
                     por_grupo[(ch, clave)].append(t3)     # bajo el agua no se acerca la cámara: sin trocear
@@ -721,6 +730,13 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
                     editor.luzv(p, up, 0.55)), up) for p in q]
             for tri in ((0, 2, 1), (1, 2, 3)):
                 por_grupo[(trozo_de(x, z), clave_t)].append(tuple(vs[t] for t in tri))
+    if secreta_fijas:
+        # el suelo, el techo y el marco de la pared secreta: con el color de lo que tienen al lado (en el borde de
+        # la casilla su luz salía de la roca: una franja oscura en el suelo del paso)
+        _colores_panel(secreta_fijas, por_grupo, todas_normales=True)
+        for caras_ in secreta_fijas.values():
+            for g, t in caras_:
+                por_grupo[g].extend(_partir(t))
     if paneles:
         _colores_panel(paneles, por_grupo)
     _juntar_mar(editor, mar, negros, clave_negra, lecho_negro, por_grupo, pad)
@@ -1135,7 +1151,7 @@ def _puerta_en(editor, datos, atlas, pad):
     return f
 
 
-def _colores_panel(paneles, por_grupo):
+def _colores_panel(paneles, por_grupo, todas_normales=False):
     """La pared que sube toma el color de vértice de las paredes del mapa que tiene al lado (las del mismo plano,
     mirando hacia el mismo lado): así no se distingue, se mire desde donde se mire. Si no encuentra ninguna, se
     queda con el suyo."""
@@ -1145,7 +1161,7 @@ def _colores_panel(paneles, por_grupo):
     for tris in por_grupo.values():
         for t in tris:
             for (pp, _, col, nn) in t:
-                if abs(nn[2]) > 0.3:
+                if abs(nn[2]) > 0.3 and not todas_normales:
                     continue
                 for k, c in centros.items():
                     if abs(pp[0] - c[0]) < 4.0 and abs(pp[1] - c[1]) < 4.0 and abs(pp[2] - c[2]) < 4.5:
@@ -1162,10 +1178,12 @@ def _colores_panel(paneles, por_grupo):
             vs = []
             for (pp, uv, col, nn) in tri:
                 ok = (N_ @ np.array(nn[:3])) > 0.85
+                if abs(nn[2]) > 0.7:          # suelo o techo: solo los de su misma altura (no el de debajo, en la roca)
+                    ok &= np.abs(P_[:, 2] - pp[2]) < 0.3
                 if not ok.any():
                     vs.append((pp, uv, col, nn))
                     continue
-                d2 = ((P_[ok, :2] - np.array(pp[:2])) ** 2).sum(1) + 0.5 * (P_[ok, 2] - pp[2]) ** 2
+                d2 = ((P_[ok, :2] - np.array(pp[:2])) ** 2).sum(1) + 4.0 * (P_[ok, 2] - pp[2]) ** 2
                 orden = np.argsort(d2)[:8]
                 w = 1.0 / (d2[orden] + 0.25)
                 c = (C_[ok][orden] * w[:, None]).sum(0) / w.sum()

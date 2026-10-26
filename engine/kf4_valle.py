@@ -1910,7 +1910,7 @@ LUZ_ENEMIGOS = 24     # bloque de luz propio para los enemigos
 LUZ_OBJETOS_KF = 25   # bloque de luz de los objetos del mapa portado (puertas, paredes secretas, cofres, barriles):
 # la luna fría de los enemigos los dejaba gris azulados al lado de las paredes del King's Field, que son oscuras y
 # cálidas; esta es tenue y cálida, para que la pared que se abre no se distinga de las de al lado
-LUZ_PANEL_AMB = 0.4
+LUZ_PANEL_AMB = 0.5
 LUZ_PANEL = 26        # la pared secreta del King's Field: su luz va en sus colores de vértice (los del mapa): sin luces
 LUZ_OBJETOS_KF_COLORES = [(0.30, 0.27, 0.20, 0.0), (0.12, 0.10, 0.07, 0.0), (0.05, 0.05, 0.05, 0.0),
                           (0.30, 0.28, 0.24, 1.0)]
@@ -2757,7 +2757,8 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
         for li in range(4):
             v = dirs[li][ax] if (li < 3 and ax < 3) else (1.0 if (ax == 3 and li == 3) else 0.0)
             struct.pack_into("<f", blocks, lb + (ax * 4 + li) * 4, v)
-    # (medido en capturas: con 1,75 salía 2,5 veces más clara que las paredes de al lado y con 0,8, el doble)
+    # (medido en capturas: los objetos dan textura x color/64 x luz, con tope en 1; el mapa, textura x color/128:
+    # con 0,5 los dos casan si la pared lleva los colores de vértice de las de al lado)
     for li, col in enumerate([(0.0, 0.0, 0.0, 0.0)] * 3 + [(LUZ_PANEL_AMB,) * 3 + (1.0,)]):
         struct.pack_into("<4f", blocks, lb + 0x40 + li * 16, *col)
 

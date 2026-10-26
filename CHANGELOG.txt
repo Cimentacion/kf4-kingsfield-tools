@@ -1,6 +1,12 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 6 (2026-10-26)
+-----------------------------------
+- Secret walls: fixed the dark strip on the floor of the opening (the underside of the wall was left on the
+  floor), and the floor and frame around the wall take the colors of the floor and walls next to them.
+- Secret walls: object brightness recalibrated from in-game screenshots.
+
 Alpha 0.1 - revision 5 (2026-10-26)
 -----------------------------------
 - New vertex lighting for King's Field interiors: about four times brighter than before, floors lighter than
