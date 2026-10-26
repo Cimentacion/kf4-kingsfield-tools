@@ -2167,51 +2167,55 @@ def panel_kf(t, tris):
     for _ in range(n1):
         pos += 0x90 + m[pos + 0x70] * 32 + 16
     fin_paquetes = pos
-    paquetes = []
+    # por textura, muchos triángulos en cada paquete (3 puntos por triángulo, los 2 primeros sin dibujar: ADC):
+    # un paquete por triángulo eran 256 bytes cada uno y las puertas no cabían en el mapa
+    por_tex = collections.OrderedDict()
     for tex, tri in tris:
-        h = bytearray(cab1)
+        por_tex.setdefault(tex, []).append(tri)
+    paquetes = []
+    TRI_PAQ = MAXV // 3            # (como el mapa: 30 puntos por paquete; h[0x8E] es un byte)
+    for tex, lista_t in por_tex.items():
         tbp, cbp, tbw, w, hh, psm = tex
-        t0 = struct.unpack_from("<Q", h, 0x40)[0]
-        t0 &= ~((0x3FFF) | (0x3F << 14) | (0x3F << 20) | (0xF << 26) | (0xF << 30) | (0x3FFF << 37))
-        t0 |= tbp | (tbw << 14) | (psm << 20) | (int(math.log2(w)) << 26) | (int(math.log2(hh)) << 30) | (cbp << 37)
-        struct.pack_into("<Q", h, 0x40, t0)
-        struct.pack_into("<I", h, 0, 2 * 3 + 9)
-        h[0x70] = 3
-        h[0x8E] = 3 * 4
-        cuerpo = bytearray()
-        for k, (p, uv, col, n) in enumerate(tri):
-            x, y, z = to_native(p)
-            dx, dz = x - cx, z - cz
-            lx, lz = dx * ca - dz * sa, dx * sa + dz * ca        # el giro de la losa, deshecho
-            lx, ly, lz = lx / sx, (y - y_pie) / sy, lz / sz
-            nx, ny, nz = n[0], -n[2], n[1]
-            nx, nz = nx * ca - nz * sa, nx * sa + nz * ca
-            nx, ny, nz = nx / sx, ny / sy, nz / sz                 # normal en el espacio escalado
-            ln = math.sqrt(nx * nx + ny * ny + nz * nz) or 1.0
-            cuerpo += struct.pack("<4h4h4h4H", int(round(clamp(lx, -32000, 32000))), int(round(clamp(ly, -32000, 32000))),
-                                  int(round(clamp(lz, -32000, 32000))), 1,
-                                  int(nx / ln * 4096), int(ny / ln * 4096), int(nz / ln * 4096),
-                                  -32768 if k < 2 else 0,
-                                  int(round(uv[0] * 4096)), int(round(uv[1] * 4096)), 4096, 0,
-                                  int(clamp(col[0], 0, 255)), int(clamp(col[1], 0, 255)), int(clamp(col[2], 0, 255)),
-                                  128)
-        cola = bytearray(16)
-        cola[15] = 0x14 if not paquetes else 0x17
-        paquetes.append(bytes(h) + bytes(cuerpo) + bytes(cola))
-    # la primera malla de la losa (una pirámide blanca de 20 unidades, escondida dentro de la losa del 4): con la
-    # escala de la pared asomaba al pie como un pico blanco; sus puntos, todos al origen
-    q = off0
-    for _ in range(n0):
-        nv = m[q + 0x70]
-        for k in range(nv):
-            struct.pack_into("<3h", m, q + 0x90 + k * 32, 0, 0, 0)
-        q += 0x90 + nv * 32 + 16
+        for i0 in range(0, len(lista_t), TRI_PAQ):
+            trozo = lista_t[i0:i0 + TRI_PAQ]
+            nv = 3 * len(trozo)
+            h = bytearray(cab1)
+            t0 = struct.unpack_from("<Q", h, 0x40)[0]
+            t0 &= ~((0x3FFF) | (0x3F << 14) | (0x3F << 20) | (0xF << 26) | (0xF << 30) | (0x3FFF << 37))
+            t0 |= tbp | (tbw << 14) | (psm << 20) | (int(math.log2(w)) << 26) | (int(math.log2(hh)) << 30) | (cbp << 37)
+            struct.pack_into("<Q", h, 0x40, t0)
+            struct.pack_into("<I", h, 0, 2 * nv + 9)
+            h[0x70] = nv
+            h[0x8E] = (nv * 4) & 0xFF
+            cuerpo = bytearray()
+            for kt, tri in enumerate(trozo):
+                orden = (0, 1, 2) if kt % 2 == 0 else (1, 0, 2)      # la tira cambia el sentido en cada impar
+                for k, idx in enumerate(orden):
+                    p, uv, col, n = tri[idx]
+                    x, y, z = to_native(p)
+                    dx, dz = x - cx, z - cz
+                    lx, lz = dx * ca - dz * sa, dx * sa + dz * ca        # el giro de la losa, deshecho
+                    lx, ly, lz = lx / sx, (y - y_pie) / sy, lz / sz
+                    nx, ny, nz = n[0], -n[2], n[1]
+                    nx, nz = nx * ca - nz * sa, nx * sa + nz * ca
+                    nx, ny, nz = nx / sx, ny / sy, nz / sz
+                    ln = math.sqrt(nx * nx + ny * ny + nz * nz) or 1.0
+                    cuerpo += struct.pack("<4h4h4h4H", int(round(clamp(lx, -32000, 32000))),
+                                          int(round(clamp(ly, -32000, 32000))), int(round(clamp(lz, -32000, 32000))), 1,
+                                          int(nx / ln * 4096), int(ny / ln * 4096), int(nz / ln * 4096),
+                                          -32768 if k < 2 else 0,
+                                          int(round(uv[0] * 4096)), int(round(uv[1] * 4096)), 4096, 0,
+                                          int(clamp(col[0], 0, 255)), int(clamp(col[1], 0, 255)),
+                                          int(clamp(col[2], 0, 255)), 128)
+            cola = bytearray(16)
+            cola[15] = 0x14 if not paquetes else 0x17
+            paquetes.append(bytes(h) + bytes(cuerpo) + bytes(cola))
     nuevo = bytearray(m[:off1]) + b"".join(paquetes) + m[fin_paquetes:length]
     nuevo_len = len(nuevo)
     nuevo += m[length:]                                  # la parte de textura propia del objeto, tal cual
     struct.pack_into("<I", nuevo, 0, nuevo_len)
-    struct.pack_into("<H", nuevo, 6, min(65535, len(paquetes) + 3))
-    struct.pack_into("<I", nuevo, 8, 3 * len(paquetes) + 5)
+    struct.pack_into("<H", nuevo, 6, min(65535, len(tris) + 3))
+    struct.pack_into("<I", nuevo, 8, 3 * len(tris) + 5)
     struct.pack_into("<II", nuevo, 0x10 + 48 + 36, off1, len(paquetes))
     b = bytearray(t["rec"])
     struct.pack_into("<4f", b, 0x00, cx, y_pie, cz, 0.0)
@@ -2280,7 +2284,7 @@ def colocar_objetos_kf(objs, obj_secc, lista, plantillas, recs, log, tex_pared=N
                     b[0x3A] = ident
                     etiqueta = GUION_PANEL0 + len(GUIONES_PANEL)
                     struct.pack_into("<H", b, 0x40, etiqueta)
-                    GUIONES_PANEL.append((etiqueta, ident, struct.unpack_from("<3f", b, 0)))
+                    GUIONES_PANEL.append((etiqueta, ident, struct.unpack_from("<3f", b, 0), bool(o.get("es_puerta"))))
                 objs += b
                 cuenta["pared secreta del King's Field"] += 1
                 continue
@@ -2368,14 +2372,15 @@ def _trozos_de(b, n):
     return [b[i:i + n] for i in range(0, len(b) - n + 1, n)]
 
 
-def _guion_panel(etiqueta, ident, pos):
+def _guion_panel(etiqueta, ident, pos, puerta=False):
     E, F = 0x40000, 0x60000
     fl = lambda v: struct.unpack("<I", struct.pack("<f", v))[0]
     x, y, z = pos
     w = [(0x190 << 16) | etiqueta]
     w += [(182 << 16) | 2, E, ident, E, 1]                                   # SignalMapObject id 1: se abre
-    w += [(144 << 16) | 2, F, fl(PANEL_TEMBLOR[0]), E, PANEL_TEMBLOR[1]]      # ShakeCamera
-    w += [(198 << 16) | 3, E, PANEL_VIBRACION[0], E, PANEL_VIBRACION[1], E, 0]   # RumblePad
+    if not puerta:            # las puertas solo suenan; la pared secreta, además, tiembla
+        w += [(144 << 16) | 2, F, fl(PANEL_TEMBLOR[0]), E, PANEL_TEMBLOR[1]]      # ShakeCamera
+        w += [(198 << 16) | 3, E, PANEL_VIBRACION[0], E, PANEL_VIBRACION[1], E, 0]   # RumblePad
     w += [(160 << 16) | 6, E, 0, E, PANEL_SONIDO, F, fl(0.0), F, fl(x), F, fl(y - 150.0), F, fl(z)]   # PlaySoundAt
     w += [0x191 << 16]
     return w
@@ -2387,10 +2392,10 @@ def guion_paneles(guion, log):
     g = _palabras(guion)
     fin = g.index((0x190 << 16) | 0x7FFE)
     nuevo = []
-    for etiqueta, ident, pos in GUIONES_PANEL:
-        nuevo += _guion_panel(etiqueta, ident, pos)
+    for etiqueta, ident, pos, puerta in GUIONES_PANEL:
+        nuevo += _guion_panel(etiqueta, ident, pos, puerta)
     g[fin:fin] = nuevo
-    log.append(f"Paredes secretas: {len(GUIONES_PANEL)} con temblor, vibración y sonido al abrirse")
+    log.append(f"Paredes secretas y puertas: {len(GUIONES_PANEL)} con su guion al abrirse (sonido; las paredes, temblor)")
     return struct.pack("<%dI" % len(g), *g) + bytes(len(guion) % 4)
 
 
@@ -2753,13 +2758,13 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
             libres = dict(paneles)
             con_panel = 0
             for k, o in enumerate(lista):
-                if o["tipo"] != "secreta" or not libres:
+                if o["tipo"] not in ("secreta", "puerta") or not libres:
                     continue
                 pk = min(libres, key=lambda q: (q[0] - o["pos"][0]) ** 2 + (q[1] - o["pos"][1]) ** 2)
                 if (pk[0] - o["pos"][0]) ** 2 + (pk[1] - o["pos"][1]) ** 2 < 2.0 ** 2:
-                    lista[k] = dict(o, panel=libres.pop(pk))
+                    lista[k] = dict(o, tipo="secreta", panel=libres.pop(pk), es_puerta=o["tipo"] == "puerta")
                     con_panel += 1
-            log.append(f"Paredes secretas con la pared del King's Field: {con_panel} de {len(paneles)}")
+            log.append(f"Paredes secretas y puertas con su modelo del King's Field: {con_panel} de {len(paneles)}")
         puerta_kf = getattr(valle, "kf_puerta_en", None)
         if puerta_kf and OBJ_SECRETA in plantillas_obj:
             # las puertas del King's Field suben al abrirse, como la losa del 4: la losa con la textura de la puerta

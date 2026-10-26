@@ -147,6 +147,8 @@ class Datos:
         if juego == "kf1" and arch.get("MO.T"):
             import kf1_objetos
             self.secretas = props_kf1(arch, nivel, self.grid, ids=kf1_objetos.SECRETAS)
+            # las puertas, igual: su modelo de verdad entero va al objeto que sube (kf4_valle.panel_kf)
+            self.puertas_mov = props_kf1(arch, nivel, self.grid, ids=kf1_objetos.PUERTAS)
 
 
 # objetos de decorado: los que no son de coger (< 120), cofres, puertas, paredes secretas, cielos/luna, zonas de
@@ -279,6 +281,21 @@ def _piezas(datos, editor, pad, h0):
             gx, gy, gz = gira(v)
             mundo.append((ox + gx * ESCALA, oy + gz * ESCALA, oz - gy * ESCALA))
         _SECRETA_ACTUAL[0] = (oid, (ox, oy, oz), oz + 3200 * ESCALA - 0.05)
+        yield x, z, prims, mundo, gira, int(round(ang / (math.pi / 2))) & 3
+    for (x, z, oid, verts, prims, elev, ffx, ffz, ang, fz) in getattr(datos, "puertas_mov", []):
+        ox = editor.ox + (x + pad + ffz) * C
+        oy = editor.oy + (z + pad + ffx) * C
+        oz = (elev - h0) * ALTURA_M - fz * ESCALA
+        ca, sa = math.cos(ang), math.sin(ang)
+
+        def gira(v, ca=ca, sa=sa):
+            x_, y_, z_ = v
+            return x_ * ca + z_ * sa, y_, -x_ * sa + z_ * ca
+        mundo = []
+        for v in verts:
+            gx, gy, gz = gira(v)
+            mundo.append((ox + gx * ESCALA, oy + gz * ESCALA, oz - gy * ESCALA))
+        _SECRETA_ACTUAL[0] = (oid, (ox, oy, oz), 1e9, True)      # puerta: todas sus caras al objeto
         yield x, z, prims, mundo, gira, int(round(ang / (math.pi / 2))) & 3
     _SECRETA_ACTUAL[0] = None
 
@@ -540,6 +557,18 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
                 n = _norm(_cross(_sub(b, a), _sub(c, a)))
             uv = [((ax + min(u - cu, lado)) / W, (ay + min(vv - cv, lado)) / H) for (u, vv) in uvs]
             sec = _SECRETA_ACTUAL[0]
+            es_puerta = bool(sec) and len(sec) > 3 and sec[3]
+            if es_puerta and not agua:
+                # la puerta del King's Field: entera al objeto que sube, con la luz de lo que tiene delante
+                fuera = [(p[0] + n[0] * 0.4, p[1] + n[1] * 0.4, p[2] + n[2] * 0.4) for p in P]
+                cols = azular([(luz_kf(editor, q, n, max(_interior(editor, q, cache_int), _interior(editor, p, cache_int)))
+                                if LUZ_INTERIOR else editor.luzv(q, n, _interior(editor, q, cache_int)))
+                               for q, p in zip(fuera, P)], P)
+                tex = (h["f"]["TBP"], cbp, h["f"]["TBW"], W, H, 0x14)
+                cara = [(P[k], uv[k], cols[k], n) for k in range(len(P))]
+                paneles.setdefault(sec[1], []).extend(
+                    (tex, tuple(cara[k] for k in tri)) for tri in (((0, 1, 2), (1, 3, 2)) if len(P) == 4 else ((0, 1, 2),)))
+                continue
             if sec and nrm_ps is not None and nrm_ps[1] > 0 and all(abs(p_[2] - sec[1][2]) < 0.05 for p_ in P):
                 continue     # la cara de debajo de la pared (a ras de suelo, mirando abajo): se veía como una franja negra
             if sec and nrm_ps is not None and nrm_ps[1] != 0 and not agua:

@@ -14,6 +14,8 @@ Alpha 0.1 - revision 6 (2026-10-26)
 - Secret walls: the rising wall has a bottom and a top face (open, it looked like two loose sheets); the
   bottom no longer disappears when you stand right under it.
 - Secret walls close again when you walk away, like KFIV's own doors.
+- Doors now use their real King's Field model (wooden knocker doors, big grey doors, stone door) and rise like the
+  secret walls, with a sound. Their objects are packed much smaller so everything still fits in the map.
 
 Alpha 0.1 - revision 5 (2026-10-26)
 -----------------------------------
