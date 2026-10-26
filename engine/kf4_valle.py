@@ -2373,7 +2373,7 @@ def panel_kf(t, tris):
     # que no la cierre el 4 por su cuenta (door.c: MapObject_UpdateOpenDoor la cierra si este campo es 0 y el jugador
     # está más lejos que su alcance + 1 m, y su alcance es pequeño: se cerraba estando al lado). La cierra su guion,
     # cuando te alejas PANEL_CIERRE (_guion_panel)
-    b[0x46] = 1
+    b[0x46] = 0 if "cierre" in QUITAR else 1      # prueba: --quitar cierre, como en la revisión 7
     # el movimiento: la losa sube 280 (el juego suma ese desplazamiento a la posición sin escalarlo,
     # map_object/door.c); la pared del King's Field es más alta: que suba toda su altura
     mov = t["movimiento"]
@@ -2544,6 +2544,8 @@ def _guion_panel(etiqueta, ident, pos, puerta=False):
         # el operando de la palabra "set" es cuántas palabras la siguen (Script_SkipWord salta eso: con 0, quien
         # buscara una etiqueta más abajo se perdía dentro del guion y el juego se colgaba al cargar el mapa)
         return [(0x196 << 16) | 8, dest[0], dest[1], a[0], a[1], op, b[0], b[1], FIN]
+    if "cierre" in QUITAR:          # prueba: sin el bucle que la cierra (la cierra el 4, como en la revisión 7)
+        return w + [0x191 << 16]
     w += [(1 << 16) | 1, E, PANEL_ESPERA]                                        # Wait
     bucle = len(w)
     w += set_(LX, PX, SUB, (F, fl(x)))
