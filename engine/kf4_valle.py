@@ -2757,7 +2757,8 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
         for li in range(4):
             v = dirs[li][ax] if (li < 3 and ax < 3) else (1.0 if (ax == 3 and li == 3) else 0.0)
             struct.pack_into("<f", blocks, lb + (ax * 4 + li) * 4, v)
-    # (medido en capturas: los objetos dan textura x color/64 x luz, con tope en 1; el mapa, textura x color/128:
+    # (estimado de 3 capturas, no comprobado: los objetos parecen dar textura x color/64 x luz, con tope en 1, y el
+    # mapa textura x color/128:
     # con 0,5 los dos casan si la pared lleva los colores de vértice de las de al lado)
     for li, col in enumerate([(0.0, 0.0, 0.0, 0.0)] * 3 + [(LUZ_PANEL_AMB,) * 3 + (1.0,)]):
         struct.pack_into("<4f", blocks, lb + 0x40 + li * 16, *col)
