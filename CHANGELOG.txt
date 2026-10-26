@@ -1,6 +1,14 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 19 (2026-10-26)
+------------------------------------
+- New enemy: the King's Field giant snail (the one with the spotted body and the stone shell). Like the Kraken
+  it keeps its real model and texture with a skeleton and animations made for it (crawl, bite, hits, death) and
+  behaves like KFIV's slime. Level 0 has 7, in their original spots (they were bats before: that King's Field
+  class was mislabeled "S-Knight" in the table).
+- Several new enemy models can now go in the same ISO, each in its own place.
+
 Alpha 0.1 - revision 18 (2026-10-26)
 ------------------------------------
 - Enemy choices made on the "Enemigos del nivel 0" map page are saved in engine\reparto_nivel0.json, and the

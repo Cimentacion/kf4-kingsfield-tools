@@ -33,7 +33,8 @@ ENEMIGOS = {
     11: ("Reik", 24, False),                       # armadura viviente
     14: ("Head Eater", 18, False),                 # phagos
     15: ("Mogle", 12, False),                      # critter
-    16: ("S-Knight", 24, False), 34: ("Copper Knight", 24, False),
+    16: ("Snail", 63, False),                      # caracol gigante (MO.T[16]): kf4_caracol, registro 63 nuevo
+    34: ("Copper Knight", 24, False),
     17: ("Soldier", 93, False), 18: ("Archer", 92, False),
     21: ("Skeleton", 50, False), 44: ("Skeleton of One-Eyed Giant", 58, False),
     22: ("Termite", 11, False), 25: ("Giant Termite", 11, False), 47: ("Mecha Termite", 11, False),
@@ -54,7 +55,7 @@ ENEMIGOS = {
     107: ("Dragon Grass", 49, False),              # flor oscura
 }
 # vida de cada registro del 4 (chr.prm +0x0A), para repartir los que no caben entre los que sí
-VIDA = {48: 400, 13: 200, 2: 60, 3: 60, 6: 100, 10: 54, 11: 105, 12: 750, 16: 550, 18: 1, 19: 600, 24: 1800, 32: 3000, 34: 4500,
+VIDA = {63: 150, 48: 400, 13: 200, 2: 60, 3: 60, 6: 100, 10: 54, 11: 105, 12: 750, 16: 550, 18: 1, 19: 600, 24: 1800, 32: 3000, 34: 4500,
         39: 500, 40: 1400, 49: 500, 50: 250, 56: 210, 58: 800, 66: 1300, 67: 900, 68: 900, 73: 3800, 75: 5500,
         81: 205, 85: 300, 92: 200, 93: 540}
 # jefes y bichos enormes del 4: cuelgan el juego al cargar el mapa (probado con el 34, Earth King, y el 75,
@@ -158,7 +159,8 @@ REPARTO = {
         "pulpo_lado": (-1, 0),           # el pasillo por el que llegas a la pared (el otro es el escondido)
         29: [2], "pulpo": 48,            # Kraken (en tierra) -> babosa (c0002); el pulpo, uno, delante de la pared secreta
         21: [4, 4, 50, 4, 0],            # Skeleton -> sobre todo c0004, algún esqueleto (c0050) y la planta (c0000)
-        16: [10], 4: [10],               # S-Knight y los Baltail de tierra -> murciélago (c0010), en las cuevas
+        16: [63],                        # el caracol gigante, en su sitio (lo que antes eran murciélagos)
+        4: [10],                         # los Baltail de tierra -> murciélago (c0010), en las cuevas
         2: [4],                          # Sigill de tierra -> c0004
         "grupo": (10, 87, 15.0),         # donde hay varios murciélagos (a menos de 15 m) va una seta (c0087)
     },

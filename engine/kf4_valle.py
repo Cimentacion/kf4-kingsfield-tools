@@ -2061,6 +2061,7 @@ DISTANCIA_ENEMIGOS = 3000   # cm: a esta distancia del jugador se cargan y apare
 # más de 5 tipos a la vez y el pulpo se quedaba esperando hueco (no aparecía). A 30 m caben; el pulpo, de más lejos
 # para que coja hueco antes que los demás; los peces, solo cerca (son muchos y están en el agua)
 DISTANCIA_TIPO = {"chr:48": 6000, "chr:26": 2200}
+CHR_VACIOS = (37, 79)       # archivos chr vacíos (32 bytes) del juego que usan los bichos nuevos
 MAX_SPAWNS = 120      # el 4: 128 entidades por mapa y 256 ids de spawn (entity_world.c); el cuelgue que se vio con 46 era el banco de sonido movido
 
 
@@ -2120,7 +2121,9 @@ def plantillas_chr(src, registros, log):
     import kf4_pulpo
     for r in registros:
         sp = spawns.get(r)
-        base = {kf4_pulpo.REGISTRO_PULPO: kf4_pulpo.REGISTRO_BASE, PEZ: PEZ_BASE}.get(r)
+        import kf4_caracol
+        base = {kf4_pulpo.REGISTRO_PULPO: kf4_pulpo.REGISTRO_BASE, PEZ: PEZ_BASE,
+                kf4_caracol.REGISTRO: kf4_caracol.REGISTRO_BASE}.get(r)
         if base is not None:                    # registros nuevos (el pulpo, el pez): el spawn del bicho del que salen
             sp = spawns.get(base) or por_tipo.get(tipo_de.get(base))
             if sp is not None:
@@ -4682,11 +4685,12 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
     _, tab0 = _dat_table(iso, "SPA")
     hueco0 = min((t["099.map"][2] for t in [tab0] if t), default=0)
     grande = len(new_map) > hueco0
-    # el pulpo (kf4_pulpo): su .chr va detrás del mapa grande (o solo, si el mapa cabe en su hueco) y el registro
-    # chr/c0037.chr (vacío en el juego) apunta allí
-    chr_pulpo = pulpo[0] if pulpo and pulpo[0] else None
+    # los bichos nuevos (kf4_pulpo, kf4_caracol): cada .chr en su propio sitio del DAT y el registro de un archivo
+    # vacío del juego (chr/c0037.chr, chr/c0079.chr) apunta allí. pulpo = ({modelo: bytes}, {registro: bytes},
+    # {registro: (modelo, registro de respaldo si no hay sitio)})
+    chrs = dict(pulpo[0]) if pulpo and pulpo[0] else {}
     n_mapa = (len(new_map) + 2047) // 2048 * 2048 if grande else 0
-    n_pulpo = (len(chr_pulpo) + 2047) // 2048 * 2048 if chr_pulpo else 0
+    n_chr = {m: (len(d) + 2047) // 2048 * 2048 for m, d in chrs.items()}
     if len(new_map) > MAPA_MAXIMO:
         raise RuntimeError(f"El mapa nuevo ({len(new_map)} bytes) pasa de lo que el juego carga ({MAPA_MAXIMO}) "
                            f"aun quitando caras: este nivel todavía es demasiado grande")
@@ -4694,7 +4698,7 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
     # (el DAT está entero por debajo de los 4 GB y el juego lo lee seguro); si no hay hueco, DUMMY.OUT (relleno de
     # 512 MB); y si tampoco, al final de la ISO (más allá de los 4 GB el lector de la PS2 se cuelga)
     destinos = {}
-    destinos_pulpo = {}
+    destinos_chr = {m: {} for m in chrs}
 
     def buscar_en_dat(tabo, n, ocupados):
         """(offset en el DAT, nombres) de mapas seguidos que este mod no usa con n bytes, o None."""
@@ -4732,24 +4736,29 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
                 dummy_libre = n_mapa
             else:
                 destinos[lg] = (fin_original, "al final de la ISO (más allá de los 4 GB: puede colgarse)")
-        if chr_pulpo:
-            # el pulpo aparte del mapa (así el mapa sigue yendo donde iba), y nunca más allá de los 4 GB
-            m = buscar_en_dat(tabo, n_pulpo, set(usados))
-            if m and d_off + m[0] + n_pulpo < (1 << 32):
-                destinos_pulpo[lg] = (d_off + m[0], f"en su DAT, encima de {', '.join(m[1])}")
-            elif c and c[1] >= dummy_libre + n_pulpo and c[0] >= d_off and c[0] + dummy_libre + n_pulpo < (1 << 32):
-                destinos_pulpo[lg] = (c[0] + dummy_libre, "dentro de DUMMY.OUT")
-    if chr_pulpo and not destinos_pulpo:
-        log.append("AVISO: no hay sitio seguro para el modelo del pulpo: van serpientes en su lugar")
+        for mdl, datos_chr in chrs.items():
+            # cada bicho aparte del mapa (así el mapa sigue yendo donde iba), y nunca más allá de los 4 GB
+            n = n_chr[mdl]
+            m = buscar_en_dat(tabo, n, set(usados))
+            if m and d_off + m[0] + n < (1 << 32):
+                destinos_chr[mdl][lg] = (d_off + m[0], f"en su DAT, encima de {', '.join(m[1])}")
+                usados = list(usados) + m[1]
+            elif c and c[1] >= dummy_libre + n and c[0] >= d_off and c[0] + dummy_libre + n < (1 << 32):
+                destinos_chr[mdl][lg] = (c[0] + dummy_libre, "dentro de DUMMY.OUT")
+                dummy_libre += n
+    for mdl in chrs:
+        if not destinos_chr[mdl]:
+            log.append(f"AVISO: no hay sitio seguro para chr/c{mdl:04d}.chr: va otro bicho en su lugar")
     with open(out, "r+b") as f:
         f.truncate(fin_original)
         if grande:
             for pos in sorted({d for d, _ in destinos.values()}):
                 f.seek(pos)
                 f.write(new_map + bytes((-len(new_map)) % 2048))
-        for pos in sorted({d for d, _ in destinos_pulpo.values()}):
-            f.seek(pos)
-            f.write(chr_pulpo + bytes((-len(chr_pulpo)) % 2048))
+        for mdl, datos_chr in chrs.items():
+            for pos in sorted({d for d, _ in destinos_chr[mdl].values()}):
+                f.seek(pos)
+                f.write(datos_chr + bytes((-len(datos_chr)) % 2048))
         total = f.seek(0, 2)
         f.seek(16 * 2048 + 80)            # tamaño del volumen (descriptor primario), por si algo lo mira
         f.write(struct.pack("<I", total // 2048) + struct.pack(">I", total // 2048))
@@ -4757,10 +4766,11 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
         log.append(f"Mapa de {len(new_map) // 1024} KB: no cabe en su hueco del DAT ({hueco0 // 1024} KB)")
         for lg, (pos, donde) in destinos.items():
             log.append(f"  {lg}: {donde} (byte {pos} de la ISO)")
-    if destinos_pulpo:
-        log.append(f"Pulpo: chr/c{kf4_pulpo.MODELO_PULPO:04d}.chr de {len(chr_pulpo) // 1024} KB")
-        for lg, (pos, donde) in destinos_pulpo.items():
-            log.append(f"  {lg}: {donde} (byte {pos} de la ISO)")
+    for mdl, datos_chr in chrs.items():
+        if destinos_chr[mdl]:
+            log.append(f"chr/c{mdl:04d}.chr de {len(datos_chr) // 1024} KB")
+            for lg, (pos, donde) in destinos_chr[mdl].items():
+                log.append(f"  {lg}: {donde} (byte {pos} de la ISO)")
     for lang in ("SPA", "ENG", "FRA", "GER", "ITA"):
         dat_off, tab = _dat_table(out, lang)
         if tab is None:
@@ -4777,13 +4787,15 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
                 f.write(new_map + bytes(alloc - len(new_map)))
                 f.seek(rec + 0x34)
                 f.write(struct.pack("<III", len(new_map), alloc, off))
-            nombre_pulpo = f"chr/c{kf4_pulpo.MODELO_PULPO:04d}.chr"
-            if chr_pulpo and nombre_pulpo in orig and lang in destinos_pulpo:
-                f.seek(orig[nombre_pulpo][0] + 0x34)
-                f.write(struct.pack("<III", len(chr_pulpo), n_pulpo, destinos_pulpo[lang][0] - dat_off))
-            elif nombre_pulpo in orig:
-                f.seek(orig[nombre_pulpo][0] + 0x34)
-                f.write(struct.pack("<III", *orig[nombre_pulpo][1:4]))
+            for mdl in CHR_VACIOS:
+                nombre_chr = f"chr/c{mdl:04d}.chr"
+                if nombre_chr not in orig:
+                    continue
+                f.seek(orig[nombre_chr][0] + 0x34)
+                if mdl in chrs and lang in destinos_chr[mdl]:
+                    f.write(struct.pack("<III", len(chrs[mdl]), n_chr[mdl], destinos_chr[mdl][lang][0] - dat_off))
+                else:
+                    f.write(struct.pack("<III", *orig[nombre_chr][1:4]))
             # ini de arranque. Partida nueva lee ini/0611.ini (main: GameLoop_ResetSystems(0x263); el 9999 solo si
             # falta). Se parte del original (o del de debug) y se le añade el equipo; va en el hueco del 0611 o, si
             # no cabe, en el de otro ini de desarrollo que el juego nunca lee, y el registro del 0611 apunta allí.
@@ -4845,8 +4857,9 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
                     chr_nuevo = bytearray(chr_nuevo)
                     for reg, rec in pulpo[1].items():
                         r0 = reg * 0x450
-                        if reg == kf4_pulpo.REGISTRO_PULPO and lang not in destinos_pulpo:
-                            rec = chr_nuevo[13 * 0x450:14 * 0x450]   # sin sitio para su modelo: la serpiente
+                        mdl, resp = pulpo[2].get(reg, (None, None))
+                        if mdl is not None and lang not in destinos_chr.get(mdl, {}):
+                            rec = chr_nuevo[resp * 0x450:(resp + 1) * 0x450]   # sin sitio para su modelo: otro
                         chr_nuevo[r0:r0 + 0x450] = rec
                     chr_nuevo = bytes(chr_nuevo)
                 f.seek(dat_off + oc)
@@ -4982,13 +4995,13 @@ def registro_pez(base):
 
 
 def preparar_registros(src, v, log):
-    """(chr del pulpo o None, {registro: 0x450 bytes}) con los bichos nuevos que lleve el mapa: el pulpo (48) y el
-    pez (26). Si el pulpo no se puede hacer, va la serpiente en su lugar."""
+    """({modelo: chr}, {registro: 0x450 bytes}, {registro: (modelo, respaldo)}) con los bichos nuevos que lleve el
+    mapa: el pez (26), el pulpo (48) y el caracol (63). Si un modelo no se puede hacer, va otro bicho en su lugar."""
+    import kf4_caracol
     enemigos = getattr(v, "enemigos", [])
     tipos = {t for t, _ in enemigos}
     prm = src.read("param/chr.prm")
-    regs = {}
-    datos = None
+    regs, chrs, respaldo = {}, {}, {}
     if f"chr:{PEZ}" in tipos:
         b = PEZ_BASE * 0x450
         regs[PEZ] = registro_pez(prm[b:b + 0x450])
@@ -4996,31 +5009,41 @@ def preparar_registros(src, v, log):
         n = sum(1 for t, _ in enemigos if t == f"chr:{PEZ}")
         log.append(f"Peces: {n} (el Seafang del IV, {PEZ_VIDA} de vida, {PEZ_EXP} de experiencia, golpes de unos "
                    f"{PEZ_GOLPE}; nadan bajo el agua y reaparecen siempre)")
-    tipo = f"chr:{kf4_pulpo.REGISTRO_PULPO}"
-    if tipo in tipos:
+    import kf4_chr
+    nuevos = [
+        ("pulpo", kf4_pulpo.REGISTRO_PULPO, kf4_pulpo.MODELO_PULPO, kf4_pulpo.REGISTRO_BASE, 13,
+         lambda base: kf4_pulpo.pulpo_chr(base, v.kf_mo, v.kf_vram)[0], kf4_pulpo.pulpo_prm,
+         "Pulpo (Kraken del King's Field): latigazos de cerca"),
+        ("caracol", kf4_caracol.REGISTRO, kf4_caracol.MODELO, kf4_caracol.REGISTRO_BASE, 2,
+         lambda base: kf4_caracol.caracol_chr(base, v.kf_mo, v.kf_vram), kf4_caracol.caracol_prm,
+         "Caracol gigante del King's Field: se arrastra y muerde (se porta como la babosa)"),
+    ]
+    for nombre, reg, modelo, base_reg, resp, hacer, prm_de, texto in nuevos:
+        tipo = f"chr:{reg}"
+        if tipo not in tipos:
+            continue
         try:
-            if "pulpo" in QUITAR:
-                raise RuntimeError("prueba: --quitar pulpo")
-            import kf4_chr
+            if nombre in QUITAR:
+                raise RuntimeError(f"prueba: --quitar {nombre}")
             if getattr(v, "kf_mo", None) is None:
                 raise RuntimeError("no tengo el MO.T del King's Field (los modelos de los bichos)")
-            flor = kf4_chr.Chr(src.read(f"chr/c{kf4_pulpo.REGISTRO_BASE:04d}.chr"))
-            datos, esq = kf4_pulpo.pulpo_chr(flor, v.kf_mo, v.kf_vram)
+            base = kf4_chr.Chr(src.read(f"chr/c{base_reg:04d}.chr"))
+            datos = hacer(base)
             if len(datos) > 0x80000:
                 raise RuntimeError(f"el modelo ocupa {len(datos)} bytes, más que un bloque de pool")
-            b = kf4_pulpo.REGISTRO_BASE * 0x450
-            regs[kf4_pulpo.REGISTRO_PULPO] = kf4_pulpo.pulpo_prm(prm[b:b + 0x450])
-            REGISTRO_BASE[kf4_pulpo.REGISTRO_PULPO] = kf4_pulpo.REGISTRO_BASE
+            b = base_reg * 0x450
+            regs[reg] = prm_de(prm[b:b + 0x450])
+            chrs[modelo] = datos
+            respaldo[reg] = (modelo, resp)
+            REGISTRO_BASE[reg] = base_reg
             n = sum(1 for t, _ in enemigos if t == tipo)
-            log.append(f"Pulpo (Kraken del King's Field): {n}, con su modelo, {esq.n} huesos y "
-                       f"{len(kf4_pulpo.ORDEN_MOV)} movimientos ({len(datos) // 1024} KB); latigazos de cerca")
+            log.append(f"{texto}: {n}, chr/c{modelo:04d}.chr de {len(datos) // 1024} KB")
         except Exception as e:
-            v.enemigos = [("chr:13" if t == tipo else t, p) for t, p in v.enemigos]
-            log.append(f"AVISO: no hay pulpo ({e}); va la serpiente en su lugar")
-            datos = None
+            v.enemigos = [(f"chr:{resp}" if t == tipo else t, p) for t, p in v.enemigos]
+            log.append(f"AVISO: no hay {nombre} ({e}); va el registro {resp} en su lugar")
     if not regs:
         return None
-    return datos, regs
+    return chrs, regs, respaldo
 
 
 def main():
