@@ -36,6 +36,7 @@ import collections
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import kf4_mapdump as md  # noqa: E402
+import kf4_pulpo  # noqa: E402
 
 # ======================= Texturas de North Cliffs (031) por (TBP, CBP) =======================
 ROCA = (0x32C0, 0x3D43)        # roca gris oscura 512
@@ -2096,8 +2097,16 @@ def plantillas_chr(src, registros, log):
         t = tipo_de.get(r)
         if t is not None:
             por_tipo.setdefault(t, sp)
+    import kf4_pulpo
     for r in registros:
         sp = spawns.get(r)
+        if r == kf4_pulpo.REGISTRO_PULPO:       # el pulpo: registro nuevo, con el spawn de la Flor oscura
+            sp = spawns.get(kf4_pulpo.REGISTRO_BASE) or por_tipo.get(tipo_de.get(kf4_pulpo.REGISTRO_BASE))
+            if sp is not None:
+                b = bytearray(sp)
+                struct.pack_into("<H", b, 0x30, r)
+                out[f"chr:{r}"] = _limpiar_spawn(bytes(b), 0)
+                continue
         if sp is None:
             sp = por_tipo.get(tipo_de.get(r))
             if sp is None:
@@ -4576,7 +4585,8 @@ def ini_con_equipo(texto):
     return fin.join(base + lineas) + fin
 
 
-def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", vida_numero=True, cruz=True, exp_menu=True):
+def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", vida_numero=True, cruz=True, exp_menu=True,
+              pulpo=None):
     """Copia la ISO una vez a '(valle).iso' y en las siguientes veces solo reescribe lo que cambia.
     debug_ini: '9999' etc. para que Partida nueva use ese ini de desarrollo; None = el normal."""
     base, ext = os.path.splitext(iso)
@@ -4608,6 +4618,11 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
     _, tab0 = _dat_table(iso, "SPA")
     hueco0 = min((t["099.map"][2] for t in [tab0] if t), default=0)
     grande = len(new_map) > hueco0
+    # el pulpo (kf4_pulpo): su .chr va detrás del mapa grande (o solo, si el mapa cabe en su hueco) y el registro
+    # chr/c0037.chr (vacío en el juego) apunta allí
+    chr_pulpo = pulpo[0] if pulpo else None
+    n_mapa = (len(new_map) + 2047) // 2048 * 2048 if grande else 0
+    n_pulpo = (len(chr_pulpo) + 2047) // 2048 * 2048 if chr_pulpo else 0
     if len(new_map) > MAPA_MAXIMO:
         raise RuntimeError(f"El mapa nuevo ({len(new_map)} bytes) pasa de lo que el juego carga ({MAPA_MAXIMO}) "
                            f"aun quitando caras: este nivel todavía es demasiado grande")
@@ -4615,8 +4630,8 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
     # (el DAT está entero por debajo de los 4 GB y el juego lo lee seguro); si no hay hueco, DUMMY.OUT (relleno de
     # 512 MB); y si tampoco, al final de la ISO (más allá de los 4 GB el lector de la PS2 se cuelga)
     destinos = {}
-    if grande:
-        n = (len(new_map) + 2047) // 2048 * 2048
+    if grande or chr_pulpo:
+        n = n_mapa + n_pulpo
         for lg in ("SPA", "ENG", "FRA", "GER", "ITA"):
             d_off, tabo = _dat_table(iso, lg)
             if not tabo:
@@ -4652,7 +4667,11 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
         f.truncate(fin_original)
         for pos in sorted({d for d, _ in destinos.values()}):
             f.seek(pos)
-            f.write(new_map + bytes((-len(new_map)) % 2048))
+            if grande:
+                f.write(new_map + bytes((-len(new_map)) % 2048))
+            if chr_pulpo:
+                f.seek(pos + n_mapa)
+                f.write(chr_pulpo + bytes((-len(chr_pulpo)) % 2048))
         total = f.seek(0, 2)
         f.seek(16 * 2048 + 80)            # tamaño del volumen (descriptor primario), por si algo lo mira
         f.write(struct.pack("<I", total // 2048) + struct.pack(">I", total // 2048))
@@ -4660,6 +4679,8 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
         log.append(f"Mapa de {len(new_map) // 1024} KB: no cabe en su hueco del DAT ({hueco0 // 1024} KB)")
         for lg, (pos, donde) in destinos.items():
             log.append(f"  {lg}: {donde} (byte {pos} de la ISO)")
+    if chr_pulpo:
+        log.append(f"Pulpo: chr/c{kf4_pulpo.MODELO_PULPO:04d}.chr de {len(chr_pulpo) // 1024} KB detrás del mapa")
     for lang in ("SPA", "ENG", "FRA", "GER", "ITA"):
         dat_off, tab = _dat_table(out, lang)
         if tab is None:
@@ -4676,6 +4697,13 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
                 f.write(new_map + bytes(alloc - len(new_map)))
                 f.seek(rec + 0x34)
                 f.write(struct.pack("<III", len(new_map), alloc, off))
+            nombre_pulpo = f"chr/c{kf4_pulpo.MODELO_PULPO:04d}.chr"
+            if chr_pulpo and nombre_pulpo in orig and lang in destinos:
+                f.seek(orig[nombre_pulpo][0] + 0x34)
+                f.write(struct.pack("<III", len(chr_pulpo), n_pulpo, destinos[lang][0] + n_mapa - dat_off))
+            elif nombre_pulpo in orig:
+                f.seek(orig[nombre_pulpo][0] + 0x34)
+                f.write(struct.pack("<III", *orig[nombre_pulpo][1:4]))
             # ini de arranque. Partida nueva lee ini/0611.ini (main: GameLoop_ResetSystems(0x263); el 9999 solo si
             # falta). Se parte del original (o del de debug) y se le añade el equipo; va en el hueco del 0611 o, si
             # no cabe, en el de otro ini de desarrollo que el juego nunca lee, y el registro del 0611 apunta allí.
@@ -4727,15 +4755,20 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
                     if done == 0:
                         log.append(f"Barriles: se rompen con {BARRIL_DUREZA} de daño de un golpe (antes 181)")
             # daño de los enemigos cuerpo a cuerpo (param/chr.prm), siempre desde el original y en su sitio
-            if "param/chr.prm" in orig and DANO_MAX_GOLPE:
+            if "param/chr.prm" in orig and (DANO_MAX_GOLPE or pulpo):
                 _, sc, ac, oc = orig["param/chr.prm"]
                 with open(iso, "rb") as g:
                     g.seek(dat_off + oc)
                     chr_orig = g.read(sc)
-                chr_nuevo, n_bajados = rebajar_dano(chr_orig)
+                chr_nuevo, n_bajados = rebajar_dano(chr_orig) if DANO_MAX_GOLPE else (chr_orig, 0)
+                if pulpo:
+                    chr_nuevo = bytearray(chr_nuevo)
+                    r0 = kf4_pulpo.REGISTRO_PULPO * 0x450
+                    chr_nuevo[r0:r0 + 0x450] = pulpo[1]
+                    chr_nuevo = bytes(chr_nuevo)
                 f.seek(dat_off + oc)
                 f.write(chr_nuevo)
-                if done == 0:
+                if done == 0 and DANO_MAX_GOLPE:
                     log.append(f"Serpiente: {n_bajados} golpes cuerpo a cuerpo rebajados a unos {DANO_MAX_GOLPE} de daño "
                                f"(con 50 de vida y sin armadura); los demás enemigos, como en el juego")
         done += 1
@@ -4832,6 +4865,34 @@ MAPA_MAXIMO = 0xA80000 - 0x10000
 def hueco_mapa(iso, lang="SPA"):
     """Bytes que puede ocupar el 099.map: si no cabe en su sitio del .DAT va al final de la ISO."""
     return MAPA_MAXIMO
+
+
+def preparar_pulpo(src, v, log):
+    """(chr, registro de chr.prm) del pulpo si el mapa lo lleva; si no se puede hacer, sus enemigos pasan a ser
+    la serpiente (como antes)."""
+    tipo = f"chr:{kf4_pulpo.REGISTRO_PULPO}"
+    enemigos = getattr(v, "enemigos", [])
+    if not any(t == tipo for t, _ in enemigos):
+        return None
+    try:
+        import kf4_chr
+        if getattr(v, "kf_mo", None) is None:
+            raise RuntimeError("no tengo el MO.T del King's Field (los modelos de los bichos)")
+        flor = kf4_chr.Chr(src.read(f"chr/c{kf4_pulpo.REGISTRO_BASE:04d}.chr"))
+        datos, esq = kf4_pulpo.pulpo_chr(flor, v.kf_mo, v.kf_vram)
+        if len(datos) > 0x80000:
+            raise RuntimeError(f"el modelo ocupa {len(datos)} bytes, más que un bloque de pool")
+        prm = src.read("param/chr.prm")
+        b = kf4_pulpo.REGISTRO_BASE * 0x450
+        reg = kf4_pulpo.pulpo_prm(prm[b:b + 0x450])
+        n = sum(1 for t, _ in enemigos if t == tipo)
+        log.append(f"Pulpo (Kraken del King's Field): {n} con su modelo, {esq.n} huesos y {len(kf4_pulpo.ORDEN_MOV)} movimientos "
+                   f"({len(datos) // 1024} KB); se porta como la Flor oscura del IV y además da latigazos")
+        return datos, reg
+    except Exception as e:
+        v.enemigos = [("chr:13" if t == tipo else t, p) for t, p in enemigos]
+        log.append(f"AVISO: no pude hacer el pulpo ({e}); va la serpiente en su lugar")
+        return None
 
 
 def main():
@@ -4934,6 +4995,7 @@ def main():
     log.append(f"Zona colocada en las coordenadas del Palacio de Oath (desplazamiento {OFFSET[0]:.0f}, {OFFSET[1]:.0f}, {OFFSET[2]:.0f})")
     log.append(f"Ventanas: {len(v.ventanas)}  puertas: {len(v.puertas)}  enemigos pedidos: "
                f"{len(getattr(v, 'enemigos', []))}")
+    pulpo = preparar_pulpo(src, v, log)
     new_map, stats = generar_mapa(src, v, rumbo, log, d099, d031, cruz)
     if zona == "editor" and getattr(v, "kf_atlas", None) is not None:
         # si no cabe en la memoria de mapas se repite: primero quitando las caras que la roca tapa entera, luego
@@ -4954,11 +5016,12 @@ def main():
             v = kf4_editor.MapaEditor(semilla, ruta)
             v.construir()
             fijar_offset(v)
+            pulpo = preparar_pulpo(src, v, [])
             new_map, stats = generar_mapa(src, v, rumbo, log, d099, d031, cruz)
     with open(os.path.join(outdir, "099.map"), "wb") as o:
         o.write(new_map)
     if not solo and src.kind == "ISO":
-        iso_out, n = patch_iso(src_path, new_map, log, debug_ini, giro, mando, vida_numero, cruz, exp_menu)
+        iso_out, n = patch_iso(src_path, new_map, log, debug_ini, giro, mando, vida_numero, cruz, exp_menu, pulpo)
         log.append(f"ISO -> {iso_out}")
         with open(os.path.join(outdir, "iso_lista.txt"), "w", encoding="utf-8") as o:
             o.write(iso_out)

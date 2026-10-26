@@ -1,6 +1,14 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 9 (2026-10-26)
+-----------------------------------
+- New enemy: the King's Field Kraken (the octopus). Until now the level used KFIV's snake in its place. It uses
+  its real King's Field model and texture, with a skeleton (body, six legs, two long arms) and its own animations:
+  idle, light and heavy hit, death, an ink spit at range and a whip with both arms up close. It behaves like
+  KFIV's Dark Flower (it stays in place). None of KFIV's enemies are removed: it is added as a new type.
+- Untested on a real PS2 or emulator yet: report if it crashes the level, looks wrong or never attacks.
+
 Alpha 0.1 - revision 8 (2026-10-26)
 -----------------------------------
 - Secret walls and doors stay open while you are near: they only close once you walk about 8 m away (they closed

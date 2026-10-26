@@ -42,7 +42,7 @@ ENEMIGOS = {
     26: ("Red Spike Ball", 66, True),              # malicia
     27: ("Log Stalker", 12, False),
     28: ("Demon Lord", 58, False), 46: ("Mecha Demon Lord", 58, False),   # esqueleto alto (no el jefe)
-    29: ("Kraken", 13, False),                    # serpiente (la cabeza, 30, va con el cuerpo: no se duplica)
+    29: ("Kraken", 48, False),                    # el pulpo de verdad (kf4_pulpo: registro 48 nuevo del chr.prm)
     31: ("Earth Elemental", 68, False),
     32: ("Refma", 66, True), 51: ("Refma", 66, True),
     33: ("Tarn", 58, False),                       # esqueleto alto (el gigante es un jefe)
@@ -54,7 +54,7 @@ ENEMIGOS = {
     107: ("Dragon Grass", 49, False),              # flor oscura
 }
 # vida de cada registro del 4 (chr.prm +0x0A), para repartir los que no caben entre los que sí
-VIDA = {13: 200, 2: 60, 3: 60, 6: 100, 10: 54, 11: 105, 12: 750, 16: 550, 18: 1, 19: 600, 24: 1800, 32: 3000, 34: 4500,
+VIDA = {48: 400, 13: 200, 2: 60, 3: 60, 6: 100, 10: 54, 11: 105, 12: 750, 16: 550, 18: 1, 19: 600, 24: 1800, 32: 3000, 34: 4500,
         39: 500, 40: 1400, 49: 500, 50: 250, 56: 210, 58: 800, 66: 1300, 67: 900, 68: 900, 73: 3800, 75: 5500,
         81: 205, 85: 300, 92: 200, 93: 540}
 # jefes y bichos enormes del 4: cuelgan el juego al cargar el mapa (probado con el 34, Earth King, y el 75,
@@ -165,6 +165,8 @@ def para_editor(fdat, nivel, pad, ox, oy, celda, altura_capa=None, vecinos=None,
     # tipos: los MAX_TIPOS registros más repetidos; el resto pasa al de vida más parecida
     cuenta = collections.Counter(ENEMIGOS[e["modelo"]][1] for e in enemigos if e["modelo"] in ENEMIGOS)
     elegidos = [r for r, _ in cuenta.most_common(MAX_TIPOS)]
+    if 48 in cuenta and 48 not in elegidos:      # el pulpo siempre (es uno solo y guarda la puerta)
+        elegidos[-1] = 48
     cambio = {}
     for r in cuenta:
         if r not in elegidos:

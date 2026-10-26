@@ -453,6 +453,9 @@ class MapaEditor(kp.Prologo):
         except FileNotFoundError:
             arch = ka.leer_archivos(km["ruta"])
         datos = kf_malla.Datos(arch, km["juego"], int(km["nivel"]))
+        # para el pulpo (el Kraken, kf4_pulpo): su modelo de MO.T y la memoria de vídeo del nivel (sus texturas)
+        self.kf_mo = arch.get("MO.T") if km["juego"] == "kf1" else None
+        self.kf_vram = datos.vram
         pad_ = int(km["pad"])
         self.kf_props = len(datos.props)
         self.kf_fuentes = []          # fuentes que curan: (x, y, z) del editor
