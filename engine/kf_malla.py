@@ -255,6 +255,25 @@ def _piezas(datos, editor, pad, h0):
             # -256 a 0, metida en la roca. Desde un lado la de abajo quedaba 31 cm hundida en su hueco: su cara de ese
             # lado se lleva a x = -256, al ras de la pared de al lado (el hueco va de -256 a 256)
             verts = [(-256, v[1], v[2]) if v[0] == 3 and v[1] >= -3200 else v for v in verts]
+            # el hueco por encima del techo, donde se mete la pared al subir: sus dos lados y su tapa (sin ellos, al
+            # abrirla se veía el cielo por ese hueco). Con la textura de la pared; la normal lleva un poco de z para
+            # que no cuenten como la pared que sube (kf_malla: las caras verticales puras van al objeto)
+            cara = next((pr for pr in prims if pr[0] is not None and pr[4] is not None and pr[4][0] != 0
+                         and pr[4][1] == 0 and pr[4][2] == 0), None)
+            if cara:
+                tp_, cl_, uvs_, _, _ = cara
+                u0_, u1_ = min(u for u, _ in uvs_), max(u for u, _ in uvs_)
+                v0_, v1_ = min(v for _, v in uvs_), max(v for _, v in uvs_)
+                uvq = [(u0_, v1_), (u1_, v1_), (u0_, v0_), (u1_, v0_)]
+                verts = list(verts)
+                prims = list(prims)
+                for xs, nx_ in ((-256, 4096), (256, -4096)):          # los dos lados, mirando hacia dentro
+                    b_ = len(verts)
+                    verts += [(xs, -3200, -1034), (xs, -3200, 1034), (xs, -6400, -1034), (xs, -6400, 1034)]
+                    prims.append((tp_, cl_, uvq, [b_, b_ + 1, b_ + 2, b_ + 3], (nx_, 0, 1)))
+                b_ = len(verts)                                        # la tapa, mirando abajo
+                verts += [(-256, -6400, -1034), (256, -6400, -1034), (-256, -6400, 1034), (256, -6400, 1034)]
+                prims.append((tp_, cl_, uvq, [b_, b_ + 1, b_ + 2, b_ + 3], (0, 4096, 0)))
         mundo = []
         for v in verts:
             gx, gy, gz = gira(v)
