@@ -524,10 +524,10 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
             if sec and nrm_ps is not None and nrm_ps[1] > 0 and all(abs(p_[2] - sec[1][2]) < 0.05 for p_ in P):
                 continue     # la cara de debajo de la pared (a ras de suelo, mirando abajo): se veía como una franja negra
             if sec and nrm_ps is not None and nrm_ps[1] != 0 and not agua:
-                # suelo y techo del modelo de la pared secreta: 1 cm por debajo (el techo, 2 por encima) del de las
+                # suelo y techo del modelo de la pared secreta: 4 mm por debajo (el techo, por encima) del de las
                 # casillas de al lado, que también lo tienen: si no, los dos parpadeaban en la unión
                 # (quitar el del modelo donde la casilla ya tiene suelo dejaba agujeros: no siempre lo tiene entero)
-                dz = -0.01 if nrm_ps[1] < 0 else 0.02
+                dz = -0.004 if nrm_ps[1] < 0 else 0.004     # (con 2 cm se veía la raya de la unión en el techo)
                 P = [(p_[0], p_[1], p_[2] + dz) for p_ in P]
             if sec and sec[0] not in NICHOS_KF and nrm_ps is not None and nrm_ps[1] == 0 and nrm_ps[2] == 0 \
                     and not agua and min(p_[2] for p_ in P) > sec[2]:

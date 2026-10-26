@@ -8,6 +8,7 @@ Alpha 0.1 - revision 6 (2026-10-26)
 - Secret walls: object brightness recalibrated from in-game screenshots.
 - Secret walls: flush with the wall on both sides (the original model's lower slab sat 31 cm back on one side),
   and they rise exactly their own height (no more seeing the empty slot above them).
+- Secret walls: the seam line on the ceiling around the wall is gone.
 
 Alpha 0.1 - revision 5 (2026-10-26)
 -----------------------------------
