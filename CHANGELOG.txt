@@ -1,6 +1,12 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 18 (2026-10-26)
+------------------------------------
+- Enemy choices made on the "Enemigos del nivel 0" map page are saved in engine\reparto_nivel0.json, and the
+  port uses them: each marked enemy keeps the type picked there, and the Kraken goes where it was placed.
+- This revision includes the first set of choices (10 enemies changed, Kraken moved).
+
 Alpha 0.1 - revision 17 (2026-10-26)
 ------------------------------------
 - KFIV keeps at most 5 enemy types loaded at once. With every type loading from 45 m, the caves of level 0 had

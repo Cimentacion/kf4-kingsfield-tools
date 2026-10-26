@@ -155,6 +155,7 @@ REPARTO = {
         "agua_modelos": {2, 4, 5},       # Sigill, Baltail y el 5 sin nombre: los que el nivel pone en el mar
         0: [2], "slime_raro": 3,         # Green Slime -> slime (c0002), uno de ellos el venenoso (c0003)
         14: [4],                         # Head Eater -> c0004, el que más sale
+        "pulpo_lado": (-1, 0),           # el pasillo por el que llegas a la pared (el otro es el escondido)
         29: [2], "pulpo": 48,            # Kraken (en tierra) -> babosa (c0002); el pulpo, uno, delante de la pared secreta
         21: [4, 4, 50, 4, 0],            # Skeleton -> sobre todo c0004, algún esqueleto (c0050) y la planta (c0000)
         16: [10], 4: [10],               # S-Knight y los Baltail de tierra -> murciélago (c0010), en las cuevas
@@ -162,6 +163,28 @@ REPARTO = {
         "grupo": (10, 87, 15.0),         # donde hay varios murciélagos (a menos de 15 m) va una seta (c0087)
     },
 }
+
+
+def _cargar_cambios():
+    """reparto_nivelN.json (junto a las herramientas): lo que el jugador marcó en el mapa de enemigos:
+    {"cambios": {"índice del enemigo del King's Field": "chr:N" | "ninguno"}, "pulpo": [x, y]}."""
+    import json
+    import os
+    aqui = os.path.dirname(os.path.abspath(__file__))
+    for nivel, R in REPARTO.items():
+        ruta = os.path.join(aqui, f"reparto_nivel{nivel}.json")
+        if not os.path.isfile(ruta):
+            continue
+        try:
+            datos = json.load(open(ruta, encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        R["cambios"] = {int(k): v for k, v in datos.get("cambios", {}).items()}
+        if datos.get("pulpo"):
+            R["pulpo_en"] = tuple(datos["pulpo"])
+
+
+_cargar_cambios()
 
 
 def para_editor(fdat, nivel, pad, ox, oy, celda, altura_capa=None, vecinos=None, techo_de=None, es_agua=None):
@@ -241,7 +264,10 @@ def _para_editor_reparto(enemigos, objetos, R, nivel, pad, ox, oy, celda, altura
             return len(vistas)
         lados = [(dc, df) for (dc, df), ok in vecinos(col, fila).items() if ok]
         if lados:
-            dc, df = max(lados, key=lambda d: alcance(col + d[0], fila + d[1], (col, fila)))
+            if R.get("pulpo_lado") in lados:
+                dc, df = R["pulpo_lado"]
+            else:
+                dc, df = max(lados, key=lambda d: alcance(col + d[0], fila + d[1], (col, fila)))
             # a dos casillas de la pared, por el lado de fuera (el que da a más sitio: el escondido es el pequeño)
             c2, f2 = col + 2 * dc, fila + 2 * df
             if not vecinos(c2 - dc, f2 - df).get((dc, df)):
@@ -270,8 +296,13 @@ def _para_editor_reparto(enemigos, objetos, R, nivel, pad, ox, oy, celda, altura
         else:
             sin[m] += 1
             continue
+        cambio = R.get("cambios", {}).get(i)           # lo que el jugador eligió en el mapa (reparto_nivel0.json)
+        if cambio == "ninguno":
+            continue
+        if cambio:
+            reg = int(cambio[4:])
         X, Y = pos(e)
-        d = {"tipo": f"chr:{reg}", "x": X, "y": Y, "kf": nombre, "giro": round(e["giro"] / 4096 * 6.2832, 3)}
+        d = {"tipo": f"chr:{reg}", "x": X, "y": Y, "kf": nombre, "giro": round(e["giro"] / 4096 * 6.2832, 3), "i": i}
         if agua:
             d["agua"] = True                 # kf4_editor lo pone bajo la superficie del agua
         elif altura_capa:
@@ -284,9 +315,22 @@ def _para_editor_reparto(enemigos, objetos, R, nivel, pad, ox, oy, celda, altura
         if pulpo[2] is not None:
             d["z"] = round(pulpo[2], 3)
         lista.append(d)
+    if R.get("pulpo_en"):                         # el sitio del pulpo que eligió el jugador (x, y del editor)
+        lista = [d for d in lista if d["tipo"] != f"chr:{R['pulpo']}"]
+        X, Y = R["pulpo_en"]
+        d = {"tipo": f"chr:{R['pulpo']}", "x": round(X, 3), "y": round(Y, 3), "kf": "Kraken", "giro": 0.0}
+        if altura_capa:
+            col_ = int(round((X - ox) / celda - pad - 0.5))
+            fila_ = int(round((Y - oy) / celda - pad - 0.5))
+            z = altura_capa(col_, fila_, 0)
+            if z is not None:
+                d["z"] = round(z, 3)
+        lista.append(d)
     murc, seta, radio = R["grupo"]
     hechos = []
     for d in lista:
+        if "i" in d and d["i"] in R.get("cambios", {}):
+            continue                              # elegido a mano: no se toca
         if d["tipo"] != f"chr:{murc}":
             continue
         cerca = [o for o in lista if o is not d and o["tipo"] == f"chr:{murc}"
