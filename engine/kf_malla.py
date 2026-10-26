@@ -779,12 +779,20 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
             x0_, x1_ = min(p[0] for p in pts_), max(p[0] for p in pts_)
             y0_, y1_ = min(p[1] for p in pts_), max(p[1] for p in pts_)
             u0_, u1_, v0_, v1_ = min(us_), max(us_), min(vs_), max(vs_)
+            # en trozos pequeños y por las dos caras: el 4 quita los triángulos grandes que se salen de la pantalla
+            # cerca de la cámara (debajo de la puerta desaparecía) y algunos objetos solo se ven por un lado
+            nx_ = max(1, int(math.ceil((x1_ - x0_) / 0.35)))
+            ny_ = max(1, int(math.ceil((y1_ - y0_) / 0.35)))
             for zq, nz_ in ((min(p[2] for p in pts_), -1.0), (max(p[2] for p in pts_), 1.0)):
-                q_ = [((x0_, y0_, zq), (u0_, v0_)), ((x1_, y0_, zq), (u1_, v0_)), ((x0_, y1_, zq), (u0_, v1_)),
-                      ((x1_, y1_, zq), (u1_, v1_))]
-                vs4 = [(pp, uv_, col_, (0.0, 0.0, nz_)) for pp, uv_ in q_]
-                for tri in ((0, 1, 2), (1, 3, 2)):
-                    caras_.append((tex_, tuple(vs4[t] for t in tri)))
+                for i_ in range(nx_):
+                    for j_ in range(ny_):
+                        a0, a1 = i_ / nx_, (i_ + 1) / nx_
+                        b0, b1 = j_ / ny_, (j_ + 1) / ny_
+                        q_ = [(a0, b0), (a1, b0), (a0, b1), (a1, b1)]
+                        vs4 = [((x0_ + (x1_ - x0_) * a, y0_ + (y1_ - y0_) * b, zq),
+                                (u0_ + (u1_ - u0_) * a, v0_ + (v1_ - v0_) * b), col_, (0.0, 0.0, nz_)) for a, b in q_]
+                        for tri in ((0, 1, 2), (1, 3, 2), (0, 2, 1), (1, 2, 3)):
+                            caras_.append((tex_, tuple(vs4[t] for t in tri)))
     _juntar_mar(editor, mar, negros, clave_negra, lecho_negro, por_grupo, pad)
     editor.kf_pared_en = _pared_en(editor, atlas, paredes_tile, pad)
     editor.kf_puerta_en = _puerta_en(editor, datos, atlas, pad)

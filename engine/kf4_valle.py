@@ -2217,9 +2217,9 @@ def panel_kf(t, tris):
     struct.pack_into("<4f", b, 0x00, cx, y_pie, cz, 0.0)
     struct.pack_into("<4f", b, 0x10, 0.0, ang, 0.0, 0.0)
     struct.pack_into("<4f", b, 0x20, sx, sy, sz, 1.0)
-    # que no se cierre sola al alejarse (door.c: MapObject_UpdateOpenDoor solo la cierra si este campo es 0):
-    # la pared secreta del King's Field se queda abierta
-    b[0x46] = 1
+    # se cierra sola al alejarse, como las puertas del 4 (door.c: MapObject_UpdateOpenDoor la cierra si este campo
+    # es 0 y el jugador está más lejos que su alcance + 1 m)
+    b[0x46] = 0
     # el movimiento: la losa sube 280 (el juego suma ese desplazamiento a la posición sin escalarlo,
     # map_object/door.c); la pared del King's Field es más alta: que suba toda su altura
     mov = t["movimiento"]
