@@ -2273,6 +2273,14 @@ def colocar_objetos_kf(objs, obj_secc, lista, plantillas, recs, log, tex_pared=N
                 x, _, z = struct.unpack_from("<3f", b, 0)
                 struct.pack_into("<H", b, 0x38, _registro_de(cajas, x, z))
                 b[0x3D] = LUZ_PANEL
+                # al usarla, su guion: la abre (señal a la puerta), tiembla la cámara y el mando y suena (GUIONES_PANEL)
+                usados = {o_[0x3A] for o_ in _trozos_de(objs, md.OBJREC)} | {g[1] for g in GUIONES_PANEL}
+                ident = next((i_ for i_ in range(PANEL_ID0, 256) if i_ not in usados), None)
+                if ident is not None:
+                    b[0x3A] = ident
+                    etiqueta = GUION_PANEL0 + len(GUIONES_PANEL)
+                    struct.pack_into("<H", b, 0x40, etiqueta)
+                    GUIONES_PANEL.append((etiqueta, ident, struct.unpack_from("<3f", b, 0)))
                 objs += b
                 cuenta["pared secreta del King's Field"] += 1
                 continue
@@ -2342,6 +2350,48 @@ def colocar_objetos_kf(objs, obj_secc, lista, plantillas, recs, log, tex_pared=N
 GUION_FUENTE_099 = 0x44D
 GUION_FUENTE = 0x0F0D
 FUENTE_ALTO = 120.0          # el punto que se examina, sobre el suelo (cm)
+
+
+# La pared secreta del King's Field, al abrirse: un guion por pared (etiqueta GUION_PANEL0 + n) que la abre con
+# una señal (como hacen los guiones de 011 con sus puertas: SignalMapObject id 1), hace temblar la cámara despacio
+# (ShakeCamera), vibra el mando (RumblePad) y suena (PlaySoundAt, sonido común: el de la losa del 4 es del banco de
+# 011 y en este mapa no suena). Los números, como en los guiones del juego.
+GUION_PANEL0 = 0x0F20
+PANEL_ID0 = 200                  # ids de objeto (MapObject_GetById, byte 0x3A) para las paredes
+PANEL_TEMBLOR = (2.5, 75)        # alcance y fotogramas del temblor de la cámara (000 usa 8.0, 30 en un terremoto)
+PANEL_VIBRACION = (64, 75)       # fuerza y fotogramas de la vibración del mando (los de 099: 64, 15)
+PANEL_SONIDO = 0x0D              # sonido común (el de los movimientos 6 y 7 de la losa del 4)
+GUIONES_PANEL = []               # [(etiqueta, id, posición)] de este mapa (colocar_objetos_kf los llena)
+
+
+def _trozos_de(b, n):
+    return [b[i:i + n] for i in range(0, len(b) - n + 1, n)]
+
+
+def _guion_panel(etiqueta, ident, pos):
+    E, F = 0x40000, 0x60000
+    fl = lambda v: struct.unpack("<I", struct.pack("<f", v))[0]
+    x, y, z = pos
+    w = [(0x190 << 16) | etiqueta]
+    w += [(182 << 16) | 2, E, ident, E, 1]                                   # SignalMapObject id 1: se abre
+    w += [(144 << 16) | 2, F, fl(PANEL_TEMBLOR[0]), E, PANEL_TEMBLOR[1]]      # ShakeCamera
+    w += [(198 << 16) | 3, E, PANEL_VIBRACION[0], E, PANEL_VIBRACION[1], E, 0]   # RumblePad
+    w += [(160 << 16) | 6, E, 0, E, PANEL_SONIDO, F, fl(0.0), F, fl(x), F, fl(y - 150.0), F, fl(z)]   # PlaySoundAt
+    w += [0x191 << 16]
+    return w
+
+
+def guion_paneles(guion, log):
+    if not GUIONES_PANEL:
+        return guion
+    g = _palabras(guion)
+    fin = g.index((0x190 << 16) | 0x7FFE)
+    nuevo = []
+    for etiqueta, ident, pos in GUIONES_PANEL:
+        nuevo += _guion_panel(etiqueta, ident, pos)
+    g[fin:fin] = nuevo
+    log.append(f"Paredes secretas: {len(GUIONES_PANEL)} con temblor, vibración y sonido al abrirse")
+    return struct.pack("<%dI" % len(g), *g) + bytes(len(guion) % 4)
 
 
 def _palabras(b):
@@ -2456,6 +2506,7 @@ def recortar_objetos(h, objs, nobj, obj_kind, log):
 
 def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, modelos_item=None, obj_kind=None,
              bloque_cruz=None, plantillas_obj=None):
+    GUIONES_PANEL.clear()
     stats = collections.Counter()
     if getattr(valle, "tex_fuente", "031") == "099":
         # la zona usa las texturas del propio 099 (piedra clara, columnas, sillares): bloque tal cual
@@ -2895,6 +2946,7 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
     guion = h[off_script:off_tex]
     if getattr(valle, "kf_fuentes", None):
         guion = guion_fuente(guion, d099, log)
+    guion = guion_paneles(guion, log)
     out += guion
     new_tex = len(out)
     if getattr(valle, "kf_atlas", None) is not None:   # geometría real de King's Field: su atlas de texturas
