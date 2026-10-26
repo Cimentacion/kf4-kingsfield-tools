@@ -296,8 +296,8 @@ def caracol_chr(base, mo_t, vram):
 def caracol_prm(base_rec):
     r = bytearray(base_rec)
     struct.pack_into("<H", r, 0, MODELO)
-    struct.pack_into("<H", r, 0x0A, 150)           # vida
-    struct.pack_into("<H", r, 0x0E, 40)            # experiencia
+    struct.pack_into("<H", r, 0x0A, 75)            # vida: 300 en el King's Field, a la cuarta parte como lo demás
+    struct.pack_into("<H", r, 0x0E, 16)            # experiencia: la del King's Field
     struct.pack_into("<HH", r, 0x06, 110, 120)     # radio y alto contra el mapa
     struct.pack_into("<H", r, 0xEE, 150)
     struct.pack_into("<H", r, 0xCC, 130)
@@ -314,4 +314,7 @@ def caracol_prm(base_rec):
     h = o + 0x10
     struct.pack_into("<9h", r, h, 0, 14, 0, 0, 0, 0, 6, 0, 0)
     struct.pack_into("<HHHH", r, h + 0x20, 140, 60, 20, 26)
+    # la babosa del IV se dibuja semitransparente (bit 0x40 del byte 0x11, solo lo llevan las babosas 2, 3 y el 27):
+    # el caracol es macizo
+    r[0x11] &= ~0x40
     return bytes(r)

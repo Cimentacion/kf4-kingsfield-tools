@@ -25,7 +25,11 @@ MODELO_PULPO = 37            # chr/c0037.chr: en el IV es un archivo vacío de 3
                              # 37 usa el modelo 36); se le cambia el sitio en la tabla del DAT y el nombre no cambia
 REGISTRO_PULPO = 48          # chr.prm 48: registro vacío en el IV
 REGISTRO_BASE = 49           # la Flor oscura: su comportamiento, sonidos y el chorro
-ESC = 250.0 / 2048 * 0.85    # unidades del PS1 -> cm del IV (un poco más pequeño que el original: pasillos)
+ESC = 250.0 / 2048           # unidades del PS1 -> cm del IV, a la escala del grande (la clase 0 del nivel 0, escala 1)
+MINI = 65                    # chr.prm 65 (vacío en el IV): los pulpitos, el mismo modelo a la escala de su clase
+MINI_ESCALA = 38             # % (clases 18, 27 y 29 del nivel 0: escala 1536 / 4096)
+MO_CAPUCHA = 30              # la capucha (el cuerpo de arriba): en el original es otro bicho en la misma casilla
+CAPUCHA_BAJO = -900          # y (PS1) donde queda el borde de abajo de la capucha: tapa el cuerpo, salen las patas
 
 R_CUERPO = 700               # unidades del PS1: lo que está más cerca del eje es cuerpo
 PATAS = [0, 32, 147, 180, -147, -32]       # acimut de cada pata (grados, atan2(z, x))
@@ -100,19 +104,31 @@ def _dueno(esq, v):
     return esq.parte("pata", pata, k), r
 
 
-def malla_kf1(mo_t):
+def malla_kf1(mo_t, capucha=True):
+    """(vértices, prims, índice desde el que van los de la capucha): las patas (MO.T[29]) y encima la capucha
+    (MO.T[30]), que en el King's Field es otro enemigo puesto en la misma casilla."""
     d = mo_t[29]
     t = struct.unpack_from("<I", d, 8)[0]
     vs, prims = kf2_tex.objetos_tmd(d[t:], por_8=False)[0]
-    return [tuple(float(c) for c in v) for v in vs], prims
+    vs = [tuple(float(c) for c in v) for v in vs]
+    desde = len(vs)
+    if capucha:
+        d = mo_t[MO_CAPUCHA]
+        t = struct.unpack_from("<I", d, 8)[0]
+        vc, pc = kf2_tex.objetos_tmd(d[t:], por_8=False)[0]
+        dy = CAPUCHA_BAJO - max(v[1] for v in vc)
+        vs += [(float(v[0]), float(v[1]) + dy, float(v[2])) for v in vc]
+        prims = list(prims) + [(tp, cl, uvs, [r + desde for r in refs], n) for tp, cl, uvs, refs, n in pc]
+    return vs, prims, desde
 
 
-def rig(vs, prims):
-    """(esqueleto, dueño de cada vértice, pivotes (unidades del PS1) de cada parte, triángulos)."""
+def rig(vs, prims, desde=None):
+    """(esqueleto, dueño de cada vértice, pivotes (unidades del PS1) de cada parte, triángulos). Los vértices
+    desde `desde` (la capucha) son del cuerpo."""
     esq = Esqueleto()
     duenos, ss = [], []
-    for v in vs:
-        p, s = _dueno(esq, v)
+    for k, v in enumerate(vs):
+        p, s = (1, 0.0) if desde is not None and k >= desde else _dueno(esq, v)
         duenos.append(p)
         ss.append(s)
     tris = []
@@ -164,6 +180,8 @@ def rig(vs, prims):
 
 
 # ---------------- textura: las tres páginas del PS1 en una de 256x256 y 8 bits ----------------
+TEX_CONTRASTE = 1.30
+TEX_COLOR = 1.45
 TEX_ESCALA = 2        # las texturas del PS1 (4 bits, 64x64) se agrandan al doble suavizadas: más como las del IV
 
 
@@ -194,6 +212,12 @@ def textura(vram, tris):
         sitio[clave] = (x - u0 * E, y - v0 * E)
         x += w
         alto_fila = max(alto_fila, h)
+    # las texturas del PS1 salen apagadas al lado de las del IV: más contraste y color
+    from PIL import ImageEnhance
+    im = Image.fromarray(rgb)
+    im = ImageEnhance.Contrast(im).enhance(TEX_CONTRASTE)
+    im = ImageEnhance.Color(im).enhance(TEX_COLOR)
+    rgb = np.asarray(im)
     q = Image.fromarray(rgb).quantize(colors=256, method=Image.MEDIANCUT, dither=Image.NONE)
     img = np.asarray(q, np.uint8).copy()
     p = np.array(q.getpalette()[:768], np.uint8).reshape(-1, 3)
@@ -384,8 +408,8 @@ def archivo_movimientos(esq, piv):
 # ---------------- el .chr ----------------
 def pulpo_chr(flor, mo_t, vram):
     """flor: kc.Chr de c0049 (la Flor oscura); mo_t: entradas de MO.T del King's Field; vram: la del nivel 0."""
-    vs, prims = malla_kf1(mo_t)
-    esq, duenos, piv, tris = rig(vs, prims)
+    vs, prims, desde = malla_kf1(mo_t)
+    esq, duenos, piv, tris = rig(vs, prims, desde)
     img, pal, sitio = textura(vram, tris)
     V = np.array(vs)
     # normales por vértice (de las caras), en ejes del IV
@@ -436,8 +460,9 @@ def _sombra(v, n):
     tono frío de agua. El IV ilumina además por la normal; esto le da el volumen que la textura del PS1 no trae."""
     arriba = (-n[1] + 1) / 2                      # 1 mirando arriba, 0 abajo (y negativa es arriba)
     alto = min(1.0, max(0.0, -v[1] / 1800.0))     # 0 en el suelo, 1 a la altura del cuerpo
-    f = 0.50 + 0.30 * arriba + 0.20 * alto
-    return (128 * f * 0.92, 128 * f * 0.98, 128 * f, 128.0)
+    # más contraste que antes: de 0,40 por debajo a 1,25 por arriba (128 = 1; el IV deja pasar hasta 2)
+    f = 0.40 + 0.55 * arriba ** 1.5 + 0.30 * alto
+    return (min(255.0, 128 * f * 0.94), min(255.0, 128 * f), min(255.0, 128 * f * 1.02), 128.0)
 INVERTIR = True
 
 
@@ -495,7 +520,7 @@ def pulpo_prm(flor_rec):
     r = bytearray(flor_rec)
     struct.pack_into("<H", r, 0, MODELO_PULPO)
     struct.pack_into("<H", r, 0x0A, 400)          # vida
-    struct.pack_into("<H", r, 0x0E, 250)          # experiencia
+    struct.pack_into("<H", r, 0x0E, 450)          # experiencia (la del King's Field: 450)
     struct.pack_into("<H", r, 0x06, 120)          # radio contra el mapa
     struct.pack_into("<H", r, 0x08, 250)          # alto contra el mapa
     struct.pack_into("<H", r, 0xEE, 250)          # alto del cuerpo
@@ -529,4 +554,18 @@ def pulpo_prm(flor_rec):
     # ...pero tampoco se ve bien en este mapa (los efectos de muchos bichos usan texturas de efectos que el 4 solo
     # carga en sus zonas): el pulpo no escupe, solo da latigazos
     r[0x3D8] = 0
+    return bytes(r)
+
+
+def mini_prm(grande_rec):
+    """El pulpito: el registro del grande a la escala de su clase, con la vida y la experiencia del King's Field
+    (patas 250 + capucha 250 de vida en el original, a la cuarta parte como todo lo portado; 12 + 3 de experiencia)."""
+    r = bytearray(grande_rec)
+    struct.pack_into("<H", r, 0x0A, 125)
+    struct.pack_into("<H", r, 0x0E, 15)
+    r[0xD2] = MINI_ESCALA
+    h = 0x240 + 0x10
+    struct.pack_into("<9h", r, h, 0, 18, 0, 0, 0, 0, 8, 0, 0)          # golpe y agua: más flojo que el grande
+    struct.pack_into("<HHf", r, 0x240 + 4, 0, 200, math.radians(70))     # alcance a su tamaño
+    struct.pack_into("<HHHH", r, h + 0x20, 120, 70, 26, 34)
     return bytes(r)

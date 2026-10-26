@@ -1,6 +1,16 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 20 (2026-10-26)
+------------------------------------
+- New enemy: the King's Field baby Kraken (the small octopuses of the first level). It uses the Kraken model
+  at 38% size with its own record (125 HP, 15 EXP, weaker and shorter whips). Level 0 has 20, in their original
+  spots; the big Kraken (400 HP, 450 EXP) stays alone at the secret door. No original KFIV enemy is replaced.
+- The Kraken now has its hood (the head/mantle of the original) and a texture with more contrast and colour.
+- The giant snail is no longer see-through (it inherited the slime's translucency flag); now 75 HP / 16 EXP.
+- Doors and secret walls, the sides of their doorway and the floor under them were almost black: around them
+  the light is now the same as in the corridors.
+
 Alpha 0.1 - revision 19 (2026-10-26)
 ------------------------------------
 - New enemy: the King's Field giant snail (the one with the spotted body and the stone shell). Like the Kraken

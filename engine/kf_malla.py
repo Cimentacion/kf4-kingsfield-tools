@@ -441,6 +441,11 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
     caras = collections.Counter()
     por_grupo = collections.defaultdict(list)
     cache_int = {}
+    # alrededor de las puertas y paredes secretas el King's Field pinta el suelo muy oscuro (su luz horneada): la
+    # puerta, sus lados y el suelo del hueco salían casi negros. Ahí la sombra pintada no baja de ZONA_PUERTA_MIN
+    editor._zonas_puerta = [(editor.ox + (x + pad + ffz) * C, editor.oy + (z + pad + ffx) * C)
+                            for (x, z, oid, verts, prims, elev, ffx, ffz, ang, fz)
+                            in list(getattr(datos, "secretas", [])) + list(getattr(datos, "puertas_mov", []))]
     datos.topes = {k: v - h0 * ALTURA_M for k, v in datos.topes_crudos.items()}
     datos.fondos = {k: v - h0 * ALTURA_M for k, v in datos.fondos_crudos.items()}
     con_agua = set()          # casillas con caras de agua (también las de la orilla en diagonal)
@@ -1402,6 +1407,8 @@ def _juntar_mar(editor, mar, negros, clave_negra, lecho_negro, por_grupo, pad):
 LUZ_INTERIOR = True
 LUZ_KF_BASE = 0.62          # nivel de una pared a media altura (x 128 en el color de vértice)
 LUZ_KF_TONO = (1.08, 1.0, 0.86)
+ZONA_PUERTA_R = 3.5         # metros alrededor de una puerta o pared secreta con la luz de un pasillo normal
+ZONA_PUERTA_MIN = 0.9       # color pintado mínimo ahí (1 = sin sombra pintada)
 
 
 def luz_kf(editor, p, n, interior):
@@ -1410,6 +1417,15 @@ def luz_kf(editor, p, n, interior):
     if n[2] > 0.5:                    # fuera, como antes: el suelo lleva además el color pintado
         m = editor.color_en(p[0], p[1])
         dia = tuple(dia[q] * m[q] for q in range(3))
+    # cerca de una puerta o pared secreta: bajo techo del todo (están en el borde de la casilla con techo y la luz
+    # de fuera, casi negra, se colaba) y sin la sombra pintada del King's Field
+    tp = 0.0
+    zp = getattr(editor, "_zonas_puerta", None)
+    if zp:
+        d = min((p[0] - zx) ** 2 + (p[1] - zy) ** 2 for zx, zy in zp) ** 0.5
+        tp = max(0.0, min(1.0, (ZONA_PUERTA_R + 2.0 - d) / 2.0))     # se funde en 2 m con lo de alrededor
+        if tp > 0:
+            interior = max(interior, 0.55 * tp)
     w = min(1.0, interior / 0.55) if interior > 0 else 0.0
     if w <= 0.0:
         return dia
@@ -1426,6 +1442,9 @@ def luz_kf(editor, p, n, interior):
     else:
         ao = 1.0
         m = editor.color_en(p[0], p[1])
+    if tp > 0:
+        m = tuple(max(mk, ZONA_PUERTA_MIN * tp) for mk in m)
+        ao = max(ao, 0.62 + 0.3 * tp)
     m = tuple(0.6 + 0.4 * mk for mk in m)            # la sombra pintada, más suave
     r = getattr(editor, "ruido", None)
     var = 0.9 + 0.2 * r.v(p[0] * 0.17 + p[2] * 0.11, p[1] * 0.17, 23) if r else 1.0

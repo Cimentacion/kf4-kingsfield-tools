@@ -43,7 +43,7 @@ ENEMIGOS = {
     26: ("Red Spike Ball", 66, True),              # malicia
     27: ("Log Stalker", 12, False),
     28: ("Demon Lord", 58, False), 46: ("Mecha Demon Lord", 58, False),   # esqueleto alto (no el jefe)
-    29: ("Kraken", 48, False),                    # el pulpo de verdad (kf4_pulpo: registro 48 nuevo del chr.prm)
+    29: ("Kraken", 65, False),                    # el pulpo de verdad (kf4_pulpo: registro 48 nuevo del chr.prm)
     31: ("Earth Elemental", 68, False),
     32: ("Refma", 66, True), 51: ("Refma", 66, True),
     33: ("Tarn", 58, False),                       # esqueleto alto (el gigante es un jefe)
@@ -55,7 +55,7 @@ ENEMIGOS = {
     107: ("Dragon Grass", 49, False),              # flor oscura
 }
 # vida de cada registro del 4 (chr.prm +0x0A), para repartir los que no caben entre los que sí
-VIDA = {63: 150, 48: 400, 13: 200, 2: 60, 3: 60, 6: 100, 10: 54, 11: 105, 12: 750, 16: 550, 18: 1, 19: 600, 24: 1800, 32: 3000, 34: 4500,
+VIDA = {65: 125, 63: 75, 48: 400, 13: 200, 2: 60, 3: 60, 6: 100, 10: 54, 11: 105, 12: 750, 16: 550, 18: 1, 19: 600, 24: 1800, 32: 3000, 34: 4500,
         39: 500, 40: 1400, 49: 500, 50: 250, 56: 210, 58: 800, 66: 1300, 67: 900, 68: 900, 73: 3800, 75: 5500,
         81: 205, 85: 300, 92: 200, 93: 540}
 # jefes y bichos enormes del 4: cuelgan el juego al cargar el mapa (probado con el 34, Earth King, y el 75,
@@ -129,8 +129,12 @@ def leer(fdat, nivel):
         if clase >= 40 or modo == 0xFF or x >= 80 or y >= 80:
             continue
         giro, fx, fy, fz = struct.unpack_from("<Hhhh", r, 8)
+        o = clase * paso
+        vida = struct.unpack_from("<H", clases, o + 26)[0] if o + 28 <= len(clases) else 0
+        escala = struct.unpack_from("<H", clases, o + 50)[0] if o + 52 <= len(clases) else 4096
         enemigos.append({"modelo": modelo_clase[clase], "x": x, "y": y, "capa": capa & 1,
-                         "fx": fx, "fy": fy, "fz": fz, "giro": giro})
+                         "fx": fx, "fy": fy, "fz": fz, "giro": giro, "clase": clase,
+                         "vida": vida, "escala": escala})
     objetos = []
     for i in range(len(objs) // 24):
         r = objs[i * 24:i * 24 + 24]
@@ -157,7 +161,8 @@ REPARTO = {
         0: [2], "slime_raro": 3,         # Green Slime -> slime (c0002), uno de ellos el venenoso (c0003)
         14: [4],                         # Head Eater -> c0004, el que más sale
         "pulpo_lado": (-1, 0),           # el pasillo por el que llegas a la pared (el otro es el escondido)
-        29: [2], "pulpo": 48,            # Kraken (en tierra) -> babosa (c0002); el pulpo, uno, delante de la pared secreta
+        # Kraken: el grande (clase con 1500 de vida, escala 1) es el pulpo; los de escala 0,375, los pulpitos
+        29: "kraken", "pulpo": 48, "pulpito": 65, "pulpo_vida": 1000,
         21: [4, 4, 50, 4, 0],            # Skeleton -> sobre todo c0004, algún esqueleto (c0050) y la planta (c0000)
         16: [63],                        # el caracol gigante, en su sitio (lo que antes eran murciélagos)
         4: [10],                         # los Baltail de tierra -> murciélago (c0010), en las cuevas
@@ -247,7 +252,7 @@ def _para_editor_reparto(enemigos, objetos, R, nivel, pad, ox, oy, celda, altura
     secretas = [o for o in objetos if o["id"] in PUERTAS_SECRETAS]
     candidatos = [i for i, e in enumerate(enemigos) if e["modelo"] == 29 and not es_agua(e["y"], e["x"])]
     pulpo = None          # (x, y, z) donde va: delante de la pared secreta más cercana a algún Kraken
-    if candidatos and secretas and R.get("pulpo") and vecinos:
+    if candidatos and secretas and R.get("pulpo") and vecinos and R.get(29) != "kraken":
         def d2(o, e):
             (a, b), (c, d) = pos(o), pos(e)
             return math.hypot(a - c, b - d)
@@ -289,6 +294,8 @@ def _para_editor_reparto(enemigos, objetos, R, nivel, pad, ox, oy, celda, altura
         agua = es_agua(e["y"], e["x"])
         if agua and m in R["agua_modelos"]:
             reg = R["agua"]
+        elif R.get(m) == "kraken":
+            reg = R["pulpo"] if e.get("vida", 0) >= R["pulpo_vida"] else R["pulpito"]
         elif m in R and isinstance(R[m], list):
             regs = R[m]
             reg = regs[turno[m] % len(regs)]

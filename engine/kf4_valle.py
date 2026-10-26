@@ -2122,8 +2122,8 @@ def plantillas_chr(src, registros, log):
     for r in registros:
         sp = spawns.get(r)
         import kf4_caracol
-        base = {kf4_pulpo.REGISTRO_PULPO: kf4_pulpo.REGISTRO_BASE, PEZ: PEZ_BASE,
-                kf4_caracol.REGISTRO: kf4_caracol.REGISTRO_BASE}.get(r)
+        base = {kf4_pulpo.REGISTRO_PULPO: kf4_pulpo.REGISTRO_BASE, kf4_pulpo.MINI: kf4_pulpo.REGISTRO_BASE,
+                PEZ: PEZ_BASE, kf4_caracol.REGISTRO: kf4_caracol.REGISTRO_BASE}.get(r)
         if base is not None:                    # registros nuevos (el pulpo, el pez): el spawn del bicho del que salen
             sp = spawns.get(base) or por_tipo.get(tipo_de.get(base))
             if sp is not None:
@@ -5018,9 +5018,10 @@ def preparar_registros(src, v, log):
          lambda base: kf4_caracol.caracol_chr(base, v.kf_mo, v.kf_vram), kf4_caracol.caracol_prm,
          "Caracol gigante del King's Field: se arrastra y muerde (se porta como la babosa)"),
     ]
+    mini = f"chr:{kf4_pulpo.MINI}"
     for nombre, reg, modelo, base_reg, resp, hacer, prm_de, texto in nuevos:
         tipo = f"chr:{reg}"
-        if tipo not in tipos:
+        if tipo not in tipos and not (nombre == "pulpo" and mini in tipos):
             continue
         try:
             if nombre in QUITAR:
@@ -5038,8 +5039,16 @@ def preparar_registros(src, v, log):
             REGISTRO_BASE[reg] = base_reg
             n = sum(1 for t, _ in enemigos if t == tipo)
             log.append(f"{texto}: {n}, chr/c{modelo:04d}.chr de {len(datos) // 1024} KB")
+            if nombre == "pulpo" and mini in tipos:
+                # los pulpitos: el mismo modelo a menor escala, registro propio (no tocan ninguno del juego)
+                regs[kf4_pulpo.MINI] = kf4_pulpo.mini_prm(regs[reg])
+                respaldo[kf4_pulpo.MINI] = (modelo, 2)
+                REGISTRO_BASE[kf4_pulpo.MINI] = base_reg
+                m = sum(1 for t, _ in enemigos if t == mini)
+                log.append(f"Pulpitos (las crías del Kraken): {m}, mismo chr a escala {kf4_pulpo.MINI_ESCALA}%")
         except Exception as e:
-            v.enemigos = [(f"chr:{resp}" if t == tipo else t, p) for t, p in v.enemigos]
+            caidos = {tipo, mini} if nombre == "pulpo" else {tipo}
+            v.enemigos = [(f"chr:{resp}" if t in caidos else t, p) for t, p in v.enemigos]
             log.append(f"AVISO: no hay {nombre} ({e}); va el registro {resp} en su lugar")
     if not regs:
         return None
