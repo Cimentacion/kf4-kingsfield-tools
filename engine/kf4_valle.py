@@ -2541,7 +2541,9 @@ def _guion_panel(etiqueta, ident, pos, puerta=False):
     SUB, MUL, ADD, FIN = (1 << 8) | 4, (2 << 8) | 4, (0 << 8) | 4, 0xFF
 
     def set_(dest, a, op, b):
-        return [0x196 << 16, dest[0], dest[1], a[0], a[1], op, b[0], b[1], FIN]
+        # el operando de la palabra "set" es cuántas palabras la siguen (Script_SkipWord salta eso: con 0, quien
+        # buscara una etiqueta más abajo se perdía dentro del guion y el juego se colgaba al cargar el mapa)
+        return [(0x196 << 16) | 8, dest[0], dest[1], a[0], a[1], op, b[0], b[1], FIN]
     w += [(1 << 16) | 1, E, PANEL_ESPERA]                                        # Wait
     bucle = len(w)
     w += set_(LX, PX, SUB, (F, fl(x)))
@@ -2567,9 +2569,39 @@ def guion_paneles(guion, log):
     nuevo = []
     for etiqueta, ident, pos, puerta in GUIONES_PANEL:
         nuevo += _guion_panel(etiqueta, ident, pos, puerta)
-    g[fin:fin] = nuevo
+    g2 = g[:fin] + nuevo + g[fin:]
+    malas = _etiquetas_perdidas(g2, [e for e, _, _, _ in GUIONES_PANEL])
+    if malas:
+        log.append(f"AVISO: el guion de las paredes no se lee bien (etiquetas {malas}): sin guion, para no colgar el juego")
+        return guion
+    g = g2
     log.append(f"Paredes secretas y puertas: {len(GUIONES_PANEL)} con su guion al abrirse (sonido; las paredes, temblor)")
     return struct.pack("<%dI" % len(g), *g) + bytes(len(guion) % 4)
+
+
+def _etiquetas_perdidas(g, etiquetas):
+    """Las etiquetas que el juego no encontraría recorriendo el guion como Script_Start (Script_SkipWord), más la
+    final 0x7FFE: si sale alguna, buscar un guion se saldría del guion y el juego se cuelga."""
+    vistas, i = set(), 0
+    while i < len(g):
+        w = g[i]
+        op, arg = w >> 16, w & 0xFFFF
+        if op == 0x190:
+            vistas.add(arg)
+            if arg == 0x7FFE:
+                break
+        i += 1
+        if op in (0x190, 0x191, 0x194, 0x195, 0x197):
+            pass
+        elif op == 0x192:
+            i += (arg >> 8) * 5 + 1
+        elif op == 0x196:
+            i += arg
+        elif op == 0x19D:
+            i += arg + 1
+        else:
+            i += arg * 2
+    return [hex(e) for e in list(etiquetas) + [0x7FFE] if e not in vistas]
 
 
 def _palabras(b):

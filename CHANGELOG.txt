@@ -1,6 +1,14 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 11 (2026-10-26)
+------------------------------------
+- Fixed the level not loading (black screen) since revision 8. The new close-when-far script of the secret walls
+  and doors used the script's "set" word with a wrong length, so whenever the game looked for a script further
+  down it lost its place and looped forever while loading the map. The Kraken was not the cause.
+- The generator now walks the whole map script the way the game does and, if any label would be lost, leaves the
+  wall scripts out instead of producing a map that hangs.
+
 Alpha 0.1 - revision 10 (2026-10-26)
 ------------------------------------
 - Fix attempt for the level not loading after revision 9 (black screen): the Kraken's model no longer goes
