@@ -1,6 +1,13 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 22 (2026-10-26)
+------------------------------------
+- Enemies now spawn facing the direction the map gives them (before it was random). Facings from the King's
+  Field were also half a turn off, like the decoration: the Kraken now faces the water, as in the original.
+- The Kraken attacks sooner: whip reach 700 instead of 380 (its arms are about 640 long, it only attacked with
+  the player touching it), a wider hit and a shorter pause between attacks. Baby Krakens: reach 300.
+
 Alpha 0.1 - revision 21 (2026-10-26)
 ------------------------------------
 - The Kraken (and the baby Krakens) faced backwards: the King's Field model looks towards +z and KFIV enemies

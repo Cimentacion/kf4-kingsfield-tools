@@ -2919,7 +2919,10 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
         struct.pack_into("<H", b, 0x32, orden_tipo[tipo])
         x, y, z = to_native(pos)
         struct.pack_into("<3f", b, 0x00, x, y - 10.0, z)
-        struct.pack_into("<f", b, 0x14, valle.rng.uniform(0, 6.283))
+        # el giro del mapa (el mismo que los cofres y objetos: 0 mira a +Y); si no trae, al azar. Antes siempre al
+        # azar: el Kraken salía mirando a cualquier lado
+        g = getattr(valle, "giros", {}).get(pos)
+        struct.pack_into("<f", b, 0x14, g if g is not None else valle.rng.uniform(0, 6.283))
         b[0x3C] = k & 0xFF                         # id de spawn único
         # distancia a la que se carga (despawn_range, 0x5A): a 0 el juego pone 20 m y los esqueletos salían de
         # golpe delante; los mapas grandes del 4 (000) usan 48-65 m y sin límite vertical se cargan pisos enteros

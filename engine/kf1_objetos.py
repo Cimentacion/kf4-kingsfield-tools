@@ -147,6 +147,12 @@ def leer(fdat, nivel):
     return enemigos, objetos
 
 
+def _giro(g):
+    """Giro del King's Field (0..4095) a radianes del editor. Va media vuelta desfasado: sin ella el Kraken miraba
+    al túnel en vez de al agua (igual que el decorado, kf_malla._piezas)."""
+    return round((g / 4096 * 2 * math.pi + math.pi) % (2 * math.pi), 3)
+
+
 def _fino(f):
     """Posición fina dentro de la casilla: 0..2047 (algunos la guardan fuera: se recorta)."""
     return min(max(f, 0), 2047) / 2048.0
@@ -233,7 +239,7 @@ def para_editor(fdat, nivel, pad, ox, oy, celda, altura_capa=None, vecinos=None,
         if reg in JEFES:
             reg = 24
         X, Y = pos(e)
-        d = {"tipo": f"chr:{reg}", "x": X, "y": Y, "kf": nombre, "giro": round(e["giro"] / 4096 * 6.2832, 3)}
+        d = {"tipo": f"chr:{reg}", "x": X, "y": Y, "kf": nombre, "giro": _giro(e["giro"])}
         if vuela:
             d["vuela"] = True
         if altura_capa:
@@ -311,7 +317,7 @@ def _para_editor_reparto(enemigos, objetos, R, nivel, pad, ox, oy, celda, altura
         if cambio:
             reg = int(cambio[4:])
         X, Y = pos(e)
-        d = {"tipo": f"chr:{reg}", "x": X, "y": Y, "kf": nombre, "giro": round(e["giro"] / 4096 * 6.2832, 3), "i": i}
+        d = {"tipo": f"chr:{reg}", "x": X, "y": Y, "kf": nombre, "giro": _giro(e["giro"]), "i": i}
         if agua:
             d["agua"] = True                 # kf4_editor lo pone bajo la superficie del agua
         elif altura_capa:

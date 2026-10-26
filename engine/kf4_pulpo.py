@@ -550,13 +550,14 @@ def pulpo_prm(flor_rec):
     r[o:o + 0x88] = bytes(0x88)
     r[o + 0] = 100            # peso
     r[o + 1] = 24             # se vuelve hacia el jugador hasta el fotograma 24
-    r[o + 2] = 40             # espera tras el ataque
+    r[o + 2] = 15             # espera tras el ataque (con 40 tardaba mucho en volver a atacar)
     r[o + 3] = 36             # fin de la ventana
-    struct.pack_into("<HHf", r, o + 4, 0, 380, math.radians(70))
+    # alcance: los brazos miden unas 640 unidades del IV; con 380 solo atacaba con el jugador pegado
+    struct.pack_into("<HHf", r, o + 4, 0, 700, math.radians(80))
     h = o + 0x10
     struct.pack_into("<9h", r, h, 0, 35, 0, 0, 0, 0, 15, 0, 0)  # golpe y agua (moderado: hay muchos)
     r[h + 0x1E] = 1                               # empuja
-    struct.pack_into("<HHHH", r, h + 0x20, 260, 70, 26, 34)
+    struct.pack_into("<HHHH", r, h + 0x20, 450, 80, 26, 34)
     # la tinta: más corta que el chorro de la flor
     struct.pack_into("<HH", r, 0x3D8 + 4, 150, 900)
     # el chorro: el de la Flor oscura (efecto 148) dibuja con la textura de la propia flor, que en el pulpo ya no
@@ -578,6 +579,6 @@ def mini_prm(grande_rec):
     r[0xD2] = MINI_ESCALA
     h = 0x240 + 0x10
     struct.pack_into("<9h", r, h, 0, 18, 0, 0, 0, 0, 8, 0, 0)          # golpe y agua: más flojo que el grande
-    struct.pack_into("<HHf", r, 0x240 + 4, 0, 200, math.radians(70))     # alcance a su tamaño
+    struct.pack_into("<HHf", r, 0x240 + 4, 0, 300, math.radians(80))     # alcance a su tamaño
     struct.pack_into("<HHHH", r, h + 0x20, 120, 70, 26, 34)
     return bytes(r)

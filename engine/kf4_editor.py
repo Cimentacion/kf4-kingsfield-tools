@@ -755,6 +755,9 @@ class MapaEditor(kp.Prologo):
         self.enemigos = [(e.get("tipo", "escarabajo"), (float(e["x"]), float(e["y"]), z_de(e)))
                          for e in m.get("enemigos", [])]
         self.spawns_pos = [p for _, p in self.enemigos]
+        # hacia dónde mira cada enemigo al aparecer (el giro del mapa, como los cofres; sin él, al azar)
+        self.giros = {(float(e["x"]), float(e["y"]), z_de(e)): float(e["giro"])
+                      for e in m.get("enemigos", []) if e.get("giro") is not None}
         # cofres, puertas y paredes que se abren de un mapa portado (kf4_valle.colocar_objetos_kf)
         self.kf_objetos = [{"tipo": o["tipo"], "pos": (float(o["x"]), float(o["y"]), z_de(o)),
                             "giro": float(o.get("giro", 0.0)), "medida": o.get("medida"),
