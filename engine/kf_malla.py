@@ -766,6 +766,25 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
                 por_grupo[g].extend(_partir(t))
     if paneles:
         _colores_panel(paneles, por_grupo)
+        # la cara de abajo de la pared que sube (el modelo del King's Field no la tiene: abierta se veían las dos
+        # caras sueltas, como dos papeles), y la de arriba: con la textura y el color de la propia pared
+        for k_, caras_ in paneles.items():
+            pts_ = [v[0] for _, tri in caras_ for v in tri]
+            if not pts_:
+                continue
+            tex_, tri0 = caras_[0]
+            us_ = [v[1][0] for _, tri in caras_ for v in tri]
+            vs_ = [v[1][1] for _, tri in caras_ for v in tri]
+            col_ = tuple(sum(v[2][q] for _, tri in caras_ for v in tri) / (3 * len(caras_)) * 0.7 for q in range(3))
+            x0_, x1_ = min(p[0] for p in pts_), max(p[0] for p in pts_)
+            y0_, y1_ = min(p[1] for p in pts_), max(p[1] for p in pts_)
+            u0_, u1_, v0_, v1_ = min(us_), max(us_), min(vs_), max(vs_)
+            for zq, nz_ in ((min(p[2] for p in pts_), -1.0), (max(p[2] for p in pts_), 1.0)):
+                q_ = [((x0_, y0_, zq), (u0_, v0_)), ((x1_, y0_, zq), (u1_, v0_)), ((x0_, y1_, zq), (u0_, v1_)),
+                      ((x1_, y1_, zq), (u1_, v1_))]
+                vs4 = [(pp, uv_, col_, (0.0, 0.0, nz_)) for pp, uv_ in q_]
+                for tri in ((0, 1, 2), (1, 3, 2)):
+                    caras_.append((tex_, tuple(vs4[t] for t in tri)))
     _juntar_mar(editor, mar, negros, clave_negra, lecho_negro, por_grupo, pad)
     editor.kf_pared_en = _pared_en(editor, atlas, paredes_tile, pad)
     editor.kf_puerta_en = _puerta_en(editor, datos, atlas, pad)

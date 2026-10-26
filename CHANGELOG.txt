@@ -11,6 +11,7 @@ Alpha 0.1 - revision 6 (2026-10-26)
 - Secret walls: the seam line on the ceiling around the wall is gone.
 - Secret walls: the slot the wall rises into is closed (sides and top), so the sky no longer shows through it.
 - Secret walls: opening one shakes the camera slowly, rumbles the controller and plays a sound.
+- Secret walls: the rising wall has a bottom and a top face (open, it looked like two loose sheets).
 
 Alpha 0.1 - revision 5 (2026-10-26)
 -----------------------------------
