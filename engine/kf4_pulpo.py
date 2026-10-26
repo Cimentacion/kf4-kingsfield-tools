@@ -164,31 +164,42 @@ def rig(vs, prims):
 
 
 # ---------------- textura: las tres páginas del PS1 en una de 256x256 y 8 bits ----------------
+TEX_ESCALA = 2        # las texturas del PS1 (4 bits, 64x64) se agrandan al doble suavizadas: más como las del IV
+
+
 def textura(vram, tris):
-    """(índices 256x256, paleta 256x4, {(tpage, clut): (dx, dy, x0, y0)}): recorta lo que usa cada página."""
+    """(índices 256x256, paleta 256x4, {(tpage, clut): (dx, dy)}): cada página que usa, recortada, agrandada a
+    TEX_ESCALA suavizada y todas juntas reducidas a 256 colores (las del IV son de 8 bits y más finas)."""
+    from PIL import Image
     cajas = {}
     for clave, _, uvs in tris:
         u = [a for a, _ in uvs]
         v = [b for _, b in uvs]
         c = cajas.get(clave, [255, 255, 0, 0])
         cajas[clave] = [min(c[0], min(u)), min(c[1], min(v)), max(c[2], max(u)), max(c[3], max(v))]
-    img = np.zeros((256, 256), np.uint8)
-    pal = np.zeros((256, 4), np.uint8)
-    pal[:, 3] = 0x80
+    rgb = np.zeros((256, 256, 3), np.uint8)
     sitio = {}
     x, y, alto_fila = 0, 0, 0
-    for n, (clave, (u0, v0, u1, v1)) in enumerate(sorted(cajas.items(), key=lambda kv: -(kv[1][3] - kv[1][1]))):
-        w, h = u1 - u0 + 1, v1 - v0 + 1
+    E = TEX_ESCALA
+    for clave, (u0, v0, u1, v1) in sorted(cajas.items(), key=lambda kv: -(kv[1][3] - kv[1][1])):
+        w, h = (u1 - u0 + 1) * E, (v1 - v0 + 1) * E
         if x + w > 256:
             x, y, alto_fila = 0, y + alto_fila, 0
         assert y + h <= 256, "no cabe la textura del pulpo"
         tp, cl = clave
         idx, p16 = _region(vram, tp, cl)
-        img[y:y + h, x:x + w] = idx[v0:v0 + h, u0:u0 + w] + 16 * n
-        pal[16 * n:16 * n + 16] = p16
-        sitio[clave] = (x - u0, y - v0)
+        trozo = p16[idx[v0:v1 + 1, u0:u1 + 1]][..., :3]
+        grande = Image.fromarray(trozo).resize((w, h), Image.BICUBIC)
+        rgb[y:y + h, x:x + w] = np.asarray(grande)
+        sitio[clave] = (x - u0 * E, y - v0 * E)
         x += w
         alto_fila = max(alto_fila, h)
+    q = Image.fromarray(rgb).quantize(colors=256, method=Image.MEDIANCUT, dither=Image.NONE)
+    img = np.asarray(q, np.uint8).copy()
+    p = np.array(q.getpalette()[:768], np.uint8).reshape(-1, 3)
+    pal = np.zeros((256, 4), np.uint8)
+    pal[:len(p), :3] = p
+    pal[:, 3] = 0x80
     return img, pal, sitio
 
 
@@ -397,7 +408,7 @@ def pulpo_chr(flor, mo_t, vram):
             sobre_padre = duenos[r] != D
             base = piv[esq.padre[D]] if sobre_padre else piv[D]
             p = (V[r] - base) * ESC
-            tri.append((tuple(p), tuple(nrm[r]), ((u + dx + 0.5) / 256.0, (v + dy + 0.5) / 256.0), 1 if sobre_padre else 0))
+            tri.append((tuple(p), tuple(nrm[r]), _sombra(V[r], nrm[r]), ((u * TEX_ESCALA + dx + TEX_ESCALA / 2) / 256.0, (v * TEX_ESCALA + dy + TEX_ESCALA / 2) / 256.0), 1 if sobre_padre else 0))
         por_parte[D].append(tri)
     bloques = []
     for p in range(esq.n):
@@ -407,8 +418,8 @@ def pulpo_chr(flor, mo_t, vram):
             verts = []
             for tri in tri_s[i:i + MAX_TRIS]:
                 # el orden del IV es el contrario del PS1: así la normal de la cara sale hacia fuera
-                for k, (pos, n, st, sp) in enumerate([tri[0], tri[2], tri[1]] if INVERTIR else tri):
-                    verts.append((pos, n, k < 2, st, sp, (128.0, 128.0, 128.0, 128.0)))
+                for k, (pos, n, col, st, sp) in enumerate([tri[0], tri[2], tri[1]] if INVERTIR else tri):
+                    verts.append((pos, n, k < 2, st, sp, col))
             bl.append(kc.bloque_nuevo(plantilla, verts))
         bloques.append(bl)
     modelo = modelo_pulpo(flor, esq, bloques, piv)
@@ -418,6 +429,15 @@ def pulpo_chr(flor, mo_t, vram):
 
 
 MAX_TRIS = kc.MAX_V // 3
+
+
+def _sombra(v, n):
+    """Color de vértice (128 = sin cambiar): la cara de abajo y lo que está pegado al suelo, más oscuro; un poco de
+    tono frío de agua. El IV ilumina además por la normal; esto le da el volumen que la textura del PS1 no trae."""
+    arriba = (-n[1] + 1) / 2                      # 1 mirando arriba, 0 abajo (y negativa es arriba)
+    alto = min(1.0, max(0.0, -v[1] / 1800.0))     # 0 en el suelo, 1 a la altura del cuerpo
+    f = 0.50 + 0.30 * arriba + 0.20 * alto
+    return (128 * f * 0.92, 128 * f * 0.98, 128 * f, 128.0)
 INVERTIR = True
 
 
@@ -502,4 +522,8 @@ def pulpo_prm(flor_rec):
     struct.pack_into("<HHHH", r, h + 0x20, 260, 70, 26, 34)
     # la tinta: más corta que el chorro de la flor
     struct.pack_into("<HH", r, 0x3D8 + 4, 150, 900)
+    # el chorro: el de la Flor oscura (efecto 148) dibuja con la textura de la propia flor, que en el pulpo ya no
+    # está (salía un papel sin textura); el del Aqualizard (160, un chorro de agua) usa las texturas comunes de los
+    # efectos (sfx.tmx). Sale de la boca (ancla 0) en el fotograma 40, como antes
+    r[0x3D8 + 0x10] = 160
     return bytes(r)

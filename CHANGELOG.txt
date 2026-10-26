@@ -1,6 +1,13 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 14 (2026-10-26)
+------------------------------------
+- Kraken: its ranged attack is now a water jet (the Aqualizard's). The Dark Flower's spores it used before draw
+  with the flower's own texture, so they came out as a blank sheet.
+- Kraken: its PS1 textures are enlarged 2x with smoothing and turned into one 256-colour texture, closer to how
+  KFIV's own enemies look, and its vertex colours are darker underneath and near the ground for some volume.
+
 Alpha 0.1 - revision 13 (2026-10-26)
 ------------------------------------
 - Found the real cause of the black screen: the map's texture section has to start on a 16-byte boundary, and
