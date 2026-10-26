@@ -7,6 +7,7 @@ Alpha 0.1 - revision 5 (2026-10-26)
   walls and walls than ceilings, soft shadow at the foot of the walls, subtle variation and a warm tone.
   Torches and the fountain still add their own light on top.
 - Secret walls take the vertex colors of the walls right next to them, so they blend in from both sides.
+- Secret walls are now as thick as the wall they sit in (they looked sunk into their opening).
 
 Alpha 0.1 - revision 4 (2026-10-26)
 -----------------------------------

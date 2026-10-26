@@ -2148,7 +2148,11 @@ def panel_kf(t, tris):
     ca, sa = math.cos(ang), math.sin(ang)
     ancho = (z1 - z0) if fino_x else (x1 - x0)
     grueso = max((x1 - x0) if fino_x else (z1 - z0), 20.0)
-    sx, sy, sz = ancho / 200.0, (alto_paso + 10.0) / 300.0, grueso / 20.0
+    # la misma escala en x y z: el juego escala en los ejes del mundo y no en los de la losa (con sx != sz y el
+    # giro de 90 grados la pared salía más delgada, metida en su hueco, y se veían los lados del marco);
+    # con la misma, da igual el orden. La caja de colisión queda de 200 x 20 por esa escala (más fina que la pared)
+    sx = sz = ancho / 200.0
+    sy = (alto_paso + 10.0) / 300.0
     m = bytearray(t["modelo"])
     length = struct.unpack_from("<I", m, 0)[0]
     nmesh = struct.unpack_from("<H", m, 4)[0]
