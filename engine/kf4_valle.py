@@ -4654,6 +4654,7 @@ def main():
         kf_malla.AGUA_ANIMADA = False
     if "luz" in QUITAR:
         kf_malla.LUZ_SUAVE = False
+        kf_malla.LUZ_INTERIOR = False
     if "texturas" in QUITAR:
         kf_malla.ESCRITURA_PARCIAL = False
     if args:

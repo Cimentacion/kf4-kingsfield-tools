@@ -1,6 +1,13 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 5 (2026-10-26)
+-----------------------------------
+- New vertex lighting for King's Field interiors: about four times brighter than before, floors lighter than
+  walls and walls than ceilings, soft shadow at the foot of the walls, subtle variation and a warm tone.
+  Torches and the fountain still add their own light on top.
+- Secret walls take the vertex colors of the walls right next to them, so they blend in from both sides.
+
 Alpha 0.1 - revision 4 (2026-10-26)
 -----------------------------------
 - Secret walls: removed a small white spike at the foot of the wall (a hidden piece of KFIV's slab).

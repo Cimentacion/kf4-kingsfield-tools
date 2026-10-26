@@ -521,7 +521,10 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
                 # la luz, la de un poco por delante de la cara: en la cara misma (el borde de la casilla) salía la
                 # de la roca de al lado, casi negra
                 fuera = [(p[0] + n[0] * 0.4, p[1] + n[1] * 0.4, p[2]) for p in P]
-                cols = azular([editor.luzv(q, n, _interior(editor, q, cache_int)) for q in fuera], P)
+                # (bajo techo si lo está la cara o el punto de delante: como las paredes de al lado)
+                cols = azular([(luz_kf(editor, q, n, max(_interior(editor, q, cache_int), _interior(editor, p, cache_int)))
+                                if LUZ_INTERIOR else editor.luzv(q, n, _interior(editor, q, cache_int)))
+                               for q, p in zip(fuera, P)], P)
                 tex = (h["f"]["TBP"], cbp, h["f"]["TBW"], W, H, 0x14)
                 cara = [(P[k], uv[k], cols[k], n) for k in range(len(P))]
                 paneles.setdefault(sec[1], []).extend(
@@ -537,7 +540,9 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
                 if abs(nn_[2]) > 0.9 and ((x, z) not in suelo_tex or alt_ < suelo_alt[(x, z)]):
                     suelo_tex[(x, z)] = (clave, ax / W, ay / H, lado / W, lado / H)
                     suelo_alt[(x, z)] = alt_
-            if LUZ_SUAVE:
+            if LUZ_INTERIOR:
+                cols = [luz_kf(editor, p, n, _interior(editor, p, cache_int)) for p in P]
+            elif LUZ_SUAVE:
                 cols = [editor.luzv(p, n, _interior(editor, p, cache_int)) for p in P]
             else:
                 ce = editor.celda_en(x + pad, z + pad)
@@ -545,7 +550,7 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
                 cols = [editor.luzv(p, n, it) for p in P]
             # el color pintado del mapa (manchas de tono y de luz, sombra al pie de las paredes: los colores de
             # vértice que pone kf2_a_editor) tiñe también los modelos de verdad, como a las piezas del editor
-            if n[2] > 0.5:        # solo el suelo: en las paredes la sombra del pie las oscurecería enteras
+            if n[2] > 0.5 and not LUZ_INTERIOR:   # solo el suelo (luz_kf ya lo lleva)
                 cols = [tuple(c[q] * m[q] for q in range(3))
                         for c, m in zip(cols, (editor.color_en(p[0], p[1]) for p in P))]
             cols = azular(cols, P)
@@ -705,9 +710,12 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
             clave_t, u0, v0, du, dv = tex
             up = (0.0, 0.0, 1.0)
             vs = [(p, (u0 + du * (0.02 + 0.96 * ((p[0] - x0) / C)), v0 + dv * (0.02 + 0.96 * ((p[1] - y0) / C))),
-                   editor.luzv(p, up, 0.55), up) for p in q]
+                   (luz_kf(editor, p, up, _interior(editor, p, cache_int)) if LUZ_INTERIOR else
+                    editor.luzv(p, up, 0.55)), up) for p in q]
             for tri in ((0, 2, 1), (1, 2, 3)):
                 por_grupo[(trozo_de(x, z), clave_t)].append(tuple(vs[t] for t in tri))
+    if paneles:
+        _colores_panel(paneles, por_grupo)
     _juntar_mar(editor, mar, negros, clave_negra, lecho_negro, por_grupo, pad)
     editor.kf_pared_en = _pared_en(editor, atlas, paredes_tile, pad)
     editor.kf_puerta_en = _puerta_en(editor, datos, atlas, pad)
@@ -1120,6 +1128,45 @@ def _puerta_en(editor, datos, atlas, pad):
     return f
 
 
+def _colores_panel(paneles, por_grupo):
+    """La pared que sube toma el color de vértice de las paredes del mapa que tiene al lado (las del mismo plano,
+    mirando hacia el mismo lado): así no se distingue, se mire desde donde se mire. Si no encuentra ninguna, se
+    queda con el suyo."""
+    import numpy as np
+    centros = {k: np.mean([v[0] for _, tri in caras for v in tri], axis=0) for k, caras in paneles.items()}
+    cand = {k: [] for k in paneles}
+    for tris in por_grupo.values():
+        for t in tris:
+            for (pp, _, col, nn) in t:
+                if abs(nn[2]) > 0.3:
+                    continue
+                for k, c in centros.items():
+                    if abs(pp[0] - c[0]) < 4.0 and abs(pp[1] - c[1]) < 4.0 and abs(pp[2] - c[2]) < 4.5:
+                        cand[k].append((pp, col, nn))
+    for k, caras in paneles.items():
+        cs = cand[k]
+        if not cs:
+            continue
+        P_ = np.array([c[0] for c in cs])
+        N_ = np.array([c[2][:3] for c in cs])
+        C_ = np.array([c[1][:3] for c in cs], dtype=float)
+        nuevas = []
+        for tex, tri in caras:
+            vs = []
+            for (pp, uv, col, nn) in tri:
+                ok = (N_ @ np.array(nn[:3])) > 0.85
+                if not ok.any():
+                    vs.append((pp, uv, col, nn))
+                    continue
+                d2 = ((P_[ok, :2] - np.array(pp[:2])) ** 2).sum(1) + 0.5 * (P_[ok, 2] - pp[2]) ** 2
+                orden = np.argsort(d2)[:8]
+                w = 1.0 / (d2[orden] + 0.25)
+                c = (C_[ok][orden] * w[:, None]).sum(0) / w.sum()
+                vs.append((pp, uv, tuple(float(x) for x in c) + tuple(col[3:]), nn))
+            nuevas.append((tex, tuple(vs)))
+        paneles[k] = nuevas
+
+
 def _juntar_mar(editor, mar, negros, clave_negra, lecho_negro, por_grupo, pad):
     """El mar abierto (un cuadrado de agua por casilla, 3000 en el nivel 0) y el fondo negro de debajo, de 2 x 2
     casillas en un cuadrado de 5 m: la cuarta parte de triángulos. El agua usa su propia textura animada, que se
@@ -1195,6 +1242,45 @@ def _juntar_mar(editor, mar, negros, clave_negra, lecho_negro, por_grupo, pad):
     import sys
     print(f"kf_malla: mar de {len(mar)} casillas en {junt} cuadrados de 2 x 2 y {len(mar) - 4 * junt} sueltas",
           file=sys.stderr)
+
+
+# Luz de interiores de los niveles del King's Field (salas y pasillos con techo). La de día (LuzDia, pensada para
+# la piedra al sol) los dejaba casi negros: las paredes salían a ~16 de 255 de color de vértice. Aquí, una luz
+# propia de mazmorra: suelo más claro que las paredes y éstas que el techo, el pie de las paredes en sombra (como
+# la oclusión de una esquina), manchas suaves y un tono cálido; las antorchas y la fuente se suman después.
+LUZ_INTERIOR = True
+LUZ_KF_BASE = 0.62          # nivel de una pared a media altura (x 128 en el color de vértice)
+LUZ_KF_TONO = (1.08, 1.0, 0.86)
+
+
+def luz_kf(editor, p, n, interior):
+    """Color de vértice de un punto (p, normal n) del nivel portado; interior: 0 fuera .. 0,55 bajo techo."""
+    dia = editor.luzv(p, n, 0.0)
+    if n[2] > 0.5:                    # fuera, como antes: el suelo lleva además el color pintado
+        m = editor.color_en(p[0], p[1])
+        dia = tuple(dia[q] * m[q] for q in range(3))
+    w = min(1.0, interior / 0.55) if interior > 0 else 0.0
+    if w <= 0.0:
+        return dia
+    nz = n[2]
+    base = 0.82 + 0.18 * nz if nz >= 0 else 0.82 + 0.30 * nz       # suelo 1, pared 0,82, techo 0,52
+    if nz < 0.5:
+        # paredes y techo: la sombra al pie (según la altura sobre el suelo que tienen delante) y el color pintado
+        # de delante (el del borde de la casilla es el de la roca)
+        q = (p[0] + n[0] * 0.45, p[1] + n[1] * 0.45)
+        h = p[2] - editor.altura(q[0], q[1])
+        t = max(0.0, min(1.0, h / 1.3))
+        ao = 0.62 + 0.38 * t * t * (3 - 2 * t)
+        m = editor.color_en(q[0], q[1])
+    else:
+        ao = 1.0
+        m = editor.color_en(p[0], p[1])
+    m = tuple(0.6 + 0.4 * mk for mk in m)            # la sombra pintada, más suave
+    r = getattr(editor, "ruido", None)
+    var = 0.9 + 0.2 * r.v(p[0] * 0.17 + p[2] * 0.11, p[1] * 0.17, 23) if r else 1.0
+    k = LUZ_KF_BASE * base * ao * var * 128.0
+    col = tuple(max(0.0, min(255.0, k * LUZ_KF_TONO[q] * m[q])) for q in range(3))
+    return tuple(dia[q] * (1 - w) + col[q] * w for q in range(3))
 
 
 def _interior(editor, p, cache):
