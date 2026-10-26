@@ -301,9 +301,16 @@ def es_agua(datos, region):
 def _region(uvs):
     """El cuadro alineado de 64 (o 128) téxeles de la página que usa un polígono, como en kf2_tex."""
     us, vs = [u for u, _ in uvs], [v for _, v in uvs]
-    lado = 64 if max(max(us) - min(us), max(vs) - min(vs)) <= 64 else 128
-    cu, cv = (min(us) + max(us)) // 2 // lado * lado, (min(vs) + max(vs)) // 2 // lado * lado
-    return cu, cv, lado
+    # el cuadro más pequeño (64 o 128) que contiene el polígono entero; antes, uno de 64 centrado en el polígono:
+    # los que cruzaban la raya de 64 (las orillas en diagonal) se salían, sus UV se recortaban al borde y salían
+    # manchas claras (téxeles del borde y de la región de al lado)
+    u0, u1, v0, v1 = min(us), max(us), min(vs), max(vs)
+    for lado in (64, 128):
+        cu, cv = u0 // lado * lado, v0 // lado * lado
+        if u1 <= cu + lado and v1 <= cv + lado:
+            return cu, cv, lado
+    lado = 128
+    return (u0 + u1) // 2 // lado * lado, (v0 + v1) // 2 // lado * lado, lado
 
 
 class Atlas:

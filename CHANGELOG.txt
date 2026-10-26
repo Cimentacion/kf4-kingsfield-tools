@@ -8,6 +8,7 @@ Alpha 0.1 - revision 5 (2026-10-26)
   Torches and the fountain still add their own light on top.
 - Secret walls take the vertex colors of the walls right next to them, so they blend in from both sides.
 - Secret walls are now as thick as the wall they sit in (they looked sunk into their opening).
+- Fixed light specks on diagonal shore floors: polygons crossing a 64-texel boundary used a clipped texture area.
 
 Alpha 0.1 - revision 4 (2026-10-26)
 -----------------------------------
