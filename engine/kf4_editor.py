@@ -29,7 +29,7 @@ PENDIENTE_MURO = 1.0     # por encima de 1 m de subida por metro, la celda es pa
 ESCALON = 0.35           # un desnivel mayor entre casillas vecinas es pared en la colisión
 
 
-PEZ_HONDO = 1.6        # m bajo la superficie del agua a los que nadan los peces de un mapa portado
+PEZ_HONDO = 2.6        # m bajo la superficie: más que su radio de vuelta (kf4_valle._spawn_pez), así no asoman
 
 class Constructor(kp.Prologo):
     """Un prólogo vacío: solo se usan sus funciones de construcción, cada pieza en su propio Geo."""

@@ -559,6 +559,8 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
             uv = [((ax + min(u - cu, lado)) / W, (ay + min(vv - cv, lado)) / H) for (u, vv) in uvs]
             sec = _SECRETA_ACTUAL[0]
             es_puerta = bool(sec) and len(sec) > 3 and sec[3]
+            if es_puerta and not agua and abs(n[2]) > 0.8 and all(abs(p_[2] - sec[1][2]) < 0.15 for p_ in P):
+                continue     # el suelo del modelo de la puerta: no sube con ella (la casilla ya tiene su suelo)
             if es_puerta and not agua:
                 # la puerta del King's Field: entera al objeto que sube, con la luz de lo que tiene delante
                 fuera = [(p[0] + n[0] * 0.4, p[1] + n[1] * 0.4, p[2] + n[2] * 0.4) for p in P]
@@ -808,6 +810,13 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
             col_ = tuple(sum(v[2][q] for _, tri in caras_ for v in tri) / (3 * len(caras_)) * 0.7 for q in range(3))
             x0_, x1_ = min(p[0] for p in pts_), max(p[0] for p in pts_)
             y0_, y1_ = min(p[1] for p in pts_), max(p[1] for p in pts_)
+            # solo bajo la losa de verdad: las dos caras grandes de la pared y lo que hay entre ellas (la caja de
+            # todas las caras cogía el marco y el hueco: subía una placa del ancho del pasillo, como si se llevara
+            # el suelo)
+            huella = _huella_losa(caras_, x0_, x1_, y0_, y1_)
+            if huella is None:
+                continue         # no se ve una losa clara (las puertas: su modelo ya es cerrado)
+            x0_, x1_, y0_, y1_ = huella
             u0_, u1_, v0_, v1_ = min(us_), max(us_), min(vs_), max(vs_)
             # en trozos pequeños y por las dos caras: el 4 quita los triángulos grandes que se salen de la pantalla
             # cerca de la cámara (debajo de la puerta desaparecía) y algunos objetos solo se ven por un lado
@@ -845,6 +854,39 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
         for tira in tiras(tris):
             editor.geo.strip(ch, clave, tira)
     return plantillas, regiones_sin_sitio, caras["tris"]
+
+
+def _huella_losa(caras, x0, x1, y0, y1):
+    """La planta (x0, x1, y0, y1) de la losa de una pared que sube: entre sus dos caras grandes (las de más área
+    que miran en el mismo eje), a lo largo de ellas. None si no se ve clara."""
+    area = {"x": 0.0, "y": 0.0}
+    planos = {"x": [], "y": []}
+    for _, tri in caras:
+        P = [v[0] for v in tri]
+        a = _sub(P[1], P[0])
+        b = _sub(P[2], P[0])
+        n = _cross(a, b)
+        ar = math.sqrt(n[0] ** 2 + n[1] ** 2 + n[2] ** 2) / 2
+        if ar < 1e-6 or abs(n[2]) > 0.3 * (abs(n[0]) + abs(n[1]) + 1e-9):
+            continue                         # solo las verticales
+        eje = "x" if abs(n[0]) > abs(n[1]) else "y"
+        area[eje] += ar
+        planos[eje].append((ar, P))
+    eje = max(area, key=area.get)
+    if area[eje] <= 0:
+        return None
+    k = 0 if eje == "x" else 1
+    otro = 1 - k
+    # las caras grandes: las de ese eje con al menos 1/4 del área mayor; su grosor, entre sus planos
+    mayor = max(ar for ar, _ in planos[eje])
+    grandes = [P for ar, P in planos[eje] if ar >= 0.25 * mayor]
+    c = [p[k] for P in grandes for p in P]
+    t = [p[otro] for P in grandes for p in P]
+    g0, g1 = min(c), max(c)
+    if g1 - g0 < 0.05 or g1 - g0 > 1.2:      # una sola cara o algo raro: nada
+        return None
+    l0, l1 = min(t), max(t)
+    return (g0, g1, l0, l1) if k == 0 else (l0, l1, g0, g1)
 
 
 def _indice_suelos(editor):

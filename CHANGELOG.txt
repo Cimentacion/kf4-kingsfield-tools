@@ -1,6 +1,17 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 16 (2026-10-26)
+------------------------------------
+- Fish swim deeper (2.6 m under the surface) and never go more than 2.4 m from where they were born, so they
+  no longer float out of the water when they chase you.
+- Level 0: where the original had its land "Kraken" class there are now slimes (c0002); skeleton spots are
+  mostly c0004 with some skeletons (c0050) and plants (c0000).
+- The single Kraken now stands right in front of the secret wall (two tiles out, on the open side).
+- Doors: the floor of the King's Field door model stays on the ground instead of rising with the door, and
+  the extra bottom face is only added where there is a clear slab (secret walls).
+- Re-port the level (JUGAR_KF2.bat).
+
 Alpha 0.1 - revision 15 (2026-10-26)
 ------------------------------------
 - King's Field level 0 gets its enemies from a hand-made list instead of the automatic look-alikes:

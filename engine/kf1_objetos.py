@@ -155,8 +155,8 @@ REPARTO = {
         "agua_modelos": {2, 4, 5},       # Sigill, Baltail y el 5 sin nombre: los que el nivel pone en el mar
         0: [2], "slime_raro": 3,         # Green Slime -> slime (c0002), uno de ellos el venenoso (c0003)
         14: [4],                         # Head Eater -> c0004, el que más sale
-        29: [4], "pulpo": 48,            # Kraken (en tierra) -> c0004, menos el de la puerta secreta: el pulpo
-        21: [50, 0, 4],                  # Skeleton -> esqueleto (c0050), la planta (c0000) y c0004, por turnos
+        29: [2], "pulpo": 48,            # Kraken (en tierra) -> babosa (c0002); el pulpo, uno, delante de la pared secreta
+        21: [4, 4, 50, 4, 0],            # Skeleton -> sobre todo c0004, algún esqueleto (c0050) y la planta (c0000)
         16: [10], 4: [10],               # S-Knight y los Baltail de tierra -> murciélago (c0010), en las cuevas
         2: [4],                          # Sigill de tierra -> c0004
         "grupo": (10, 87, 15.0),         # donde hay varios murciélagos (a menos de 15 m) va una seta (c0087)
@@ -219,14 +219,38 @@ def para_editor(fdat, nivel, pad, ox, oy, celda, altura_capa=None, vecinos=None,
 def _para_editor_reparto(enemigos, objetos, R, nivel, pad, ox, oy, celda, altura_capa, vecinos, techo_de, es_agua,
                          pos):
     """Los enemigos de un nivel con reparto a mano (REPARTO)."""
-    secretas = [pos(o) for o in objetos if o["id"] in PUERTAS_SECRETAS]
+    secretas = [o for o in objetos if o["id"] in PUERTAS_SECRETAS]
     candidatos = [i for i, e in enumerate(enemigos) if e["modelo"] == 29 and not es_agua(e["y"], e["x"])]
-    pulpo = None
-    if candidatos and secretas and R.get("pulpo"):
-        def dist(i):
-            X, Y = pos(enemigos[i])
-            return min(math.hypot(X - a, Y - b) for a, b in secretas)
-        pulpo = min(candidatos, key=dist)
+    pulpo = None          # (x, y, z) donde va: delante de la pared secreta más cercana a algún Kraken
+    if candidatos and secretas and R.get("pulpo") and vecinos:
+        def d2(o, e):
+            (a, b), (c, d) = pos(o), pos(e)
+            return math.hypot(a - c, b - d)
+        pared = min(secretas, key=lambda o: min(d2(o, enemigos[i]) for i in candidatos))
+        col, fila = pared["y"], pared["x"]
+
+        def alcance(c0, f0, prohibida, tope=80):
+            vistas, cola = {(c0, f0)}, [(c0, f0)]
+            while cola and len(vistas) < tope:
+                c, f = cola.pop(0)
+                for (dc, df), ok in vecinos(c, f).items():
+                    q = (c + dc, f + df)
+                    if ok and q not in vistas and q != prohibida:
+                        vistas.add(q)
+                        cola.append(q)
+            return len(vistas)
+        lados = [(dc, df) for (dc, df), ok in vecinos(col, fila).items() if ok]
+        if lados:
+            dc, df = max(lados, key=lambda d: alcance(col + d[0], fila + d[1], (col, fila)))
+            # a dos casillas de la pared, por el lado de fuera (el que da a más sitio: el escondido es el pequeño)
+            c2, f2 = col + 2 * dc, fila + 2 * df
+            if not vecinos(c2 - dc, f2 - df).get((dc, df)):
+                c2, f2 = col + dc, fila + df
+            X = ox + (c2 + pad + 0.5) * celda
+            Y = oy + (f2 + pad + 0.5) * celda
+            z = altura_capa(c2, f2, pared.get("capa", 0)) if altura_capa else None
+            giro = math.atan2(-dc, -df)            # mirando a la pared
+            pulpo = (round(X, 3), round(Y, 3), z, round(giro, 3))
     turno = collections.Counter()
     sin = collections.Counter()
     lista = []
@@ -237,8 +261,6 @@ def _para_editor_reparto(enemigos, objetos, R, nivel, pad, ox, oy, celda, altura
         agua = es_agua(e["y"], e["x"])
         if agua and m in R["agua_modelos"]:
             reg = R["agua"]
-        elif i == pulpo:
-            reg = R["pulpo"]
         elif m in R and isinstance(R[m], list):
             regs = R[m]
             reg = regs[turno[m] % len(regs)]
@@ -256,6 +278,11 @@ def _para_editor_reparto(enemigos, objetos, R, nivel, pad, ox, oy, celda, altura
             z = altura_capa(e["y"], e["x"], e["capa"])
             if z is not None:
                 d["z"] = round(z, 3)
+        lista.append(d)
+    if pulpo:
+        d = {"tipo": f"chr:{R['pulpo']}", "x": pulpo[0], "y": pulpo[1], "kf": "Kraken", "giro": pulpo[3]}
+        if pulpo[2] is not None:
+            d["z"] = round(pulpo[2], 3)
         lista.append(d)
     murc, seta, radio = R["grupo"]
     hechos = []

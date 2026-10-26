@@ -2086,7 +2086,9 @@ def _spawn_pez(sp):
     f = struct.unpack_from("<Q", b, 0x38)[0]
     f &= ~((7 << 59) | (0xFF << 40))
     struct.pack_into("<Q", b, 0x38, f)
-    struct.pack_into("<H", b, 0x4C, 500)       # radio por el que nada (cm)
+    # radio por el que nada (cm). La vuelta a su sitio la mira en 3D (EntityAi_CheckFarFromSpawn3D): con 240 y
+    # naciendo a 2,6 m bajo la superficie, aunque te persiga hacia arriba no llega a salir del agua
+    struct.pack_into("<H", b, 0x4C, 240)
     struct.pack_into("<H", b, 0x50, 1800)      # reaparece cuando vuelves a 18 m
     b[0x52] = 100
     struct.pack_into("<H", b, 0x56, 60)        # sube y baja 60 cm como mucho
