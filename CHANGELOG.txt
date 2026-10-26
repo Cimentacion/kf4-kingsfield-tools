@@ -1,6 +1,13 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 24 (2026-10-26)
+------------------------------------
+- Too many baby Krakens: level 0 keeps 6, spread out over the level. The others are Head Eaters and some
+  slimes, and the 4 changes made earlier on the map page for those spots are back (mushrooms and skeletons).
+- The crystals on pedestals glow: the crystal part has its own light with a light green tint, stronger towards
+  the tip.
+
 Alpha 0.1 - revision 23 (2026-10-26)
 ------------------------------------
 - The Kraken shoots again, from 6 to 25 m: now it casts the player's Hydro Cannon (level 1). Player spell

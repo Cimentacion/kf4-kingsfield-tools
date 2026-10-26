@@ -526,6 +526,10 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
             out.append(c)
         return out
     for (x, z, prims, mundo, girar_n, rot) in _piezas(datos, editor, pad, h0):
+        brillo = None
+        if rot == -1 - CRISTAL_ID and mundo:
+            zs = [p_[2] for p_ in mundo]
+            brillo = (min(zs), max(zs))
         for tpage, clut, uvs, refs, nrm_ps in prims:
             if tpage is None or (tpage >> 7) & 3:
                 continue
@@ -633,6 +637,19 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
                 cols = [tuple(c[q] * m[q] for q in range(3))
                         for c, m in zip(cols, (editor.color_en(p[0], p[1]) for p in P))]
             cols = azular(cols, P)
+            if brillo:
+                # el cristal del pedestal: en el King's Field brilla (es semitransparente); aquí, la parte de cristal
+                # (por encima del pedestal) con luz propia y un tono verde claro, más fuerte hacia la punta
+                z0, z1 = brillo
+                nuevas = []
+                for c, p_ in zip(cols, P):
+                    t = (p_[2] - z0) / max(1e-6, z1 - z0)
+                    if t > CRISTAL_DESDE:
+                        k = (t - CRISTAL_DESDE) / (1 - CRISTAL_DESDE)
+                        g = 1.0 + 1.3 * (0.5 + 0.5 * k)
+                        c = tuple(min(255.0, max(c[q], 70.0) * g * CRISTAL_TONO[q]) for q in range(3)) + tuple(c[3:])
+                    nuevas.append(c)
+                cols = nuevas
             bajo_mar = nivel_agua is not None and (x, z) in cerca_agua
             if bajo_mar and not agua:
                 # bajo el agua, degradado a negro (3 m): los riscos y el fondo se unen con el fondo negro
@@ -1411,6 +1428,9 @@ def _juntar_mar(editor, mar, negros, clave_negra, lecho_negro, por_grupo, pad):
 LUZ_INTERIOR = True
 LUZ_KF_BASE = 0.62          # nivel de una pared a media altura (x 128 en el color de vértice)
 LUZ_KF_TONO = (1.08, 1.0, 0.86)
+CRISTAL_ID = 163           # objeto de decorado del King's Field: el cristal sobre pedestal
+CRISTAL_DESDE = 0.38        # fracción de la altura donde acaba el pedestal y empieza el cristal
+CRISTAL_TONO = (0.85, 1.15, 1.0)
 ZONA_PUERTA_R = 3.5         # metros alrededor de una puerta o pared secreta con la luz de un pasillo normal
 ZONA_PUERTA_MIN = 0.9       # color pintado mínimo ahí (1 = sin sombra pintada)
 

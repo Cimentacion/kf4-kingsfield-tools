@@ -169,6 +169,7 @@ REPARTO = {
         "pulpo_lado": (-1, 0),           # el pasillo por el que llegas a la pared (el otro es el escondido)
         # Kraken: el grande (clase con 1500 de vida, escala 1) es el pulpo; los de escala 0,375, los pulpitos
         29: "kraken", "pulpo": 48, "pulpito": 65, "pulpo_vida": 1000,
+        "pulpitos_max": 6, "pulpito_resto": [4, 4, 2],   # 6 pulpitos; los otros, Head Eater y alguna babosa
         21: [4, 4, 50, 4, 0],            # Skeleton -> sobre todo c0004, algún esqueleto (c0050) y la planta (c0000)
         16: [63],                        # el caracol gigante, en su sitio (lo que antes eran murciélagos)
         4: [10],                         # los Baltail de tierra -> murciélago (c0010), en las cuevas
@@ -341,6 +342,22 @@ def _para_editor_reparto(enemigos, objetos, R, nivel, pad, ox, oy, celda, altura
             if z is not None:
                 d["z"] = round(z, 3)
         lista.append(d)
+    # pulpitos: el original pone 20 en el nivel 0 y salían casi todos los enemigos pulpitos. Se quedan
+    # R["pulpitos_max"], repartidos (cada uno el más lejos de los ya puestos y del grande); los demás, R["pulpito_resto"]
+    if R.get("pulpitos_max") is not None:
+        mini = f"chr:{R['pulpito']}"
+        cand = [d for d in lista if d["tipo"] == mini]
+        puestos = [(d["x"], d["y"]) for d in lista if d["tipo"] == f"chr:{R['pulpo']}"]
+        quedan = []
+        while cand and len(quedan) < R["pulpitos_max"]:
+            d = max(cand, key=lambda d: min(((d["x"] - x) ** 2 + (d["y"] - y) ** 2 for x, y in puestos),
+                                            default=0.0))
+            cand.remove(d)
+            quedan.append(d)
+            puestos.append((d["x"], d["y"]))
+        resto = R.get("pulpito_resto", [4])
+        for k, d in enumerate(cand):
+            d["tipo"] = f"chr:{resto[k % len(resto)]}"
     murc, seta, radio = R["grupo"]
     hechos = []
     for d in lista:

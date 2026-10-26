@@ -1,11 +1,15 @@
 {
  "cambios": {
+  "29": "chr:87",
+  "51": "chr:50",
   "58": "chr:87",
   "71": "chr:2",
+  "75": "chr:50",
+  "99": "chr:87",
   "178": "chr:2",
   "183": "chr:2",
   "185": "chr:2",
   "191": "chr:87"
  },
- "nota": "Lo que marcaste en el mapa Enemigos del nivel 0 (2026-10-26T03:51:42.398Z). Quitados los cambios de los Kraken: ahora son los pulpitos del original, y el grande va en su sitio"
+ "nota": "Lo que marcaste en el mapa Enemigos del nivel 0 (2026-10-26T03:51:42.398Z). El Kraken grande va en su sitio del original"
 }
