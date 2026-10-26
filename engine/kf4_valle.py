@@ -2373,8 +2373,8 @@ def panel_kf(t, tris):
     # que no la cierre el 4 por su cuenta (door.c: MapObject_UpdateOpenDoor la cierra si este campo es 0 y el jugador
     # está más lejos que su alcance + 1 m, y su alcance es pequeño: se cerraba estando al lado). La cierra su guion,
     # cuando te alejas PANEL_CIERRE (_guion_panel)
-    # CIERRE: "motor" (como en la revisión 7: lo cierra el 4 por su alcance), "guion" (lo cierra su guion a
-    # PANEL_CIERRE; el mapa no cargaba así, se está buscando por qué), o las pruebas "guion0" / "abierta"
+    # CIERRE: "guion" (lo cierra su guion cuando te alejas PANEL_CIERRE), "motor" (como en la revisión 7: lo
+    # cierra el 4 por su alcance, demasiado pronto), o las pruebas "guion0" / "abierta"
     b[0x46] = 0 if CIERRE in ("motor", "guion0") else 1
     # el movimiento: la losa sube 280 (el juego suma ese desplazamiento a la posición sin escalarlo,
     # map_object/door.c); la pared del King's Field es más alta: que suba toda su altura
@@ -2518,7 +2518,7 @@ PANEL_TEMBLOR = (2.5, 75)        # alcance y fotogramas del temblor de la cámar
 PANEL_VIBRACION = (64, 75)       # fuerza y fotogramas de la vibración del mando (los de 099: 64, 15)
 PANEL_SONIDO = 0x0D              # sonido común (el de los movimientos 6 y 7 de la losa del 4)
 PANEL_CIERRE = 800               # cm: se cierra cuando te alejas más que esto
-CIERRE = os.environ.get("KF_CIERRE", "motor")   # ver panel_kf
+CIERRE = os.environ.get("KF_CIERRE", "guion")   # ver panel_kf
 PANEL_ESPERA = 150               # fotogramas abierta como mínimo antes de mirar la distancia
 GUIONES_PANEL = []               # [(etiqueta, id, posición)] de este mapa (colocar_objetos_kf los llena)
 
@@ -3169,6 +3169,9 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
         guion = guion_fuente(guion, d099, log)
     guion = guion_paneles(guion, log)
     out += guion
+    # las texturas (paquetes DMA) tienen que empezar alineadas a 16 bytes, como en todos los mapas del juego: con el
+    # guion de cierre de la revisión 8 quedaban a 4 y el juego se colgaba al cargar el mapa
+    out += bytes((-len(out)) % 16)
     new_tex = len(out)
     if getattr(valle, "kf_atlas", None) is not None:   # geometría real de King's Field: su atlas de texturas
         import kf_malla
@@ -3192,6 +3195,7 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
         if cambios:
             tex_blob = kf2_tex.inyectar(tex_blob, cambios, log)
     out += tex_blob
+    out += bytes((-len(out)) % 16)
     new_snd = len(out)
     out += h[off_snd:]
     # el banco de sonido guarda dos offsets desde el principio del fichero (+4 buffer_b, +0xC buffer_a; Map_ParseFile

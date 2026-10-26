@@ -1,6 +1,13 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 13 (2026-10-26)
+------------------------------------
+- Found the real cause of the black screen: the map's texture section has to start on a 16-byte boundary, and
+  the longer wall scripts of revision 8 left it 4 bytes off. The generator now always aligns it (and the sound
+  bank). The close-when-you-walk-away script is back on: walls and doors stay open while you are near and close
+  about 8 m away.
+
 Alpha 0.1 - revision 12 (2026-10-26)
 ------------------------------------
 - The level loads again: the new close-when-far script of revision 8 was what hung it (found with the test
