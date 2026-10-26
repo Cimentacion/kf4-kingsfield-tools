@@ -250,11 +250,16 @@ def _piezas(datos, editor, pad, h0):
         def gira(v, ca=ca, sa=sa):
             x_, y_, z_ = v
             return x_ * ca + z_ * sa, y_, -x_ * sa + z_ * ca
+        if oid not in NICHOS_KF:
+            # la pared que sube del King's Field (130): la de abajo va de x = 3 a 256 y la de encima del techo, de
+            # -256 a 0, metida en la roca. Desde un lado la de abajo quedaba 31 cm hundida en su hueco: su cara de ese
+            # lado se lleva a x = -256, al ras de la pared de al lado (el hueco va de -256 a 256)
+            verts = [(-256, v[1], v[2]) if v[0] == 3 and v[1] >= -3200 else v for v in verts]
         mundo = []
         for v in verts:
             gx, gy, gz = gira(v)
             mundo.append((ox + gx * ESCALA, oy + gz * ESCALA, oz - gy * ESCALA))
-        _SECRETA_ACTUAL[0] = (oid, (ox, oy, oz))
+        _SECRETA_ACTUAL[0] = (oid, (ox, oy, oz), oz + 3200 * ESCALA - 0.05)
         yield x, z, prims, mundo, gira, int(round(ang / (math.pi / 2))) & 3
     _SECRETA_ACTUAL[0] = None
 
@@ -524,6 +529,9 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
                 # (quitar el del modelo donde la casilla ya tiene suelo dejaba agujeros: no siempre lo tiene entero)
                 dz = -0.01 if nrm_ps[1] < 0 else 0.02
                 P = [(p_[0], p_[1], p_[2] + dz) for p_ in P]
+            if sec and sec[0] not in NICHOS_KF and nrm_ps is not None and nrm_ps[1] == 0 and nrm_ps[2] == 0 \
+                    and not agua and min(p_[2] for p_ in P) > sec[2]:
+                continue     # la parte de la pared que queda por encima del techo (dentro de la roca): no hace falta
             if sec and sec[0] not in NICHOS_KF and nrm_ps is not None and nrm_ps[1] == 0 and nrm_ps[2] == 0 \
                     and not agua:
                 # (solo las dos caras grandes: los cantos, de cara a los lados del hueco, se quedan en el mapa;

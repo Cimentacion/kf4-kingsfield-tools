@@ -2140,7 +2140,7 @@ def panel_kf(t, tris):
     y_pie = max(p[1] for p in pts)                       # Y hacia abajo: el pie es la Y mayor
     alto = y_pie - min(p[1] for p in pts)
     # lo que tiene que subir: la parte de abajo de la pared (hasta el techo; la de encima está dentro de la roca)
-    alto_paso = alto / 2.0 if alto > 500 else alto
+    alto_paso = alto              # (la parte de encima del techo ya no viene: kf_malla)
     cx, cz = (x0 + x1) / 2.0, (z0 + z1) / 2.0
     fino_x = (x1 - x0) < (z1 - z0)
     # giro: el eje z de la losa (su grosor) en el eje fino de la pared (door.c: mundo = (x cos + z sen, -x sen + z cos))
@@ -2225,7 +2225,9 @@ def panel_kf(t, tris):
     mov = t["movimiento"]
     if mov:
         mov = bytearray(mov)
-        sube = alto_paso + 10.0
+        # el desplazamiento del movimiento va en unidades de la losa (la escala y del objeto lo multiplica: con más
+        # subía por encima de su hueco y se veía el corte): que suba justo su altura
+        sube = alto_paso / sy
         for viejo, nuevo_v in ((-280.0, -sube), (280.0, sube)):
             a_, b_ = struct.pack("<f", viejo), struct.pack("<f", nuevo_v)
             k = mov.find(a_)
