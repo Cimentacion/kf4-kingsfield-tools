@@ -341,7 +341,11 @@ def movimiento(esq, piv, nombre, total, paso=5):
                 pos = (0, dy, 0)
             else:
                 pos = tuple((piv[p] - piv[esq.padre[p]]) * ESC)
-            fila.append((pos, g.get(p, (0, 0, 0))))
+            rot = g.get(p, (0, 0, 0))
+            if GIRO_180:            # el modelo va girado media vuelta (ver pulpo_chr): x y z cambian de signo
+                pos = (-pos[0], pos[1], -pos[2])
+                rot = (-rot[0], rot[1], -rot[2])
+            fila.append((pos, rot))
         curvas.append(fila)
     partes = []
     for p in range(esq.n):
@@ -432,7 +436,11 @@ def pulpo_chr(flor, mo_t, vram):
             sobre_padre = duenos[r] != D
             base = piv[esq.padre[D]] if sobre_padre else piv[D]
             p = (V[r] - base) * ESC
-            tri.append((tuple(p), tuple(nrm[r]), _sombra(V[r], nrm[r]), ((u * TEX_ESCALA + dx + TEX_ESCALA / 2) / 256.0, (v * TEX_ESCALA + dy + TEX_ESCALA / 2) / 256.0), 1 if sobre_padre else 0))
+            nr = nrm[r]
+            if GIRO_180:
+                p = (-p[0], p[1], -p[2])
+                nr = (-nr[0], nr[1], -nr[2])
+            tri.append((tuple(p), tuple(nr), _sombra(V[r], nrm[r]), ((u * TEX_ESCALA + dx + TEX_ESCALA / 2) / 256.0, (v * TEX_ESCALA + dy + TEX_ESCALA / 2) / 256.0), 1 if sobre_padre else 0))
         por_parte[D].append(tri)
     bloques = []
     for p in range(esq.n):
@@ -464,6 +472,10 @@ def _sombra(v, n):
     f = 0.40 + 0.55 * arriba ** 1.5 + 0.30 * alto
     return (min(255.0, 128 * f * 0.94), min(255.0, 128 * f), min(255.0, 128 * f * 1.02), 128.0)
 INVERTIR = True
+# el Kraken del King's Field mira hacia +z (los dos brazos largos y los ojos están de ese lado) y los bichos del IV
+# miran hacia -z: sin girarlo salía mirando al lado contrario. Media vuelta alrededor del eje vertical (un giro, no
+# un espejo: las caras y las normales siguen igual) de los vértices, los huesos y los giros de los movimientos
+GIRO_180 = True
 
 
 def modelo_pulpo(flor, esq, bloques, piv):

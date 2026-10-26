@@ -232,6 +232,10 @@ def _piezas(datos, editor, pad, h0):
         ox = editor.ox + (x + pad + ffz) * C
         oy = editor.oy + (z + pad + ffx) * C
         oz = (elev - h0) * ALTURA_M - fz * ESCALA
+        # los objetos de decorado salían girados media vuelta: el camino de madera con sus soportes hacia fuera en
+        # vez de contra la pared, el adorno de pared mirando a la pared. (Las puertas y paredes secretas, que son
+        # simétricas y van ajustadas a su hueco, se quedan como estaban.)
+        ang = ang + math.pi
         ca, sa = math.cos(ang), math.sin(ang)
 
         def gira(v, ca=ca, sa=sa):            # como _girar, pero cualquier ángulo (1024 = un cuarto de vuelta)

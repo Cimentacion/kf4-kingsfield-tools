@@ -1,6 +1,13 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 21 (2026-10-26)
+------------------------------------
+- The Kraken (and the baby Krakens) faced backwards: the King's Field model looks towards +z and KFIV enemies
+  look towards -z. The model, its bones and its animations are turned half a turn.
+- Decoration objects of the King's Field levels were placed half a turn off (the wooden walkway had its
+  supports facing out instead of against the wall). Doors and secret walls are unchanged.
+
 Alpha 0.1 - revision 20 (2026-10-26)
 ------------------------------------
 - New enemy: the King's Field baby Kraken (the small octopuses of the first level). It uses the Kraken model
