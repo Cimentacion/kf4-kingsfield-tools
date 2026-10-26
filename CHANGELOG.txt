@@ -1,6 +1,12 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 17 (2026-10-26)
+------------------------------------
+- KFIV keeps at most 5 enemy types loaded at once. With every type loading from 45 m, the caves of level 0 had
+  more than 5 around and the Kraken never got a slot, so it never appeared. Enemies now load from 30 m, fish
+  from 22 m, and the Kraken from 60 m so it takes its slot first.
+
 Alpha 0.1 - revision 16 (2026-10-26)
 ------------------------------------
 - Fish swim deeper (2.6 m under the surface) and never go more than 2.4 m from where they were born, so they

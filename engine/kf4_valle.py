@@ -2056,7 +2056,11 @@ LUZ_OBJETOS_KF_COLORES = [(0.30, 0.27, 0.20, 0.0), (0.12, 0.10, 0.07, 0.0), (0.0
                           (0.30, 0.28, 0.24, 1.0)]
 MAX_POOLS = 4         # huecos de pool de enemigos que se usan (026 usa 5; 4 es lo probado en el valle)
 POOL_DINAMICO = True  # todos los enemigos con hueco 0xFF (el juego los carga y descarga según cerca: sin límite de tipos)
-DISTANCIA_ENEMIGOS = 4500   # cm: a esta distancia del jugador se cargan y aparecen
+DISTANCIA_ENEMIGOS = 3000   # cm: a esta distancia del jugador se cargan y aparecen
+# el 4 tiene 5 huecos de pool (entity_pool.c): con todos los tipos cargándose a 45 m, en las cuevas del nivel 0 había
+# más de 5 tipos a la vez y el pulpo se quedaba esperando hueco (no aparecía). A 30 m caben; el pulpo, de más lejos
+# para que coja hueco antes que los demás; los peces, solo cerca (son muchos y están en el agua)
+DISTANCIA_TIPO = {"chr:48": 6000, "chr:26": 2200}
 MAX_SPAWNS = 120      # el 4: 128 entidades por mapa y 256 ids de spawn (entity_world.c); el cuelgue que se vio con 46 era el banco de sonido movido
 
 
@@ -2916,7 +2920,7 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
         b[0x3C] = k & 0xFF                         # id de spawn único
         # distancia a la que se carga (despawn_range, 0x5A): a 0 el juego pone 20 m y los esqueletos salían de
         # golpe delante; los mapas grandes del 4 (000) usan 48-65 m y sin límite vertical se cargan pisos enteros
-        struct.pack_into("<H", b, 0x5A, DISTANCIA_ENEMIGOS)
+        struct.pack_into("<H", b, 0x5A, DISTANCIA_TIPO.get(tipo, DISTANCIA_ENEMIGOS))
         struct.pack_into("<H", b, 0x48, 800)       # vertical_despawn_range, como 000
         nuevos += b
         cuenta[tipo] += 1
