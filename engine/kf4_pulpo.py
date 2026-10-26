@@ -555,22 +555,21 @@ def pulpo_prm(base_rec):
     r[0xD2] = 100                                 # escala
     r[0x11] &= ~0x40                              # la babosa es semitransparente; el pulpo no
     ids = [0] * 0x20
+    for anim in range(17, 0x20):     # no sé qué índice usa la IA de la babosa para atacar (en la babosa todos van
+        ids[anim] = 5                # al 0): todos los de ataque, al latigazo
     for anim, mov in ANIMACION.items():
         ids[anim] = mov
     r[0x60:0x80] = bytes(ids)
     # el latigazo: el ataque de cerca de la babosa, en la ventana del movimiento nuevo y con el alcance de los brazos
     o = 0x240
+    # todo como en la babosa (su ataque sí sale en el juego), cambiando solo el alcance, el golpe y su ventana
     r[o + 0] = 100            # peso
-    r[o + 1] = 24             # se vuelve hacia el jugador hasta el fotograma 24
-    # (los bytes 2 y 3 no son "espera" ni "fin de la ventana": en todos los bichos del juego van a 0 o 1; con 15 y
-    # 36 el ataque de cerca no salía nunca. Se dejan como en la babosa)
+    r[o + 1] = 0
     r[o + 2] = 0
     r[o + 3] = 0
-    # alcance: los brazos miden unas 640 unidades del IV
-    struct.pack_into("<HHf", r, o + 4, 0, 650, math.radians(80))
+    struct.pack_into("<HHf", r, o + 4, 0, 300, math.pi)
     h = o + 0x10
     struct.pack_into("<9h", r, h, 0, 35, 0, 0, 0, 0, 15, 0, 0)  # golpe y agua
-    r[h + 0x1E] = 1                               # empuja
     struct.pack_into("<HHHH", r, h + 0x20, 450, 180, 26, 34)
     # sin ataque a distancia: las magias de los bichos salían sin textura en este mapa, y la del jugador
     # (Hidrocañón) también (sus texturas solo se cargan si la llevas puesta)
@@ -587,6 +586,6 @@ def mini_prm(grande_rec):
     r[0xD2] = MINI_ESCALA
     h = 0x240 + 0x10
     struct.pack_into("<9h", r, h, 0, 18, 0, 0, 0, 0, 8, 0, 0)          # golpe y agua: más flojo que el grande
-    struct.pack_into("<HHf", r, 0x240 + 4, 0, 300, math.radians(80))     # alcance a su tamaño
+    struct.pack_into("<HHf", r, 0x240 + 4, 0, 120, math.pi)              # alcance a su tamaño
     struct.pack_into("<HHHH", r, h + 0x20, 160, 70, 26, 34)
     return bytes(r)

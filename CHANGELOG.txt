@@ -1,6 +1,15 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 27 (2026-10-26)
+------------------------------------
+- King's Field door 129 (the single doors, 3 in level 0): its model is a whole cell (floor, side walls and the
+  door in the middle) and all of it went up with the door, leaving the passage with almost no floor and no
+  walls. Now only the door goes up; the floor and walls stay in the map, like those of the secret walls.
+- Kraken: its melee attack is now set up exactly like the slime's (whose attack works in the game), changing
+  only reach, damage and the hit window. Every attack animation slot plays the whip.
+- Enemies added on the level 0 map page (the new "Añadir enemigo" mode) are added to the level.
+
 Alpha 0.1 - revision 26 (2026-10-26)
 ------------------------------------
 - Secret walls of the King's Field levels: the KFIV slab (with its collision) was turned 90 degrees from the

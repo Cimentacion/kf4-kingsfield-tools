@@ -154,6 +154,7 @@ class Datos:
 # objetos de decorado: los que no son de coger (< 120), cofres, puertas, paredes secretas, cielos/luna, zonas de
 # carga, el invisible ni trampas que se mueven (ObjectID de KFModTool, kf2/object.h)
 FUENTE_ID = 195
+PUERTAS_MARCO = {129}                  # puertas del King's Field que son una casilla entera (con su suelo y paredes)
 NICHOS_KF = {131, 138, 209, 214}          # paredes con nicho (kf1_objetos.NICHOS): fijas, no suben
 # cuánto decorado: 2 todo (menos lo muy pesado), 1 solo lo ligero, 0 solo la fuente (si el mapa no cabe, kf4_valle
 # lo va bajando antes de quitar caras)
@@ -572,6 +573,12 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
             uv = [((ax + min(u - cu, lado)) / W, (ay + min(vv - cv, lado)) / H) for (u, vv) in uvs]
             sec = _SECRETA_ACTUAL[0]
             es_puerta = bool(sec) and len(sec) > 3 and sec[3]
+            marco = es_puerta and sec[0] in PUERTAS_MARCO and nrm_ps is not None and abs(nrm_ps[0]) < 0.7 * 4096
+            if marco:
+                # la puerta 129 del King's Field es una casilla entera (suelo, paredes y la hoja en medio): solo la
+                # hoja (las caras de cara al paso, a lo largo de su x) sube; el suelo y las paredes se quedan en el
+                # mapa como las de una pared secreta (si subían, el paso se quedaba sin suelo ni paredes)
+                es_puerta = False
             if es_puerta and not agua and abs(n[2]) > 0.8 and all(abs(p_[2] - sec[1][2]) < 0.15 for p_ in P):
                 continue     # el suelo del modelo de la puerta: no sube con ella (la casilla ya tiene su suelo)
             if es_puerta and not agua:

@@ -196,6 +196,7 @@ def _cargar_cambios():
         R["cambios"] = {int(k): v for k, v in datos.get("cambios", {}).items()}
         if datos.get("pulpo"):
             R["pulpo_en"] = tuple(datos["pulpo"])
+        R["nuevos"] = [n for n in datos.get("nuevos", []) if n.get("tipo") and n.get("x") is not None]
 
 
 _cargar_cambios()
@@ -339,6 +340,16 @@ def _para_editor_reparto(enemigos, objetos, R, nivel, pad, ox, oy, celda, altura
             col_ = int(round((X - ox) / celda - pad - 0.5))
             fila_ = int(round((Y - oy) / celda - pad - 0.5))
             z = altura_capa(col_, fila_, 0)
+            if z is not None:
+                d["z"] = round(z, 3)
+        lista.append(d)
+    for n in R.get("nuevos", []):                # enemigos añadidos en el mapa (donde el original no tenía)
+        X, Y = float(n["x"]), float(n["y"])
+        d = {"tipo": n["tipo"], "x": round(X, 3), "y": round(Y, 3), "kf": "añadido", "giro": 0.0}
+        if altura_capa:
+            col_ = int(math.floor((X - ox) / celda - pad))
+            fila_ = int(math.floor((Y - oy) / celda - pad))
+            z = altura_capa(col_, fila_, int(n.get("capa", 0)))
             if z is not None:
                 d["z"] = round(z, 3)
         lista.append(d)
