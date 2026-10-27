@@ -749,6 +749,8 @@ class MapaEditor(kp.Prologo):
         def z_de(e):          # "z" la trae un mapa portado (la altura de la capa donde está); si no, el suelo
             if e.get("agua") and getattr(self, "kf_nivel_agua", None) is not None:
                 return self.kf_nivel_agua - PEZ_HONDO       # los peces: bajo la superficie del agua
+            if e.get("sobre_agua") and getattr(self, "kf_nivel_agua", None) is not None:
+                return self.kf_nivel_agua + 1.5             # los que vuelan sobre el agua
             z = float(e["z"]) if e.get("z") is not None else self.altura(float(e["x"]), float(e["y"]))
             return z + (2.5 if e.get("vuela") else 0.0)
         self.objetos = [(int(it["id"]), (float(it["x"]), float(it["y"]), z_de(it))) for it in m.get("items", [])]

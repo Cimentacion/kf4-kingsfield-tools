@@ -163,17 +163,19 @@ def _fino(f):
 REPARTO = {
     0: {
         "agua": 26,                      # pez (copia del Seafang, chr/c0043): kf4_valle.PEZ
-        "agua_modelos": {2, 4, 5},       # Sigill, Baltail y el 5 sin nombre: los que el nivel pone en el mar
-        0: [2], "slime_raro": 3,         # Green Slime -> slime (c0002), uno de ellos el venenoso (c0003)
-        14: [4],                         # Head Eater -> c0004, el que más sale
+        "agua_modelos": {2, 5},          # Sigill y el pez largo (el 5): bajo el agua (el Baltail vuela por encima)
+        "agua_por_modelo": {2: 26, 5: 100},   # con su modelo del King's Field (kf4_portar)
+        "vuelan": {96},                  # el Baltail: a media altura
+        0: [94],                         # Green Slime -> la babosa verde del King's Field (kf4_portar)
+        14: [95],                        # Head Eater -> el del King's Field (sobre la planta c0004)
         "pulpo_lado": (-1, 0),           # el pasillo por el que llegas a la pared (el otro es el escondido)
         # Kraken: el grande (clase con 1500 de vida, escala 1) es el pulpo; los de escala 0,375, los pulpitos
         29: "kraken", "pulpo": 48, "pulpito": 65, "pulpo_vida": 1000,
-        "pulpitos_max": 6, "pulpito_resto": [4, 4, 2],   # 6 pulpitos; los otros, Head Eater y alguna babosa
+        "pulpitos_max": 6, "pulpito_resto": [95, 95, 94],   # 6 pulpitos; los otros, Head Eater y alguna babosa
         21: [77],                        # Skeleton -> el esqueleto del King's Field (kf4_esqueleto, registro 77 nuevo)
         16: [63],                        # el caracol gigante, en su sitio (lo que antes eran murciélagos)
-        4: [10],                         # los Baltail de tierra -> murciélago (c0010), en las cuevas
-        2: [4],                          # Sigill de tierra -> c0004
+        4: [96],                         # Baltail -> el del King's Field (vuela como el murciélago)
+        2: [95],                         # Sigill de tierra (los pocos fuera del agua) -> Head Eater
         "grupo": (10, 87, 15.0),         # donde hay varios murciélagos (a menos de 15 m) va una seta (c0087)
     },
 }
@@ -301,14 +303,14 @@ def _para_editor_reparto(enemigos, objetos, R, nivel, pad, ox, oy, celda, altura
         nombre = ENEMIGOS.get(m, (f"modelo {m}",))[0]
         agua = es_agua(e["y"], e["x"])
         if agua and m in R["agua_modelos"]:
-            reg = R["agua"]
+            reg = R.get("agua_por_modelo", {}).get(m, R["agua"])
         elif R.get(m) == "kraken":
             reg = R["pulpo"] if e.get("vida", 0) >= R["pulpo_vida"] else R["pulpito"]
         elif m in R and isinstance(R[m], list):
             regs = R[m]
             reg = regs[turno[m] % len(regs)]
             turno[m] += 1
-            if m == 0 and not slime_raro and turno[m] == 4:
+            if m == 0 and not slime_raro and turno[m] == 4 and R.get("slime_raro"):
                 reg, slime_raro = R["slime_raro"], True
         else:
             sin[m] += 1
@@ -320,8 +322,12 @@ def _para_editor_reparto(enemigos, objetos, R, nivel, pad, ox, oy, celda, altura
             reg = int(cambio[4:])
         X, Y = pos(e)
         d = {"tipo": f"chr:{reg}", "x": X, "y": Y, "kf": nombre, "giro": _giro(e["giro"]), "i": i}
-        if agua:
+        if reg in R.get("vuelan", ()):
+            d["vuela"] = True
+        if agua and reg in R.get("agua_por_modelo", {}).values() or agua and reg == R["agua"]:
             d["agua"] = True                 # kf4_editor lo pone bajo la superficie del agua
+        elif agua:
+            d["sobre_agua"] = True           # los que no nadan (el Baltail): por encima del agua
         elif altura_capa:
             z = altura_capa(e["y"], e["x"], e["capa"])
             if z is not None:

@@ -1,6 +1,19 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 29 (2026-10-28)
+------------------------------------
+- Every monster of level 0 now uses its own King's Field model, texture and vertex light, fitted onto the bones
+  of a similar KFIV enemy, so it uses that enemy's animations and AI (kf4_portar.py):
+    Green Slime -> KFIV slime (20)          Head Eater -> KFIV plant c0004 (22)
+    Baltail     -> KFIV bat, flies (9)      Sigill (water) -> Seafang, swims (10)
+    long fish 5 (water) -> Seafang (7)
+  The skeleton (25), snail (7), Kraken and baby Krakens were already done. The water ones keep the fish
+  settings (30 HP, 5 EXP, always respawn). Baltails over water fly above it.
+- New models use chr files that no record of the game uses (c0094, c0095, c0096, c0152, c0164) and empty
+  chr.prm records (94, 95, 96, 100).
+- All the new models go together in one place of the DAT instead of one unused map each.
+
 Alpha 0.1 - revision 28 (2026-10-28)
 ------------------------------------
 - New enemy: the King's Field skeleton (25 in level 0, in their original spots). It keeps its own model and

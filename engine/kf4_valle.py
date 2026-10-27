@@ -2060,8 +2060,9 @@ DISTANCIA_ENEMIGOS = 3000   # cm: a esta distancia del jugador se cargan y apare
 # el 4 tiene 5 huecos de pool (entity_pool.c): con todos los tipos cargándose a 45 m, en las cuevas del nivel 0 había
 # más de 5 tipos a la vez y el pulpo se quedaba esperando hueco (no aparecía). A 30 m caben; el pulpo, de más lejos
 # para que coja hueco antes que los demás; los peces, solo cerca (son muchos y están en el agua)
-DISTANCIA_TIPO = {"chr:48": 6000, "chr:26": 2200}
-CHR_VACIOS = (37, 79, 150)       # archivos chr vacíos (32 bytes) del juego que usan los bichos nuevos
+DISTANCIA_TIPO = {"chr:48": 6000, "chr:26": 2200, "chr:100": 2200}
+CHR_VACIOS = (37, 79, 150, 94, 95, 96, 152, 164)   # (los de 94 en adelante no los usa ningún registro del IV)
+PEZ_LARGO = 100              # chr.prm 100 (vacío): el pez largo del King's Field (el 5), con lo mismo que el pez       # archivos chr vacíos (32 bytes) del juego que usan los bichos nuevos
 MAX_SPAWNS = 120      # el 4: 128 entidades por mapa y 256 ids de spawn (entity_world.c); el cuelgue que se vio con 46 era el banco de sonido movido
 
 
@@ -2123,15 +2124,17 @@ def plantillas_chr(src, registros, log):
         sp = spawns.get(r)
         import kf4_caracol
         import kf4_esqueleto
+        import kf4_portar
         base = {kf4_pulpo.REGISTRO_PULPO: kf4_pulpo.REGISTRO_BASE, kf4_pulpo.MINI: kf4_pulpo.REGISTRO_BASE,
-                PEZ: PEZ_BASE, kf4_caracol.REGISTRO: kf4_caracol.REGISTRO_BASE,
-                kf4_esqueleto.REGISTRO: kf4_esqueleto.REGISTRO_BASE}.get(r)
+                PEZ: PEZ_BASE, PEZ_LARGO: PEZ_BASE, kf4_caracol.REGISTRO: kf4_caracol.REGISTRO_BASE,
+                kf4_esqueleto.REGISTRO: kf4_esqueleto.REGISTRO_BASE,
+                **{c["registro"]: c["base"] for c in kf4_portar.BICHOS.values() if c["registro"] is not None}}.get(r)
         if base is not None:                    # registros nuevos (el pulpo, el pez): el spawn del bicho del que salen
             sp = spawns.get(base) or por_tipo.get(tipo_de.get(base))
             if sp is not None:
                 b = bytearray(sp)
                 struct.pack_into("<H", b, 0x30, r)
-                if r == PEZ:
+                if r in (PEZ, PEZ_LARGO):
                     b = bytearray(_spawn_pez(bytes(b)))
                 out[f"chr:{r}"] = _limpiar_spawn(bytes(b), 0)
                 continue
@@ -4741,16 +4744,26 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
                 dummy_libre = n_mapa
             else:
                 destinos[lg] = (fin_original, "al final de la ISO (más allá de los 4 GB: puede colgarse)")
-        for mdl, datos_chr in chrs.items():
-            # cada bicho aparte del mapa (así el mapa sigue yendo donde iba), y nunca más allá de los 4 GB
-            n = n_chr[mdl]
-            m = buscar_en_dat(tabo, n, set(usados))
-            if m and d_off + m[0] + n < (1 << 32):
-                destinos_chr[mdl][lg] = (d_off + m[0], f"en su DAT, encima de {', '.join(m[1])}")
-                usados = list(usados) + m[1]
-            elif c and c[1] >= dummy_libre + n and c[0] >= d_off and c[0] + dummy_libre + n < (1 << 32):
-                destinos_chr[mdl][lg] = (c[0] + dummy_libre, "dentro de DUMMY.OUT")
-                dummy_libre += n
+        # los bichos nuevos, todos seguidos en un mismo sitio aparte del mapa (así el mapa sigue yendo donde iba;
+        # uno por hueco gastaba un mapa entero por bicho), y nunca más allá de los 4 GB
+        total = sum(n_chr.values())
+        m = buscar_en_dat(tabo, total, set(usados)) if total else None
+        if m and d_off + m[0] + total < (1 << 32):
+            k = d_off + m[0]
+            for mdl in chrs:
+                destinos_chr[mdl][lg] = (k, f"en su DAT, encima de {', '.join(m[1])}")
+                k += n_chr[mdl]
+            usados = list(usados) + m[1]
+        else:
+            for mdl, datos_chr in chrs.items():
+                n = n_chr[mdl]
+                m = buscar_en_dat(tabo, n, set(usados))
+                if m and d_off + m[0] + n < (1 << 32):
+                    destinos_chr[mdl][lg] = (d_off + m[0], f"en su DAT, encima de {', '.join(m[1])}")
+                    usados = list(usados) + m[1]
+                elif c and c[1] >= dummy_libre + n and c[0] >= d_off and c[0] + dummy_libre + n < (1 << 32):
+                    destinos_chr[mdl][lg] = (c[0] + dummy_libre, "dentro de DUMMY.OUT")
+                    dummy_libre += n
     for mdl in chrs:
         if not destinos_chr[mdl]:
             log.append(f"AVISO: no hay sitio seguro para chr/c{mdl:04d}.chr: va otro bicho en su lugar")
@@ -5016,6 +5029,47 @@ def preparar_registros(src, v, log):
         log.append(f"Peces: {n} (el Seafang del IV, {PEZ_VIDA} de vida, {PEZ_EXP} de experiencia, golpes de unos "
                    f"{PEZ_GOLPE}; nadan bajo el agua y reaparecen siempre)")
     import kf4_chr
+    import kf4_portar
+    largo = f"chr:{PEZ_LARGO}"
+    if largo in tipos:
+        b = PEZ_BASE * 0x450
+        regs[PEZ_LARGO] = registro_pez(prm[b:b + 0x450])
+        REGISTRO_BASE[PEZ_LARGO] = PEZ_BASE
+    # los modelos del King's Field montados sobre bichos del IV (kf4_portar): el Sigill y el pez largo van en los
+    # registros de los peces; los demás, en registros nuevos
+    for nombre, cfg in kf4_portar.BICHOS.items():
+        reg = {"sigill": PEZ, "anguila": PEZ_LARGO}.get(nombre, cfg["registro"])
+        tipo = f"chr:{reg}"
+        if tipo not in tipos:
+            continue
+        try:
+            if nombre in QUITAR:
+                raise RuntimeError(f"prueba: --quitar {nombre}")
+            if getattr(v, "kf_mo", None) is None:
+                raise RuntimeError("no tengo el MO.T del King's Field")
+            base = kf4_chr.Chr(src.read(f"chr/c{cfg['base']:04d}.chr"))
+            datos = kf4_portar.portar_chr(base, v.kf_mo, v.kf_vram, cfg)
+            if len(datos) > 0x80000:
+                raise RuntimeError(f"el modelo ocupa {len(datos)} bytes, más que un bloque de pool")
+            if reg in (PEZ, PEZ_LARGO):
+                r_ = bytearray(regs[reg])
+                struct.pack_into("<H", r_, 0, cfg["modelo"])
+                regs[reg] = bytes(r_)
+                respaldo[reg] = (cfg["modelo"], PEZ_BASE)
+            else:
+                b = cfg["base"] * 0x450
+                regs[reg] = kf4_portar.portar_prm(prm[b:b + 0x450], cfg)
+                respaldo[reg] = (cfg["modelo"], cfg["base"])
+                REGISTRO_BASE[reg] = cfg["base"]
+            chrs[cfg["modelo"]] = datos
+            n = sum(1 for t, _ in enemigos if t == tipo)
+            log.append(f"{cfg['texto']}: {n}, chr/c{cfg['modelo']:04d}.chr de {len(datos) // 1024} KB")
+        except Exception as e:
+            if reg in (PEZ, PEZ_LARGO):
+                log.append(f"AVISO: {nombre} sin su modelo ({e}): va el Seafang del IV")
+            else:
+                v.enemigos = [(f"chr:{cfg['base']}" if t == tipo else t, p) for t, p in v.enemigos]
+                log.append(f"AVISO: no hay {nombre} ({e}); va el registro {cfg['base']} en su lugar")
     nuevos = [
         ("pulpo", kf4_pulpo.REGISTRO_PULPO, kf4_pulpo.MODELO_PULPO, kf4_pulpo.REGISTRO_BASE, 13,
          lambda base: kf4_pulpo.pulpo_chr(base, v.kf_mo, v.kf_vram)[0], kf4_pulpo.pulpo_prm,
