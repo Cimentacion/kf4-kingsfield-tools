@@ -36,7 +36,7 @@ ENEMIGOS = {
     16: ("Snail", 63, False),                      # caracol gigante (MO.T[16]): kf4_caracol, registro 63 nuevo
     34: ("Copper Knight", 24, False),
     17: ("Soldier", 93, False), 18: ("Archer", 92, False),
-    21: ("Skeleton", 50, False), 44: ("Skeleton of One-Eyed Giant", 58, False),
+    21: ("Skeleton", 77, False),               # el esqueleto de verdad (kf4_esqueleto: registro 77 nuevo) 44: ("Skeleton of One-Eyed Giant", 58, False),
     22: ("Termite", 11, False), 25: ("Giant Termite", 11, False), 47: ("Mecha Termite", 11, False),
     23: ("Kald", 56, False),                       # muerto viviente
     24: ("Psythe", 85, True),
@@ -55,7 +55,7 @@ ENEMIGOS = {
     107: ("Dragon Grass", 49, False),              # flor oscura
 }
 # vida de cada registro del 4 (chr.prm +0x0A), para repartir los que no caben entre los que sí
-VIDA = {65: 125, 63: 75, 48: 400, 13: 200, 2: 60, 3: 60, 6: 100, 10: 54, 11: 105, 12: 750, 16: 550, 18: 1, 19: 600, 24: 1800, 32: 3000, 34: 4500,
+VIDA = {77: 175, 65: 125, 63: 75, 48: 400, 13: 200, 2: 60, 3: 60, 6: 100, 10: 54, 11: 105, 12: 750, 16: 550, 18: 1, 19: 600, 24: 1800, 32: 3000, 34: 4500,
         39: 500, 40: 1400, 49: 500, 50: 250, 56: 210, 58: 800, 66: 1300, 67: 900, 68: 900, 73: 3800, 75: 5500,
         81: 205, 85: 300, 92: 200, 93: 540}
 # jefes y bichos enormes del 4: cuelgan el juego al cargar el mapa (probado con el 34, Earth King, y el 75,
@@ -170,7 +170,7 @@ REPARTO = {
         # Kraken: el grande (clase con 1500 de vida, escala 1) es el pulpo; los de escala 0,375, los pulpitos
         29: "kraken", "pulpo": 48, "pulpito": 65, "pulpo_vida": 1000,
         "pulpitos_max": 6, "pulpito_resto": [4, 4, 2],   # 6 pulpitos; los otros, Head Eater y alguna babosa
-        21: [4, 4, 50, 4, 0],            # Skeleton -> sobre todo c0004, algún esqueleto (c0050) y la planta (c0000)
+        21: [77],                        # Skeleton -> el esqueleto del King's Field (kf4_esqueleto, registro 77 nuevo)
         16: [63],                        # el caracol gigante, en su sitio (lo que antes eran murciélagos)
         4: [10],                         # los Baltail de tierra -> murciélago (c0010), en las cuevas
         2: [4],                          # Sigill de tierra -> c0004

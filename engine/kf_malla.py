@@ -300,7 +300,20 @@ def _piezas(datos, editor, pad, h0):
         for v in verts:
             gx, gy, gz = gira(v)
             mundo.append((ox + gx * ESCALA, oy + gz * ESCALA, oz - gy * ESCALA))
-        _SECRETA_ACTUAL[0] = (oid, (ox, oy, oz), 1e9, True)      # puerta: todas sus caras al objeto
+        hoja = None
+        if oid in PUERTAS_MARCO:
+            # la puerta que es una casilla entera (129): la hoja es la losa del medio (|z| <= 520 en el modelo),
+            # sus caras grandes, su canto de abajo y los biseles que miran abajo; el resto (las paredes del paso,
+            # el suelo con su ranura, el techo) se queda en el mapa
+            hoja = set()
+            for pr in prims:
+                n_ = pr[4]
+                if n_ is None:
+                    continue
+                zs = [verts[r][2] for r in pr[3]]
+                if max(abs(z_) for z_ in zs) <= 520 and abs(n_[0]) < 0.5 * 4096 and n_[1] >= 0:
+                    hoja.add(tuple(pr[3]))
+        _SECRETA_ACTUAL[0] = (oid, (ox, oy, oz), 1e9, True, hoja)      # puerta: sus caras (o su hoja) al objeto
         yield x, z, prims, mundo, gira, int(round(ang / (math.pi / 2))) & 3
     _SECRETA_ACTUAL[0] = None
 
@@ -573,11 +586,10 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
             uv = [((ax + min(u - cu, lado)) / W, (ay + min(vv - cv, lado)) / H) for (u, vv) in uvs]
             sec = _SECRETA_ACTUAL[0]
             es_puerta = bool(sec) and len(sec) > 3 and sec[3]
-            marco = es_puerta and sec[0] in PUERTAS_MARCO and nrm_ps is not None and abs(nrm_ps[0]) < 0.7 * 4096
+            marco = es_puerta and len(sec) > 4 and sec[4] is not None and tuple(refs) not in sec[4]
             if marco:
                 # la puerta 129 del King's Field es una casilla entera (suelo, paredes y la hoja en medio): solo la
-                # hoja (las caras de cara al paso, a lo largo de su x) sube; el suelo y las paredes se quedan en el
-                # mapa como las de una pared secreta (si subían, el paso se quedaba sin suelo ni paredes)
+                # hoja sube; el suelo y las paredes se quedan en el mapa como las de una pared secreta
                 es_puerta = False
             if es_puerta and not agua and abs(n[2]) > 0.8 and all(abs(p_[2] - sec[1][2]) < 0.15 for p_ in P):
                 continue     # el suelo del modelo de la puerta: no sube con ella (la casilla ya tiene su suelo)

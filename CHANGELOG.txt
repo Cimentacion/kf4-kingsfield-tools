@@ -1,6 +1,16 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 28 (2026-10-28)
+------------------------------------
+- New enemy: the King's Field skeleton (25 in level 0, in their original spots). It keeps its own model and
+  texture (with a bone tint and baked vertex light), fitted piece by piece onto the bones of KFIV's Skeleton
+  Soldier, so it uses the soldier's animations (walk, guard, both sword swings, hits, death) and its AI.
+  175 HP, 40 EXP. It goes in chr/c0150.chr and chr.prm record 77, both empty in the game.
+- Door 129 (doors 28, 43 and 54 on the map page): the previous revision had it backwards (the walls went up and
+  the door stayed). Now the door slab in the middle goes up and the walls, floor and ceiling stay.
+- Kraken and baby Krakens: much larger hit radius (the baby's whip played but never reached the player).
+
 Alpha 0.1 - revision 27 (2026-10-26)
 ------------------------------------
 - King's Field door 129 (the single doors, 3 in level 0): its model is a whole cell (floor, side walls and the

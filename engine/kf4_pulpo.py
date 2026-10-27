@@ -570,7 +570,8 @@ def pulpo_prm(base_rec):
     struct.pack_into("<HHf", r, o + 4, 0, 300, math.pi)
     h = o + 0x10
     struct.pack_into("<9h", r, h, 0, 35, 0, 0, 0, 0, 15, 0, 0)  # golpe y agua
-    struct.pack_into("<HHHH", r, h + 0x20, 450, 180, 26, 34)
+    # el golpe: radio grande (los brazos llegan lejos); el segundo valor como en la babosa (180)
+    struct.pack_into("<HHHH", r, h + 0x20, 700, 180, 26, 34)
     # sin ataque a distancia: las magias de los bichos salían sin textura en este mapa, y la del jugador
     # (Hidrocañón) también (sus texturas solo se cargan si la llevas puesta)
     r[0x3D8] = 0
@@ -587,5 +588,6 @@ def mini_prm(grande_rec):
     h = 0x240 + 0x10
     struct.pack_into("<9h", r, h, 0, 18, 0, 0, 0, 0, 8, 0, 0)          # golpe y agua: más flojo que el grande
     struct.pack_into("<HHf", r, 0x240 + 4, 0, 120, math.pi)              # alcance a su tamaño
-    struct.pack_into("<HHHH", r, h + 0x20, 160, 70, 26, 34)
+    # (con radio 160 y 70 el pulpito daba el latigazo pero no te llegaba a dar)
+    struct.pack_into("<HHHH", r, h + 0x20, 320, 180, 26, 34)
     return bytes(r)

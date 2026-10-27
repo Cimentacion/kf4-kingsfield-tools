@@ -2061,7 +2061,7 @@ DISTANCIA_ENEMIGOS = 3000   # cm: a esta distancia del jugador se cargan y apare
 # más de 5 tipos a la vez y el pulpo se quedaba esperando hueco (no aparecía). A 30 m caben; el pulpo, de más lejos
 # para que coja hueco antes que los demás; los peces, solo cerca (son muchos y están en el agua)
 DISTANCIA_TIPO = {"chr:48": 6000, "chr:26": 2200}
-CHR_VACIOS = (37, 79)       # archivos chr vacíos (32 bytes) del juego que usan los bichos nuevos
+CHR_VACIOS = (37, 79, 150)       # archivos chr vacíos (32 bytes) del juego que usan los bichos nuevos
 MAX_SPAWNS = 120      # el 4: 128 entidades por mapa y 256 ids de spawn (entity_world.c); el cuelgue que se vio con 46 era el banco de sonido movido
 
 
@@ -2122,8 +2122,10 @@ def plantillas_chr(src, registros, log):
     for r in registros:
         sp = spawns.get(r)
         import kf4_caracol
+        import kf4_esqueleto
         base = {kf4_pulpo.REGISTRO_PULPO: kf4_pulpo.REGISTRO_BASE, kf4_pulpo.MINI: kf4_pulpo.REGISTRO_BASE,
-                PEZ: PEZ_BASE, kf4_caracol.REGISTRO: kf4_caracol.REGISTRO_BASE}.get(r)
+                PEZ: PEZ_BASE, kf4_caracol.REGISTRO: kf4_caracol.REGISTRO_BASE,
+                kf4_esqueleto.REGISTRO: kf4_esqueleto.REGISTRO_BASE}.get(r)
         if base is not None:                    # registros nuevos (el pulpo, el pez): el spawn del bicho del que salen
             sp = spawns.get(base) or por_tipo.get(tipo_de.get(base))
             if sp is not None:
@@ -5001,6 +5003,7 @@ def preparar_registros(src, v, log):
     """({modelo: chr}, {registro: 0x450 bytes}, {registro: (modelo, respaldo)}) con los bichos nuevos que lleve el
     mapa: el pez (26), el pulpo (48) y el caracol (63). Si un modelo no se puede hacer, va otro bicho en su lugar."""
     import kf4_caracol
+    import kf4_esqueleto
     enemigos = getattr(v, "enemigos", [])
     tipos = {t for t, _ in enemigos}
     prm = src.read("param/chr.prm")
@@ -5017,6 +5020,9 @@ def preparar_registros(src, v, log):
         ("pulpo", kf4_pulpo.REGISTRO_PULPO, kf4_pulpo.MODELO_PULPO, kf4_pulpo.REGISTRO_BASE, 13,
          lambda base: kf4_pulpo.pulpo_chr(base, v.kf_mo, v.kf_vram)[0], kf4_pulpo.pulpo_prm,
          "Pulpo (Kraken del King's Field): latigazos de cerca"),
+        ("esqueleto", kf4_esqueleto.REGISTRO, kf4_esqueleto.MODELO, kf4_esqueleto.REGISTRO_BASE, 50,
+         lambda base: kf4_esqueleto.esqueleto_chr(base, v.kf_mo, v.kf_vram), kf4_esqueleto.esqueleto_prm,
+         "Esqueleto del King's Field: su modelo con los huesos, los movimientos y la IA del Skeleton Soldier"),
         ("caracol", kf4_caracol.REGISTRO, kf4_caracol.MODELO, kf4_caracol.REGISTRO_BASE, 2,
          lambda base: kf4_caracol.caracol_chr(base, v.kf_mo, v.kf_vram), kf4_caracol.caracol_prm,
          "Caracol gigante del King's Field: se arrastra y muerde (se porta como la babosa)"),
