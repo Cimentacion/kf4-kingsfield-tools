@@ -2061,6 +2061,7 @@ DISTANCIA_ENEMIGOS = 3000   # cm: a esta distancia del jugador se cargan y apare
 # más de 5 tipos a la vez y el pulpo se quedaba esperando hueco (no aparecía). A 30 m caben; el pulpo, de más lejos
 # para que coja hueco antes que los demás; los peces, solo cerca (son muchos y están en el agua)
 DISTANCIA_TIPO = {"chr:48": 6000, "chr:26": 2200, "chr:100": 2200}
+PUERTAS_PESADAS = (129,)     # puertas del King's Field que al abrirse tiemblan como una pared secreta (la losa 129)
 CHR_VACIOS = (37, 79, 150, 94, 95, 96, 152, 164)   # (los de 94 en adelante no los usa ningún registro del IV)
 PEZ_LARGO = 100              # chr.prm 100 (vacío): el pez largo del King's Field (el 5), con lo mismo que el pez       # archivos chr vacíos (32 bytes) del juego que usan los bichos nuevos
 MAX_SPAWNS = 120      # el 4: 128 entidades por mapa y 256 ids de spawn (entity_world.c); el cuelgue que se vio con 46 era el banco de sonido movido
@@ -3012,7 +3013,7 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
                     continue
                 pk = min(libres, key=lambda q: (q[0] - o["pos"][0]) ** 2 + (q[1] - o["pos"][1]) ** 2)
                 if (pk[0] - o["pos"][0]) ** 2 + (pk[1] - o["pos"][1]) ** 2 < 2.0 ** 2:
-                    lista[k] = dict(o, tipo="secreta", panel=libres.pop(pk), es_puerta=o["tipo"] == "puerta")
+                    lista[k] = dict(o, tipo="secreta", panel=libres.pop(pk), es_puerta=o["tipo"] == "puerta" and o.get("kf") not in PUERTAS_PESADAS)
                     con_panel += 1
             log.append(f"Paredes secretas y puertas con su modelo del King's Field: {con_panel} de {len(paneles)}")
         puerta_kf = getattr(valle, "kf_puerta_en", None)
@@ -3030,6 +3031,30 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
                 log.append(f"Puertas del King's Field con su textura: {cambiadas}")
         objs, obj_secc, extra = colocar_objetos_kf(objs, obj_secc, lista, plantillas_obj, recs, log, muro)
         nobj += extra
+        # las piedras de guardado (donde el King's Field tenía sus cristales de guardar): la de 099 se lleva a la
+        # primera y se copia para las demás
+        guardas = [o for o in valle.kf_objetos if o["tipo"] == "guardado"]
+        if guardas and obj_kind:
+            objs = bytearray(objs)
+            k_g = next((i for i in range(nobj)
+                        if obj_kind.get(struct.unpack_from("<H", objs, i * md.OBJREC + 0x30)[0]) == 20), None)
+            if k_g is None:
+                log.append("AVISO: no encuentro el punto de guardado de 099: sin piedras de guardado")
+            else:
+                plantilla_g = bytes(objs[k_g * md.OBJREC:(k_g + 1) * md.OBJREC])
+                cajas_g = [(k, r["box"]) for k, r in enumerate(recs) if "box" in r]
+                for j, o in enumerate(guardas):
+                    b_ = bytearray(plantilla_g)
+                    x_, y_, z_ = to_native(o["pos"])
+                    struct.pack_into("<3f", b_, 0, x_, y_, z_)
+                    struct.pack_into("<H", b_, 0x38, _registro_de(cajas_g, x_, z_))   # la zona del mapa que lo dibuja
+                    struct.pack_into("<f", b_, 0x14, float(o.get("giro", 0.0)))
+                    if j == 0:
+                        objs[k_g * md.OBJREC:(k_g + 1) * md.OBJREC] = b_
+                    else:
+                        objs += b_
+                        nobj += 1
+                log.append(f"Piedras de guardado del IV donde el King's Field guardaba: {len(guardas)}")
     if obj_secc and getattr(valle, "kf_fuentes", None):
         objs, extra = fuentes_que_curan(h, objs, valle.kf_fuentes, recs, log)
         nobj += extra

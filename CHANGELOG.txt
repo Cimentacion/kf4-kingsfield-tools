@@ -1,6 +1,17 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 30 (2026-10-28)
+------------------------------------
+- Skeleton and the other ported monsters: vertices stretched across the floor. The seam vertices are placed
+  with the parent part's matrix, and the model header (copied from the KFIV enemy) had no parents. Every part
+  now has its parent in the header.
+- Door 129: its side walls (the ones facing the passage) went up with the door, because the secret wall rule
+  sent them to the moving part. Now only the slab goes up. It also shakes the camera and the pad when it opens,
+  like the secret walls.
+- The King's Field save crystals (the two S on the map) are now KFIV save stones, on the floor in front of the
+  wall where the crystal was. The crystal model is no longer drawn.
+
 Alpha 0.1 - revision 29 (2026-10-28)
 ------------------------------------
 - Every monster of level 0 now uses its own King's Field model, texture and vertex light, fitted onto the bones

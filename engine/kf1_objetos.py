@@ -89,6 +89,8 @@ OBJETOS = {
     98: 351, 110: 6, 117: 145, 118: 145, 119: 6,
 }
 COFRES = (120, 121, 122, 123)       # tapas y cuerpos de cofre
+GUARDADOS = {230}            # el cristal de guardar del King's Field (las S del mapa): la piedra de guardado del IV
+GUARDADO_DELANTE = 1.0       # m delante de la pared donde estaba el cristal
 PUERTAS = {125, 126, 127, 128, 129, 132, 133, 134, 135, 139, 140, 194}
 SECRETAS = {130, 131, 138, 205, 209, 214}
 # de esas, las que son una pared con un hueco (nicho) en su cara: modelo fijo, no se abren (van como decorado,
@@ -411,6 +413,17 @@ def _resto(lista, sin, cuenta, cambio, elegidos, objetos, altura_capa, vecinos, 
             if z is not None:
                 it["z"] = round(z, 3)
             items.append(it)
+            continue
+        if oid in GUARDADOS:
+            # el cristal de guardar del King's Field (en la pared): la piedra de guardado del IV en el suelo,
+            # delante de la pared y mirando al paso (su modelo mira a -z, con la media vuelta del decorado)
+            a = o["giro"] / 4096 * 2 * math.pi + math.pi
+            fx, fy = -math.sin(a), -math.cos(a)
+            d = {"tipo": "guardado", "x": round(X + fx * GUARDADO_DELANTE, 3), "y": round(Y + fy * GUARDADO_DELANTE, 3),
+                 "kf": oid, "giro": round(math.atan2(fx, fy), 4)}
+            if z is not None:
+                d["z"] = round(z, 3)
+            cofres.append(d)
             continue
         if oid not in (121, 123) and oid not in PUERTAS and oid not in PUERTAS_SECRETAS and oid not in BARRILES:
             continue

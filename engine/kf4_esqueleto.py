@@ -212,7 +212,10 @@ def esqueleto_chr(base, mo_t, vram):
     cuerpo = bytearray()
     base_off = len(cab) + (-len(cab)) % 16
     for p in range(n):
+        # el padre de cada parte en la cabecera del modelo (el bicho del IV lo trae a -1): los vértices "del padre"
+        # (las costuras) se ponen con la matriz de esa parte; con -1 salían estirados por el suelo
         struct.pack_into("<IH", cab, 0x210 + 16 * p, base_off + len(cuerpo), len(bloques[p]))
+        struct.pack_into("<b", cab, 0x210 + 16 * p + 7, padre[p] if padre[p] >= 0 else -1)
         for b in bloques[p]:
             cuerpo += b
     modelo = bytearray(bytes(cab).ljust(base_off, b"\0") + cuerpo)

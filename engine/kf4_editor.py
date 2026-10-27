@@ -763,5 +763,5 @@ class MapaEditor(kp.Prologo):
         # cofres, puertas y paredes que se abren de un mapa portado (kf4_valle.colocar_objetos_kf)
         self.kf_objetos = [{"tipo": o["tipo"], "pos": (float(o["x"]), float(o["y"]), z_de(o)),
                             "giro": float(o.get("giro", 0.0)), "medida": o.get("medida"),
-                            "objeto": int(o.get("objeto", 0))}
+                            "objeto": int(o.get("objeto", 0)), "kf": o.get("kf")}
                            for o in m.get("kf_objetos", []) if isinstance(o, dict) and o.get("tipo")]

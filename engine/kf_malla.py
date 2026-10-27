@@ -171,7 +171,7 @@ PROPS_LIGEROS = {195, 179, 180, 136, 256, 259, 230, 159, 160, 161}
 # (también los indicadores 189, el soldado muerto 141 y la espada rota 264: 280-700 cada uno)
 # (los barriles, 179, van como el barril del 4 que se rompe: kf1_objetos)
 NO_PROPS = set(range(0, 136)) | set(range(240, 250)) | {141, 143, 144, 179, 183, 189, 264, 194, 200, 201, 202, 203, 204, 205, 206, 209, 213, 214,
-                                                        224, 231}
+                                                        224, 231, 230}   # 230: el cristal de guardar (va la piedra del IV)
 
 
 def props_kf1(arch, nivel, grid, ids=None):
@@ -612,11 +612,12 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
                 # (quitar el del modelo donde la casilla ya tiene suelo dejaba agujeros: no siempre lo tiene entero)
                 dz = -0.004 if nrm_ps[1] < 0 else 0.004     # (con 2 cm se veía la raya de la unión en el techo)
                 P = [(p_[0], p_[1], p_[2] + dz) for p_ in P]
-            if sec and sec[0] not in NICHOS_KF and nrm_ps is not None and nrm_ps[1] == 0 and nrm_ps[2] == 0 \
+            if sec and not marco and sec[0] not in NICHOS_KF and nrm_ps is not None and nrm_ps[1] == 0 and nrm_ps[2] == 0 \
                     and not agua and min(p_[2] for p_ in P) > sec[2]:
                 continue     # la parte de la pared que queda por encima del techo (dentro de la roca): no hace falta
-            if sec and sec[0] not in NICHOS_KF and nrm_ps is not None and nrm_ps[1] == 0 and nrm_ps[2] == 0 \
-                    and not agua:
+            if sec and not marco and sec[0] not in NICHOS_KF and nrm_ps is not None and nrm_ps[1] == 0 \
+                    and nrm_ps[2] == 0 and not agua:
+                # (las paredes del paso de la puerta 129, "marco", se quedan: no son la pared que sube)
                 # (solo las dos caras grandes: los cantos, de cara a los lados del hueco, se quedan en el mapa;
                 # si subían con ella se veía a través del marco)
                 # la pared que sube de la puerta secreta: al objeto (kf4_valle), no al mapa ni a su colisión
