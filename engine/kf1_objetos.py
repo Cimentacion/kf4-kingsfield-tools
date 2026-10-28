@@ -87,7 +87,28 @@ OBJETOS = {
     70: 368, 71: 32, 72: 114, 73: 34, 74: 7, 75: 9, 76: 13, 77: 15, 78: 16, 79: 17, 80: 18, 81: 15,
     82: 14, 85: 130, 90: 71, 91: 74, 92: 72, 93: 73, 94: 75, 95: 76, 96: 70, 97: 70,
     98: 351, 110: 6, 117: 145, 118: 145, 119: 6,
+    # mapas, objetos de misión (en el 4 no hacen nada: van como el objeto del 4 que más se les parece)
+    67: 1, 68: 3, 69: 4, 83: 100, 84: 139, 86: 120, 87: 153, 88: 125, 89: 104, 105: 104,
+    111: 134, 112: 135, 113: 136,
 }
+# --- llaves: las del King's Field (KFModTool, ItemID) -> llaves del 4 (item_nam.prm 47-59, ITEM_KEY_FIRST/LAST;
+# la 54 no la usa el juego). El 4 tiene 12 y el King's Field 13: la del Sol abre lo mismo que la de la Luna ---
+LLAVES = {
+    100: 47,    # Pirate's Key -> la de Martir (la primera de cada juego)
+    102: 51,    # Jail Key -> la de la prisión
+    104: 59,    # Harvine's Key (el rey) -> la del rey
+    109: 58,    # Shrine Key -> la del capellán
+    107: 49,    # Silver Key -> la vieja
+    108: 57,    # Gold Key -> la del artesano
+    106: 56,    # Magician's Key -> la del dibujante
+    99: 55,     # Elf's Key -> la de los Nomu
+    101: 53,    # Skull Key -> la de las ruinas
+    103: 52,    # Rhombus Key -> la de los Weavil
+    114: 48,    # Moon Key -> la de la misión
+    115: 50,    # Star Key -> la del morador de la tierra
+    116: 48,    # Sun Key -> la de la misión (no quedan más)
+}
+OBJETOS.update(LLAVES)
 COFRES = (120, 121, 122, 123)       # tapas y cuerpos de cofre
 GUARDADOS = {230}            # el cristal de guardar del King's Field (las S del mapa): la piedra de guardado del IV
 GUARDADO_DELANTE = 1.0       # m delante de la pared donde estaba el cristal
@@ -397,6 +418,23 @@ def _resto(lista, sin, cuenta, cambio, elegidos, objetos, altura_capa, vecinos, 
     items, cofres, puertas, secretas = [], [], [], []
     en_cofre = {(o["x"], o["y"]) for o in objetos if o["id"] in COFRES or o["id"] in BARRILES}
     contenido = {}                       # casilla del cofre -> objeto del 4 que hay dentro
+    # cofres y puertas cerrados con llave: la llave del King's Field va en el 3er byte de sus parámetros (el de la
+    # tapa del cofre y el de la hoja derecha de la puerta); aquí, la llave del 4 que le toca. Otros valores (0xFE,
+    # 0xFC, 0xC8, 0...) son mecanismos (ranuras, palancas, guiones): esos se abren sin llave
+    cerradura = {}
+    for o in objetos:
+        k = o["param"][2] if len(o["param"]) > 2 else 0xFF
+        if k in LLAVES and (o["id"] in COFRES or o["id"] in PUERTAS):
+            cerradura[(o["x"], o["y"], o["capa"])] = LLAVES[k]
+
+    def llave_de(o, puerta=False):
+        k = cerradura.get((o["x"], o["y"], o["capa"]))
+        if k is None and puerta:          # la otra hoja de la puerta, en la casilla de al lado
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                k = cerradura.get((o["x"] + dx, o["y"] + dy, o["capa"]))
+                if k is not None:
+                    break
+        return k
     for o in objetos:
         if o["id"] in OBJETOS and (o["x"], o["y"]) in en_cofre:
             contenido.setdefault((o["x"], o["y"]), OBJETOS[o["id"]])
@@ -411,6 +449,11 @@ def _resto(lista, sin, cuenta, cambio, elegidos, objetos, altura_capa, vecinos, 
                 continue                    # va dentro del cofre
             it = {"id": OBJETOS[oid], "x": X, "y": Y, "kf": oid}
             if z is not None:
+                # fino Z: lo que está por encima del suelo (encima de mesas y estantes; negativo = arriba). Más de
+                # 2,4 m no: son los que el King's Field pone escondidos o sobre algo que aquí no está
+                alto = -o["fz"] * CELDA_M / 2048
+                if 0.05 < alto <= 2.4:
+                    z += alto
                 it["z"] = round(z, 3)
             items.append(it)
             continue
@@ -463,10 +506,14 @@ def _resto(lista, sin, cuenta, cambio, elegidos, objetos, altura_capa, vecinos, 
                     giro = g
                     break
             d.update(tipo="cofre", giro=round(giro, 4), medida=[1.6, None], objeto=contenido.get((o["x"], o["y"]), 0))
+            if llave_de(o) is not None:
+                d["llave"] = llave_de(o)
             cofres.append(d)
         elif oid in PUERTAS:
             alto = min(3.05, techo) if techo else 3.05
             d.update(tipo="puerta", giro=round(giro, 4), medida=[CELDA_M, round(alto, 3)])
+            if llave_de(o, puerta=True) is not None:
+                d["llave"] = llave_de(o, puerta=True)
             puertas.append(d)
         else:
             alto = techo if techo else 3.0
@@ -482,5 +529,6 @@ def _resto(lista, sin, cuenta, cambio, elegidos, objetos, altura_capa, vecinos, 
         "cambiados": cambio,
         "sin_equivalente": sin,
         "objetos": len(items), "cofres": len(cofres), "puertas": len(puertas), "secretas": len(secretas),
+        "con_llave": sum(1 for d in cofres + puertas if d.get("llave")),
     }
     return lista, items, cofres + puertas + secretas, resumen

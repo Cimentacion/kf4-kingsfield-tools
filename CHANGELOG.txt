@@ -1,6 +1,19 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 41 (2026-10-28)
+------------------------------------
+- Locked chests and doors like in King's Field: the key a chest lid or a door asks for (third byte of its
+  parameters) becomes a KFIV key, so no new keys are made. KFIV has 12 keys and King's Field 13: Pirate's ->
+  Martir, Jail -> Prison, Harvine's -> King, Shrine -> Chaplain, Silver -> Old, Gold -> Craftsman, Magician's ->
+  Draftsman, Elf's -> Nomu, Skull -> Ruin, Rhombus -> Weavil, Moon -> Mission, Star -> Earth Dweller, Sun ->
+  Mission too. Chests use KFIV's own key check; doors check the key in their script ("Locked", or "... Key
+  used" and they open). Other values (slots, levers, events) open without a key. In level 0: three chests and
+  one door with the Pirate's key, one stone chest with Harvine's.
+- Keys lying around or inside chests are now placed (they were left out), and so are maps and quest items
+  (Pirate's Map, Phantom Rod, Dragon Stone, the Gates...) as the closest KFIV item.
+- Items on tables and shelves keep their height from King's Field (up to 2.4 m above the floor).
+
 Alpha 0.1 - revision 40 (2026-10-28)
 ------------------------------------
 - The King's Field AI is now general and also used by the skeletons, green slimes and Head Eaters. Each one is

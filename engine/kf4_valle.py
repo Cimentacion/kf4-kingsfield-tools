@@ -2513,7 +2513,8 @@ def colocar_objetos_kf(objs, obj_secc, lista, plantillas, recs, log, tex_pared=N
                     b[0x3A] = ident
                     etiqueta = GUION_PANEL0 + len(GUIONES_PANEL)
                     struct.pack_into("<H", b, 0x40, etiqueta)
-                    GUIONES_PANEL.append((etiqueta, ident, struct.unpack_from("<3f", b, 0), bool(o.get("es_puerta"))))
+                    GUIONES_PANEL.append((etiqueta, ident, struct.unpack_from("<3f", b, 0), bool(o.get("es_puerta")),
+                                          int(o.get("llave") or 0)))
                 objs += b
                 cuenta["pared secreta del King's Field"] += 1
                 continue
@@ -2566,7 +2567,10 @@ def colocar_objetos_kf(objs, obj_secc, lista, plantillas, recs, log, tex_pared=N
         b[0x3D] = LUZ_OBJETOS_KF
         if di == OBJ_COFRE:
             struct.pack_into("<h", b, 0x44, int(o.get("objeto", 0)))
+            b[0x46] = int(o.get("llave") or 0)           # la llave que pide (MapObject_UpdateClosedChest), 0: ninguna
             b[0x56] = 0
+        elif di == OBJ_PUERTA and o.get("llave"):
+            struct.pack_into("<h", b, 0x44, int(o["llave"]))   # la llave que pide (MapObject_UpdateClosedDoor)
         elif di == OBJ_BARRIL and int(o.get("objeto", 0)):
             struct.pack_into("<h", b, 0x44, int(o["objeto"]))   # lo que suelta al romperse (si no, la hierba)
         objs += b
@@ -2604,11 +2608,25 @@ def _trozos_de(b, n):
     return [b[i:i + n] for i in range(0, len(b) - n + 1, n)]
 
 
-def _guion_panel(etiqueta, ident, pos, puerta=False):
+MSG_CERRADO = 62                 # "Cerrado" (ui/message.h MSG_LOCKED)
+MSG_LLAVE0 = 87                  # "... usada", uno por llave desde la 47 (MSG_KEY_USED_FIRST)
+
+
+def _guion_panel(etiqueta, ident, pos, puerta=False, llave=0):
     E, F = 0x40000, 0x60000
     fl = lambda v: struct.unpack("<I", struct.pack("<f", v))[0]
     x, y, z = pos
     w = [(0x190 << 16) | etiqueta]
+    if llave:
+        # cerrada con llave (como MapObject_UpdateClosedDoor): sin la llave, "Cerrado" y nada más; con ella,
+        # "Llave ... usada" y se abre. GetItemCount -> variable entera del hilo (+16); if == 0: aviso y fin
+        CUENTA = (0x40002, 16)
+        cerrada = [(233 << 16) | 4, E, MSG_CERRADO, E, 0, E, 0, E, 0x2D, 0x191 << 16]
+        w += [(123 << 16) | 2, E, llave, 0x40012, 16]
+        w += [(0x192 << 16) | (1 << 8), len(cerrada), CUENTA[0], CUENTA[1], 0, E, 0]
+        w += cerrada
+        if 47 <= llave <= 59:
+            w += [(233 << 16) | 4, E, MSG_LLAVE0 + llave - 47, E, 0, E, 0, E, 0x2D]
     w += [(182 << 16) | 2, E, ident, E, 1]                                   # SignalMapObject id 1: se abre
     if not puerta:            # las puertas solo suenan; la pared secreta, además, tiembla
         w += [(144 << 16) | 2, F, fl(PANEL_TEMBLOR[0]), E, PANEL_TEMBLOR[1]]      # ShakeCamera
@@ -2649,10 +2667,10 @@ def guion_paneles(guion, log):
     g = _palabras(guion)
     fin = g.index((0x190 << 16) | 0x7FFE)
     nuevo = []
-    for etiqueta, ident, pos, puerta in GUIONES_PANEL:
-        nuevo += _guion_panel(etiqueta, ident, pos, puerta)
+    for etiqueta, ident, pos, puerta, llave in GUIONES_PANEL:
+        nuevo += _guion_panel(etiqueta, ident, pos, puerta, llave)
     g2 = g[:fin] + nuevo + g[fin:]
-    malas = _etiquetas_perdidas(g2, [e for e, _, _, _ in GUIONES_PANEL])
+    malas = _etiquetas_perdidas(g2, [e[0] for e in GUIONES_PANEL])
     if malas:
         log.append(f"AVISO: el guion de las paredes no se lee bien (etiquetas {malas}): sin guion, para no colgar el juego")
         return guion
