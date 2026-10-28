@@ -1,6 +1,14 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 34 (2026-10-28)
+------------------------------------
+- The save stones faced the wrong way: turned 180 degrees.
+- Enemies loading: KFIV has 5 enemy pool slots. With more than 5 types inside their load distance, the ones left
+  without a slot don't appear until another unloads (empty rooms that are full when you come back). Each enemy
+  now loads at most at a bit more than half the distance where the fifth different type around it starts
+  (between 12 and 30 m). Where many types are close, each one only loads when you are near it.
+
 Alpha 0.1 - revision 33 (2026-10-28)
 ------------------------------------
 - The white cone under open doors and secret walls: the KFIV slab template carries a small white marker mesh

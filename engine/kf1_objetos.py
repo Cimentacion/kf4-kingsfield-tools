@@ -420,7 +420,7 @@ def _resto(lista, sin, cuenta, cambio, elegidos, objetos, altura_capa, vecinos, 
             a = o["giro"] / 4096 * 2 * math.pi + math.pi
             fx, fy = -math.sin(a), -math.cos(a)
             d = {"tipo": "guardado", "x": round(X + fx * GUARDADO_DELANTE, 3), "y": round(Y + fy * GUARDADO_DELANTE, 3),
-                 "kf": oid, "giro": round(math.atan2(fx, fy), 4)}
+                 "kf": oid, "giro": round(math.atan2(fx, fy) + math.pi, 4)}   # (la piedra del IV mira al revés que el cofre: +180)
             if z is not None:
                 d["z"] = round(z, 3)
             cofres.append(d)

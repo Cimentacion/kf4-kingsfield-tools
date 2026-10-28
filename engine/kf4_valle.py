@@ -2061,6 +2061,37 @@ DISTANCIA_ENEMIGOS = 3000   # cm: a esta distancia del jugador se cargan y apare
 # más de 5 tipos a la vez y el pulpo se quedaba esperando hueco (no aparecía). A 30 m caben; el pulpo, de más lejos
 # para que coja hueco antes que los demás; los peces, solo cerca (son muchos y están en el agua)
 DISTANCIA_TIPO = {"chr:48": 6000, "chr:26": 2200, "chr:100": 2200}
+DISTANCIA_MINIMA = 1200     # cm: ningún enemigo se carga más cerca que esto (si no, aparecería delante de ti)
+MAX_TIPOS_CERCA = 5         # tipos de enemigo que caben a la vez (los 5 huecos de pool del 4)
+
+
+def _rangos_de_carga(enemigos):
+    """Distancia de carga (cm, despawn_range) de cada enemigo. El 4 tiene 5 huecos de pool: si a la vez hay más de 5
+    tipos dentro de su distancia, los que no cogen hueco no aparecen hasta que otro se descarga (salas vacías que
+    luego, al volver, sí tienen enemigos). Cada enemigo se carga como mucho a algo más de la mitad de la distancia a
+    la que empieza el quinto tipo distinto de alrededor: así, donde se juntan muchos tipos, cada uno solo se carga
+    cuando estás cerca de él."""
+    import math as _m
+    out = []
+    for i, (t, p) in enumerate(enemigos):
+        base = DISTANCIA_TIPO.get(t, DISTANCIA_ENEMIGOS)
+        cerca = {}
+        for j, (u, q) in enumerate(enemigos):
+            if u == t:
+                continue
+            if abs(p[2] - q[2]) > 8.0:          # otro piso: el 4 solo carga a 8 m de altura (0x48)
+                continue
+            d = _m.hypot(p[0] - q[0], p[1] - q[1]) * 100.0
+            if d < cerca.get(u, 1e18):
+                cerca[u] = d
+        ds = sorted(cerca.values())
+        if len(ds) >= MAX_TIPOS_CERCA - 1:
+            lim = 0.55 * ds[MAX_TIPOS_CERCA - 2]
+            base = min(base, max(DISTANCIA_MINIMA, int(lim)))
+        out.append(int(base))
+    return out
+
+
 PUERTAS_PESADAS = (129,)     # puertas del King's Field que al abrirse tiemblan como una pared secreta (la losa 129)
 CHR_VACIOS = (37, 79, 150, 94, 95, 96, 152, 164)   # (los de 94 en adelante no los usa ningún registro del IV)
 PEZ_LARGO = 100              # chr.prm 100 (vacío): el pez largo del King's Field (el 5), con lo mismo que el pez       # archivos chr vacíos (32 bytes) del juego que usan los bichos nuevos
@@ -2929,6 +2960,11 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
     orden_tipo = {}
     for t, _ in enemigos:
         orden_tipo.setdefault(t, len(orden_tipo))
+    rangos = _rangos_de_carga(enemigos)
+    if rangos:
+        cortos = sum(1 for r_, (t_, _) in zip(rangos, enemigos) if r_ < DISTANCIA_TIPO.get(t_, DISTANCIA_ENEMIGOS))
+        log.append(f"Distancia de carga de los enemigos: de {min(rangos) / 100:.0f} a {max(rangos) / 100:.0f} m; "
+                   f"{cortos} acortados donde se juntan más de {MAX_TIPOS_CERCA} tipos")
     for k, (tipo, pos) in enumerate(enemigos):
         b = bytearray(plantillas[tipo])
         b[0x34] = pools[tipo]
@@ -2942,7 +2978,7 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
         b[0x3C] = k & 0xFF                         # id de spawn único
         # distancia a la que se carga (despawn_range, 0x5A): a 0 el juego pone 20 m y los esqueletos salían de
         # golpe delante; los mapas grandes del 4 (000) usan 48-65 m y sin límite vertical se cargan pisos enteros
-        struct.pack_into("<H", b, 0x5A, DISTANCIA_TIPO.get(tipo, DISTANCIA_ENEMIGOS))
+        struct.pack_into("<H", b, 0x5A, rangos[k])
         struct.pack_into("<H", b, 0x48, 800)       # vertical_despawn_range, como 000
         nuevos += b
         cuenta[tipo] += 1
