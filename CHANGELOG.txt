@@ -1,6 +1,14 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 45 (2026-10-28)
+------------------------------------
+- The cloud sky is back over the open parts of the ported levels (rev 44 had removed it and the shore was black).
+  Instead, where an open tile with floor borders a tile King's Field leaves completely empty, a tall black wall
+  closes that edge, so the sky is not seen through the end of corridors that continue elsewhere.
+- Wall niches in level 1: a niche on a tile whose layer is marked 254 (nothing there, like 255) took that
+  layer's height and was placed about 8 m too low, with its lid out of place. It now takes the other layer.
+
 Alpha 0.1 - revision 44 (2026-10-28)
 ------------------------------------
 - People who talk. The King's Field NPCs of levels 0 and 1 (the fisherman on the shore; in level 1 the boatman,

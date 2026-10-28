@@ -794,11 +794,6 @@ def main():
         m["kf_malla"] = {"ruta": os.path.abspath(ruta), "juego": juego, "nivel": nivel, **m["kf_base"]}
     if juego == "kf1" and "--sin-enemigos" not in sys.argv:
         poner_enemigos_kf1(m, arch, nivel)
-    if juego == "kf1":
-        # el King's Field no tiene cielo: lo que no tapa la roca (el final de un pasillo que sigue en otro nivel, la
-        # boca de la cueva) es negro. Con el domo de nubes del 4 se veía el cielo por esos huecos
-        m["cielo"] = False
-        m["niebla"] = NIEBLA_KF1
     print(f"Juego: {'King' + chr(39) + 's Field (KF2 japonés)' if juego == 'kf1' else 'King' + chr(39) + 's Field II USA (KF3 japonés)'}")
     with open(salida, "w") as f:
         json.dump(m, f)

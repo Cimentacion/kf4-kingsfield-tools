@@ -157,6 +157,7 @@ FUENTE_ID = 195
 PUERTAS_MARCO = {129}
 HUECO_PUERTA_129 = 4200      # unidades del PS1 que sube su hueco por encima del techo (la hoja mide 3216 y sube 1,25 veces)                  # puertas del King's Field que son una casilla entera (con su suelo y paredes)
 NICHOS_KF = {131, 138, 209, 214}          # paredes con nicho (kf1_objetos.NICHOS): la pared fija, la tapa sube
+_DEPURA_TAPA = None
 NICHO_HUNDIR = 0.08                        # m que se mete la tapa del nicho en la pared
 # cuánto decorado: 2 todo (menos lo muy pesado), 1 solo lo ligero, 0 solo la fuente (si el mapa no cabe, kf4_valle
 # lo va bajando antes de quitar caras)
@@ -207,8 +208,10 @@ def props_kf1(arch, nivel, grid, ids=None):
         col, fila = o["y"], o["x"]
         c = grid[fila, col]
         elev = int(c[6]) if o["capa"] == 0 else int(c[1])      # capa 0 = bytes 5-7 de la casilla
-        if (c[5] if o["capa"] == 0 else c[0]) == 255:
-            elev = int(c[6]) if c[5] != 255 else int(c[1])
+        if (c[5] if o["capa"] == 0 else c[0]) >= 254:
+            # (254: la casilla no tiene nada en esa capa, como 255; en el nivel 1 un nicho de la capa 0 salía 8 m
+            # por debajo de su hueco, con la tapa fuera de sitio)
+            elev = int(c[6]) if c[5] < 254 else int(c[1])
         verts, prims = cache[oid]
         out.append((col, fila, oid, verts, prims, elev, kf1_objetos._fino(o["fx"]), kf1_objetos._fino(o["fy"]),
                     o["giro"] / 4096.0 * 2 * math.pi, o["fz"]))
@@ -570,6 +573,7 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
     suelos_secreta = set()    # casillas bajo el suelo de los modelos de pared secreta (se les pone suelo)
     con_suelo = set()         # casillas con alguna cara de suelo (mirando arriba)
     editor.kf_paneles = paneles
+    lados_con_pared = collections.Counter()      # (casilla, lado) -> m² de pared propia en ese borde
     # el plano de la pared de cada nicho (punto y normal horizontal, en el mundo): la casilla del King's Field puede
     # traer su propia pared lisa justo ahí (la verde de 209), que tapaba el hueco; esas caras de la casilla se quitan
     C_ = editor.celda
@@ -679,6 +683,19 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
                 clave = (h["clave"][0], cbp)
                 plantillas[clave] = h["clave"]
             P = [mundo[r] for r in refs]
+            if rot >= 0 and len(P) >= 3:
+                # qué lados de la casilla tienen ya pared propia (para no tapar de negro donde no hace falta)
+                cx_ = editor.ox + (x + pad + 0.5) * C
+                cy_ = editor.oy + (z + pad + 0.5) * C
+                for dx_, dz_ in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    if all((p_[0] - cx_) * dx_ + (p_[1] - cy_) * dz_ > 0.3 * C for p_ in P):
+                        # área que tapa en el plano del borde (un arco abierto tapa solo una parte)
+                        a_ = _cross(_sub(P[1], P[0]), _sub(P[2], P[0]))
+                        ar_ = abs(a_[0] * dx_ + a_[1] * dz_) / 2.0
+                        if len(P) == 4:
+                            a2_ = _cross(_sub(P[2], P[1]), _sub(P[3], P[1]))
+                            ar_ += abs(a2_[0] * dx_ + a2_[1] * dz_) / 2.0
+                        lados_con_pared[(x, z, dx_, dz_)] += ar_
             if rot >= 0 and _SECRETA_ACTUAL[0] is None and (x, z) in planos_nicho and len(P) >= 3:
                 tapa_hueco = False
                 for (q0, nq) in planos_nicho[(x, z)]:
@@ -944,6 +961,42 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
                 # el fondo negro, justo por debajo del lecho: lo que se ve a través del agua en vez del mundo por
                 # debajo; también bajo las casillas de orilla (agua en diagonal), que antes dejaban huecos
                 negros.append((x, z, ch))
+    # el borde de una casilla con suelo hacia otra donde el King's Field no tiene nada (el pasillo sigue en otro
+    # nivel; allí se veía negro): una pared negra, para que no asome el cielo del 4 por el final de los túneles (el
+    # cielo sí se ve fuera, en la orilla: allí al lado hay agua, no nada)
+    nada = lambda k: k not in datos.suelo and k not in datos.topes      # (sin ningún modelo: nada que dibujar)
+    tapas_negras = 0
+    for (x, z), h in sorted(pisos.items()):
+        ce = editor.celda_en(x + pad, z + pad)
+        if _DEPURA_TAPA and (x, z) in _DEPURA_TAPA:
+            import sys
+            print("TAPA", (x, z), h, (x, z) in suelo_tex, ce, [(d_, nada((x + d_[0], z + d_[1])),
+                  lados_con_pared[(x, z) + d_]) for d_ in ((1, 0), (-1, 0), (0, 1), (0, -1))], file=sys.stderr)
+        if (x, z) not in suelo_tex:
+            continue
+        clave_t, u0, v0, du, dv = suelo_tex[(x, z)]
+        # bajo techo, hasta el techo; al aire (el final de un túnel sin techo propio), bien alta: que por el arco no
+        # se vea el cielo del 4 (por arriba sí se ve, como en la orilla)
+        techo_ = ce.get("techo") if isinstance(ce, dict) else None
+        if techo_ is not None:
+            continue          # bajo techo la propia casilla ya cierra (y cada tapa cuesta sitio en el mapa)
+        arriba = h + 12.0
+        for dx, dz in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            if not nada((x + dx, z + dz)) or lados_con_pared[(x, z, dx, dz)] >= 0.8 * C * min(arriba - h, 3.0):
+                continue
+            cx = editor.ox + (x + pad + 0.5 + 0.5 * dx) * C
+            cy = editor.oy + (z + pad + 0.5 + 0.5 * dz) * C
+            ex, ey = -dz * C / 2, dx * C / 2
+            n_ = (-float(dx), -float(dz), 0.0)
+            q = [(cx - ex, cy - ey, h - 1.0), (cx + ex, cy + ey, h - 1.0), (cx - ex, cy - ey, arriba),
+                 (cx + ex, cy + ey, arriba)]
+            vs = [(p_, (u0 + du * 0.5, v0 + dv * 0.5), (0.0, 0.0, 0.0), n_) for p_ in q]
+            for tri in ((0, 1, 2), (1, 3, 2), (0, 2, 1), (1, 2, 3)):
+                por_grupo[(trozo_de(x, z), clave_t)].append(tuple(vs[t] for t in tri))
+            tapas_negras += 1
+    if tapas_negras:
+        import sys
+        print(f"kf_malla: {tapas_negras} bordes hacia la nada tapados de negro", file=sys.stderr)
     # suelo en los huecos de las puertas y paredes secretas: a la altura del suelo de al lado, con su textura
     huecos = set(getattr(datos, "huecos_puerta", ())) | {k for k in suelos_secreta if k not in con_suelo}
     for (x, z) in sorted(huecos):
