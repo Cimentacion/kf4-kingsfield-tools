@@ -1,6 +1,12 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 38 (2026-10-28)
+------------------------------------
+- The Kraken only appeared when you were very close: the load distance rule for crowded areas (rev 34) had cut
+  its range to 15.5 m. The Kraken is now left out of that rule and always loads at 30 m, so it is already in
+  its lake when you arrive.
+
 Alpha 0.1 - revision 37 (2026-10-28)
 ------------------------------------
 - Kraken and baby Krakens have their own AI now, a new KFIV enemy type (0x53) written in C (engine/ia/kf1_ia.c)

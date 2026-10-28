@@ -2060,7 +2060,8 @@ DISTANCIA_ENEMIGOS = 3000   # cm: a esta distancia del jugador se cargan y apare
 # el 4 tiene 5 huecos de pool (entity_pool.c): con todos los tipos cargándose a 45 m, en las cuevas del nivel 0 había
 # más de 5 tipos a la vez y el pulpo se quedaba esperando hueco (no aparecía). A 30 m caben; el pulpo, de más lejos
 # para que coja hueco antes que los demás; los peces, solo cerca (son muchos y están en el agua)
-DISTANCIA_TIPO = {"chr:48": 6000, "chr:26": 2200, "chr:100": 2200}
+DISTANCIA_TIPO = {"chr:48": 3000, "chr:26": 2200, "chr:100": 2200}
+FIJOS = ("chr:48",)          # el Kraken: siempre a su distancia (se ve desde lejos en su lago; coge hueco el primero)
 DISTANCIA_MINIMA = 1200     # cm: ningún enemigo se carga más cerca que esto (si no, aparecería delante de ti)
 MAX_TIPOS_CERCA = 5         # tipos de enemigo que caben a la vez (los 5 huecos de pool del 4)
 
@@ -2075,6 +2076,9 @@ def _rangos_de_carga(enemigos):
     out = []
     for i, (t, p) in enumerate(enemigos):
         base = DISTANCIA_TIPO.get(t, DISTANCIA_ENEMIGOS)
+        if t in FIJOS:
+            out.append(int(base))
+            continue
         cerca = {}
         for j, (u, q) in enumerate(enemigos):
             if u == t:
