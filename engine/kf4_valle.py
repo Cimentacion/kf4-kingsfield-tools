@@ -2391,7 +2391,16 @@ def panel_kf(t, tris, subir=1.0):
             cola = bytearray(16)
             cola[15] = 0x14 if not paquetes else 0x17
             paquetes.append(bytes(h) + bytes(cuerpo) + bytes(cola))
-    nuevo = bytearray(m[:off1]) + b"".join(paquetes) + m[fin_paquetes:length]
+    # la malla 0 de la plantilla es un conito blanco de marca (20 de alto, sin textura) en el pie de la losa: con la
+    # escala de la pared salía grande y se veía debajo de las puertas abiertas. Sus puntos, todos a 0 (no se ve)
+    cab0 = bytearray(m[:off1])
+    p0 = off0
+    for _ in range(n0):
+        nv0 = cab0[p0 + 0x70]
+        for j in range(nv0):
+            struct.pack_into("<3h", cab0, p0 + 0x90 + 32 * j, 0, 0, 0)
+        p0 += 0x90 + nv0 * 32 + 16
+    nuevo = cab0 + b"".join(paquetes) + m[fin_paquetes:length]
     nuevo_len = len(nuevo)
     nuevo += m[length:]                                  # la parte de textura propia del objeto, tal cual
     struct.pack_into("<I", nuevo, 0, nuevo_len)

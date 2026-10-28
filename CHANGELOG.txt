@@ -1,6 +1,12 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 33 (2026-10-28)
+------------------------------------
+- The white cone under open doors and secret walls: the KFIV slab template carries a small white marker mesh
+  (20 units tall, untextured) at its foot, and with the wall's scale it became big. Its points are now all at 0,
+  so it is not drawn.
+
 Alpha 0.1 - revision 32 (2026-10-28)
 ------------------------------------
 - Door 129: the slab gets end caps (top, bottom and both ends; in King's Field they sat inside the rock). From
