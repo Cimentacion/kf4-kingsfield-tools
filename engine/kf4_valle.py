@@ -5405,7 +5405,10 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
     for nombre_o in otros:
         if not destinos_otro[nombre_o]:
             if OTROS_OBLIGATORIOS:
-                raise RuntimeError(f"SIN_SITIO {nombre_o}")
+                donde_ = {lg_: len(v_) for lg_, v_ in usados_lg.items()}
+                raise RuntimeError(f"SIN_SITIO {nombre_o} ({len(otros)} mapas de "
+                                   f"{sum(len(d_) for d_ in otros.values()) // 1048576} MB; ISO de "
+                                   f"{fin_original // 1048576} MB; mapas ocupados por idioma {donde_})")
             log.append(f"AVISO: no hay sitio para {nombre_o}: ese nivel no se pone")
     with open(out, "r+b") as f:
         f.truncate(fin_original)
@@ -6209,6 +6212,11 @@ def main():
     with open(os.path.join(outdir, "resumen.txt"), "w", encoding="utf-8") as o:
         o.write("\n".join(log) + "\n")
     print("\n".join(log))
+    motivo = [l_ for l_ in log if "van con fundido" in l_]
+    if motivo:
+        # que se vea al final de la ventana: por qué esta vez los niveles van con pantalla de carga
+        print("\n" + "=" * 78 + "\nLOS NIVELES VAN CON FUNDIDO A NEGRO (no se han podido trocear):\n  " + motivo[-1]
+              + "\nHaz una captura de esto y mándamela.\n" + "=" * 78)
 
 
 if __name__ == "__main__":

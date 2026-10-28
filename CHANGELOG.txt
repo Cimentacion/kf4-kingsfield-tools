@@ -1,6 +1,15 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 51 (2026-10-28)
+------------------------------------
+- The opening walls are back: rev 45 read the tile layer value 254 as "empty" and took the height of the other
+  layer, so five secret walls and doors of level 0 (and many of level 1) sat up to 15 m below their place and
+  left a hole in the wall. 254 is the tile of a secret wall or door (no model of its own, good height); only 255
+  is empty, as in rev 44. Checked: every object of both levels is again exactly where rev 44 put it.
+- If the levels cannot be streamed on your ISO and go with the fade, the console now says why in a framed message
+  at the end, with the sizes involved.
+
 Alpha 0.1 - revision 50 (2026-10-28)
 ------------------------------------
 - Streamed levels cut the way KFIV cuts its own maps (rev 48-49 cut them in straight slices, which split the

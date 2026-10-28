@@ -208,10 +208,11 @@ def props_kf1(arch, nivel, grid, ids=None):
         col, fila = o["y"], o["x"]
         c = grid[fila, col]
         elev = int(c[6]) if o["capa"] == 0 else int(c[1])      # capa 0 = bytes 5-7 de la casilla
-        if (c[5] if o["capa"] == 0 else c[0]) >= 254:
-            # (254: la casilla no tiene nada en esa capa, como 255; en el nivel 1 un nicho de la capa 0 salía 8 m
-            # por debajo de su hueco, con la tapa fuera de sitio)
-            elev = int(c[6]) if c[5] < 254 else int(c[1])
+        if (c[5] if o["capa"] == 0 else c[0]) == 255:
+            # (255: la capa está vacía y su altura no vale. 254 es la casilla de una pared secreta o una puerta, sin
+            # modelo propio pero con su altura buena: en la revisión 45 se tomó como vacía y cinco paredes secretas
+            # y puertas del nivel 0 se fueron hasta 15 m por debajo de su sitio)
+            elev = int(c[6]) if c[5] != 255 else int(c[1])
         verts, prims = cache[oid]
         out.append((col, fila, oid, verts, prims, elev, kf1_objetos._fino(o["fx"]), kf1_objetos._fino(o["fy"]),
                     o["giro"] / 4096.0 * 2 * math.pi, o["fz"]))
