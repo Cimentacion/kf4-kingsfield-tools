@@ -60,7 +60,9 @@ def _trozo(v):
         return "espada"
     if h >= 1610:
         return "cabeza"
-    if abs(x) >= 160 and 560 < h < 1580:
+    # los brazos: por debajo del codo desde |x| 168 (la cadera llega a 162); arriba, desde 195 (las costillas y
+    # la clavícula llegan a 190)
+    if abs(x) >= (168 if h < 1200 else 195) and 560 < h < 1580:
         if h >= 1180:
             return "brazo" + lado
         if h >= 790:
@@ -138,7 +140,31 @@ def esqueleto_chr(base, mo_t, vram):
     k = np.linalg.norm(b_c - a_c) / max(1e-6, np.linalg.norm(b_k - a_k))
     for nombre in ("cadera", "vientre", "pecho", "cuello", "cabeza"):
         trans[nombre] = (R, k, a_k, a_c)
-    trozos = [_trozo(v) for v in vs]
+    # cada hueso del King's Field es una pieza suelta de la malla: va entero al trozo de su centro (por vértices,
+    # el antebrazo, que se curva hacia dentro, quedaba medio en la cadera y se estiraba al mover el brazo)
+    par = list(range(len(vs)))
+
+    def raiz(a):
+        while par[a] != a:
+            par[a] = par[par[a]]
+            a = par[a]
+        return a
+    for _, _, _, refs, _ in prims:
+        for r in refs[1:]:
+            par[raiz(r)] = raiz(refs[0])
+    piezas = {}
+    for i in range(len(vs)):
+        piezas.setdefault(raiz(i), []).append(i)
+    trozos = [None] * len(vs)
+    for idx in piezas.values():
+        if len(idx) > 40:                       # las piezas grandes (las costillas con la columna): por vértice
+            for i in idx:
+                trozos[i] = _trozo(vs[i])
+        else:
+            c = V[idx].mean(0)
+            t = _trozo(tuple(c))
+            for i in idx:
+                trozos[i] = t
     duenos = [HUESO[t] for t in trozos]
     # triángulos (de 3 y de 4 lados, como el PS1) y vértices de cada parte o de su padre (la costura)
     tris = []

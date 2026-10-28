@@ -1,6 +1,14 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 32 (2026-10-28)
+------------------------------------
+- Door 129: the slab gets end caps (top, bottom and both ends; in King's Field they sat inside the rock). From
+  under the open door a little white triangle showed through it.
+- King's Field skeleton: each bone of the King's Field mesh (they are separate pieces) goes whole to the body
+  part of its centre. Before, the forearm, which curves inwards, ended up half on the pelvis and stretched when
+  the arm moved, and the arms took some rib vertices.
+
 Alpha 0.1 - revision 31 (2026-10-28)
 ------------------------------------
 - Door 129: it now has its shaft above the ceiling (four sides and a lid, with the passage wall texture), so the

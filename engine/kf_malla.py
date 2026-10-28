@@ -342,6 +342,31 @@ def _piezas(datos, editor, pad, h0):
                 ys = [verts[r][1] for r in pr[3]]
                 if max(abs(z_) for z_ in zs) <= 520 and abs(n_[0]) < 0.5 * 4096 and n_[1] >= 0 and max(ys) > -3199:
                     hoja.add(tuple(pr[3]))
+            # la hoja no trae tapas arriba ni a los lados (en el King's Field quedaban dentro de la roca): al subir,
+            # por debajo se veía un triángulo blanco. Se le ponen, con su textura
+            cara_h = next((pr for pr in prims if tuple(pr[3]) in hoja and pr[4] is not None and abs(pr[4][2]) > 2048), None)
+            if cara_h:
+                tp_, cl_, uvs_, _, _ = cara_h
+                u0_, u1_ = min(u for u, _ in uvs_), max(u for u, _ in uvs_)
+                v0_, v1_ = min(v for _, v in uvs_), max(v for _, v in uvs_)
+                uvq = [(u0_, v1_), (u1_, v1_), (u0_, v0_), (u1_, v0_)]
+                verts = list(verts)
+                prims = list(prims)
+                X, Z = 1810, 517
+                tapas = [([(-X, -3216, -Z), (X, -3216, -Z), (-X, -3216, Z), (X, -3216, Z)], (0, -4096, 0)),
+                         ([(-X, 210, -Z), (X, 210, -Z), (-X, 210, Z), (X, 210, Z)], (0, 4096, 0)),
+                         ([(-X, -3216, -Z), (-X, -3216, Z), (-X, 210, -Z), (-X, 210, Z)], (-4096, 0, 0)),
+                         ([(X, -3216, -Z), (X, -3216, Z), (X, 210, -Z), (X, 210, Z)], (4096, 0, 0))]
+                for cuatro, nn in tapas:
+                    b_ = len(verts)
+                    verts += cuatro
+                    refs_ = [b_, b_ + 1, b_ + 2, b_ + 3]
+                    prims.append((tp_, cl_, uvq, refs_, nn))
+                    hoja.add(tuple(refs_))
+                mundo = []
+                for v in verts:
+                    gx, gy, gz = gira(v)
+                    mundo.append((ox + gx * ESCALA, oy + gz * ESCALA, oz - gy * ESCALA))
         _SECRETA_ACTUAL[0] = (oid, (ox, oy, oz), 1e9, True, hoja)      # puerta: sus caras (o su hoja) al objeto
         yield x, z, prims, mundo, gira, int(round(ang / (math.pi / 2))) & 3
     _SECRETA_ACTUAL[0] = None
