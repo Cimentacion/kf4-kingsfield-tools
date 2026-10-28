@@ -1,6 +1,12 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 35 (2026-10-28)
+------------------------------------
+- Kraken: new AI base, the spitting beetle of KFIV (record 39, type 5). It comes after you crawling, whips up
+  close (two blows, the second weaker) and spits from 4 to 20 m (the beetle's spit, magic 152, at frame 40 of
+  its ink animation). The slime it used before had no ranged attack. Baby Krakens: same AI, only whips.
+
 Alpha 0.1 - revision 34 (2026-10-28)
 ------------------------------------
 - The save stones faced the wrong way: turned 180 degrees.

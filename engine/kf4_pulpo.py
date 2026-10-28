@@ -24,7 +24,8 @@ import kf4_chr as kc
 MODELO_PULPO = 37            # chr/c0037.chr: en el IV es un archivo vacío de 32 bytes que nadie usa (el registro
                              # 37 usa el modelo 36); se le cambia el sitio en la tabla del DAT y el nombre no cambia
 REGISTRO_PULPO = 48          # chr.prm 48: registro vacío en el IV
-REGISTRO_BASE = 2            # la babosa: su IA (se acerca y ataca de cerca), como el caracol. La de la Flor
+REGISTRO_BASE = 39           # el escarabajo que escupe (tipo 5): se acerca, golpea de cerca y escupe de lejos. La babosa
+                             # (2) no tenía ataque a distancia; la de la Flor
                              # oscura (49) era una torreta sin cuerpo a cuerpo: nunca daba latigazos
 ESC = 250.0 / 2048           # unidades del PS1 -> cm del IV, a la escala del grande (la clase 0 del nivel 0, escala 1)
 MINI = 65                    # chr.prm 65 (vacío en el IV): los pulpitos, el mismo modelo a la escala de su clase
@@ -402,7 +403,10 @@ def movimiento(esq, piv, nombre, total, paso=5):
 ORDEN_MOV = ["quieto", "golpeado", "golpe_fuerte", "muerte", "tinta", "latigo", "arrastrar"]
 # las animaciones de la babosa (registro 2): 0 quieto, 3 andar, 13 en guardia, 14 y 15 golpeado, 16 muerte, 20 el
 # ataque de cerca (el latigazo)
-ANIMACION = {0: 0, 3: 6, 13: 0, 14: 1, 15: 2, 16: 3, 20: 5}
+# las del escarabajo (registro 39): 0 quieto, 3 y 4 andar, 14 y 15 golpeado, 16 muerte, 20 y 21 los golpes de cerca,
+# 23 el escupitajo
+ANIMACION = {0: 0, 3: 6, 4: 6, 13: 0, 14: 1, 15: 2, 16: 3, 20: 5, 21: 5, 23: 4}
+MAGIA_TINTA = 152            # chr.prm del escarabajo 39: su escupitajo
 
 
 def archivo_movimientos(esq, piv):
@@ -543,8 +547,8 @@ def chr_con(flor, modelo, mov, tex):
 
 # ---------------- chr.prm ----------------
 def pulpo_prm(base_rec):
-    """El registro del pulpo a partir del de la babosa (registro 2): su IA se acerca arrastrándose y ataca de cerca,
-    y el arrastrarse mueve al bicho con la raíz del movimiento (como el caracol)."""
+    """El registro del pulpo a partir del del escarabajo escupidor del IV (registro 39, tipo 5): su IA se acerca,
+    da golpes de cerca y escupe de lejos. El arrastrarse mueve al bicho con la raíz del movimiento."""
     r = bytearray(base_rec)
     struct.pack_into("<H", r, 0, MODELO_PULPO)
     struct.pack_into("<H", r, 0x0A, 400)          # vida
@@ -553,28 +557,26 @@ def pulpo_prm(base_rec):
     struct.pack_into("<H", r, 0x08, 250)          # alto contra el mapa
     struct.pack_into("<H", r, 0xEE, 250)          # alto del cuerpo
     r[0xD2] = 100                                 # escala
-    r[0x11] &= ~0x40                              # la babosa es semitransparente; el pulpo no
+    r[0x11] &= ~0x40
     ids = [0] * 0x20
-    for anim in range(17, 0x20):     # no sé qué índice usa la IA de la babosa para atacar (en la babosa todos van
-        ids[anim] = 5                # al 0): todos los de ataque, al latigazo
     for anim, mov in ANIMACION.items():
         ids[anim] = mov
     r[0x60:0x80] = bytes(ids)
-    # el latigazo: el ataque de cerca de la babosa, en la ventana del movimiento nuevo y con el alcance de los brazos
+    # el latigazo: el primer golpe de cerca del escarabajo (su ataque funciona), con el alcance de los brazos
     o = 0x240
-    # todo como en la babosa (su ataque sí sale en el juego), cambiando solo el alcance, el golpe y su ventana
-    r[o + 0] = 100            # peso
-    r[o + 1] = 0
-    r[o + 2] = 0
-    r[o + 3] = 0
-    struct.pack_into("<HHf", r, o + 4, 0, 300, math.pi)
+    struct.pack_into("<HHf", r, o + 4, 0, 450, math.radians(70))
     h = o + 0x10
     struct.pack_into("<9h", r, h, 0, 35, 0, 0, 0, 0, 15, 0, 0)  # golpe y agua
-    # el golpe: radio grande (los brazos llegan lejos); el segundo valor como en la babosa (180)
-    struct.pack_into("<HHHH", r, h + 0x20, 700, 180, 26, 34)
-    # sin ataque a distancia: las magias de los bichos salían sin textura en este mapa, y la del jugador
-    # (Hidrocañón) también (sus texturas solo se cargan si la llevas puesta)
-    r[0x3D8] = 0
+    struct.pack_into("<HHHH", r, h + 0x20, 500, 120, 26, 34)
+    # el segundo golpe de cerca (animación 21) también es el latigazo, más flojo
+    o2 = o + 0x88
+    r[o2:o2 + 0x88] = r[o:o + 0x88]
+    r[o2] = 60
+    # la tinta: el escupitajo del escarabajo (magia 152), de 4 a 20 m, en el fotograma 40 de la tinta
+    q = 0x3D8
+    r[q] = 70
+    struct.pack_into("<HH", r, q + 4, 400, 2000)
+    struct.pack_into("<HH", r, q + 0x10, MAGIA_TINTA, 40)
     return bytes(r)
 
 
@@ -587,7 +589,8 @@ def mini_prm(grande_rec):
     r[0xD2] = MINI_ESCALA
     h = 0x240 + 0x10
     struct.pack_into("<9h", r, h, 0, 18, 0, 0, 0, 0, 8, 0, 0)          # golpe y agua: más flojo que el grande
-    struct.pack_into("<HHf", r, 0x240 + 4, 0, 120, math.pi)              # alcance a su tamaño
-    # (con radio 160 y 70 el pulpito daba el latigazo pero no te llegaba a dar)
-    struct.pack_into("<HHHH", r, h + 0x20, 320, 180, 26, 34)
+    struct.pack_into("<HHf", r, 0x240 + 4, 0, 200, math.radians(70))     # alcance a su tamaño
+    struct.pack_into("<HHHH", r, h + 0x20, 260, 60, 26, 34)
+    r[0x3D8] = 0                                                          # los pulpitos no escupen
+    r[0x240 + 0x88] = 0                                                   # ni dan el segundo golpe
     return bytes(r)
