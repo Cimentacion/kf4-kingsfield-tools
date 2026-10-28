@@ -1,6 +1,25 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 48 (2026-10-28)
+------------------------------------
+- No loading screen between King's Field levels (new kf4_trozos.py). Levels 0 and 1 are cut into several KFIV
+  maps that the game streams in the background, the way KFIV joins its own maps: every map record asks for the
+  neighbouring map through the neighbour table (record +0x3A, origins after the flag blocks), and the game switches
+  maps when you step on the other one's floor. No ChangeMap and no fade, also between the two levels.
+  - Each level is cut by 2.5 m tiles into slices of equal weight along its long axis (level 0: 3 maps, the first
+    one is 099; level 1: 4 maps), so two maps loaded together always fit in map memory (largest pair 9.8 MB of
+    11.5).
+  - The corridor where level 0 ends is repeated in level 1 (same floors, 5 m lower and elsewhere on its grid): its
+    offset is found by matching both levels' floors (44 tiles), and the corridor is its own small map that links
+    the two levels, so the rest of the levels, which overlap in space, are never loaded together.
+  - Each record asks for the neighbour you reach first by walking (floor path to the shared tiles); the tiles next
+    to the border require it (+0x39: if it has not finished loading, it finishes there without any fade).
+  - The maps take free map entries of the DAT (037, 036, 034, 033, 032, 044...; never the ones the executable
+    treats specially) and, if there is no room, the end of the ISO below 4 GB.
+- If something does not fit (no matching corridor, no free entries or no room on the disc) the build goes back
+  to one map per level with the fade, and says why. --con-fundido forces that old mode.
+
 Alpha 0.1 - revision 47 (2026-10-28)
 ------------------------------------
 - Fixed the invisible walls of level 0 (and level 1): the secret walls, doors and niche lids were tied to a water

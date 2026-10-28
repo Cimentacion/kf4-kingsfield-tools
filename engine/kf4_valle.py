@@ -3240,6 +3240,8 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
         cz = (min(p[2] for p in ref) + max(p[2] for p in ref)) / 2
         origin = to_native((cx, cy, cz))
         rec = {"origin": origin, "omd": -1, "csk": -1}
+        if TROZO:
+            rec["zona"] = ch[-1]          # kf4_trozos: el vecino que pide este registro
         if ch[0] == "A":
             # agua: registro tardío (bit 0 de las marcas, como el agua de 000/016/026/099): se dibuja después de
             # componer la textura animada (modo 1 de la tabla) y por encima de lo demás, transparente
@@ -3269,6 +3271,8 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
             for _ in range(o0):
                 p += struct.unpack_from("<I", d099, p)[0]
             todos = [v[0] for c in geo.render.values() for seqs in c.values() for s_ in seqs for v in s_]
+            if TROZO and TROZO.get("cielo"):
+                todos = TROZO["cielo"]       # el mismo cielo en todos los trozos del nivel (el del nivel entero)
             if todos:
                 cx = (min(q[0] for q in todos) + max(q[0] for q in todos)) / 2
                 cy = (min(q[1] for q in todos) + max(q[1] for q in todos)) / 2
@@ -3304,6 +3308,8 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
     flag_blocks = h[p:p + nfb * md.FLAGBLK]
     p += nfb * md.FLAGBLK
     neigh = h[p:p + md.NEIGH_N * md.NEIGH]
+    if TROZO:
+        neigh = TROZO["neigh"]               # los trozos vecinos de este (kf4_trozos)
     p += md.NEIGH_N * md.NEIGH
     objs = bytearray(h[p:p + nobj * md.OBJREC])
     p += nobj * md.OBJREC
@@ -3591,6 +3597,10 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
         b[0x38] = 1      # bloque de flags
         b[0x39] = 0
         b[0x3A] = 0xFF   # sin vecino que precargar
+        z_ = r.get("zona", -1)
+        if TROZO and z_ is not None and z_ >= 0:
+            b[0x3A] = z_ >> 1        # el origen (vecino) que carga el juego mientras lo pisas
+            b[0x39] = z_ & 1         # 1: tocando la frontera, si no ha acabado de cargar se acaba allí mismo
         b[0x3B] = 0
         struct.pack_into("<I", b, 0x3C, 5 if r.get("tarde") else 4)
         if "box" in r:
@@ -3760,7 +3770,9 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
     out[0x70] = d031[0x70]          # música de los acantilados
     out[0x78:0x7C] = bytes(4)
     out[0x71] = LUZ_ENEMIGOS        # bloque de luz de los objetos del suelo (el de 099 está vacío aquí: salían negros)
-    if getattr(valle, "kf_atlas", None) is not None and "recorte" not in QUITAR:
+    if getattr(valle, "kf_atlas", None) is not None and "recorte" not in QUITAR and not TROZO:
+        # (en los trozos no: los objetos del otro mapa cargado se dibujan con las texturas que haya subidas, y así
+        # todos los trozos de un nivel llevan el mismo bloque de texturas)
         out = recortar_texturas(out, log)
     log.append(f"Tamaño final 099.map: {len(out)} bytes (original {len(h)})")
     # el mapa se lee en map_file_area, de 0xA80000 bytes (core/memory.c); si no cabe pisa la memoria de detrás
@@ -5313,6 +5325,8 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
 
     usados_lg = {}
     fuentes = {}                       # idioma -> (font.txc nuevo, dónde va en la ISO, texto)
+    fin_otros = {}                     # otros mapas al final de la ISO (el mismo sitio para todos los idiomas)
+    fin_libre = fin_original + n_mapa
     for lg in ("SPA", "ENG", "FRA", "GER", "ITA"):
         d_off, tabo = _dat_table(iso, lg)
         if not tabo:
@@ -5360,6 +5374,12 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
             elif c and c[1] >= dummy_libre + n and c[0] >= d_off and c[0] + dummy_libre + n < (1 << 32):
                 destinos_otro[nombre_o][lg] = (c[0] + dummy_libre, "dentro de DUMMY.OUT")
                 dummy_libre += n
+            elif (fin_otros.get(nombre_o) or fin_libre) + n < (1 << 32):
+                # al final de la ISO, si queda por debajo de los 4 GB (el juego abre por sector desde el DAT)
+                if nombre_o not in fin_otros:
+                    fin_otros[nombre_o] = fin_libre
+                    fin_libre += n
+                destinos_otro[nombre_o][lg] = (fin_otros[nombre_o], "al final de la ISO")
         usados_lg[lg] = list(usados)
         # font.txc con los mensajes de la gente que habla (guion_npcs): en su sitio si cabe; si no, aparte
         if MENSAJES_NPC and "font.txc" in tabo:
@@ -5384,6 +5404,8 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
             log.append(f"AVISO: no hay sitio seguro para chr/c{mdl:04d}.chr: va otro bicho en su lugar")
     for nombre_o in otros:
         if not destinos_otro[nombre_o]:
+            if OTROS_OBLIGATORIOS:
+                raise RuntimeError(f"SIN_SITIO {nombre_o}")
             log.append(f"AVISO: no hay sitio para {nombre_o}: ese nivel no se pone")
     with open(out, "r+b") as f:
         f.truncate(fin_original)
@@ -5781,7 +5803,165 @@ PASOS_RECORTE = [("color de las ilustraciones de la cruz (16 colores en vez de 2
                                                        globals().__setitem__("TROZO_MAX", 5.2)))]
 MALLA_POR_DEFECTO = {}
 CRUZ_COLORES = 256        # las ilustraciones de la cruz en el mapa (16 si no cabe: PASOS_RECORTE)
+OTROS_OBLIGATORIOS = False   # (trozos) si un mapa no tiene sitio en la ISO, no se parchea: se vuelve a lo de antes
+TROZO = None              # kf4_trozos: {"neigh": tabla de vecinos, "cielo": puntos} del trozo que se monta
 MAPA_NIVEL1 = 37          # la entrada del DAT del 037.map (su sitio lo ocupa el 099 grande) lleva el nivel 1
+
+
+# ======================= Niveles sin pantalla de carga (kf4_trozos) =======================
+# Los dos niveles se trocean en mapas del 4 que el juego carga solo en segundo plano (como los suyos): ni ChangeMap
+# ni fundido a negro entre trozos ni entre niveles. El trozo con el inicio del nivel 0 es el 099; los demás van en
+# las entradas del DAT de mapas del 4 que el mod no usa (TROZOS_MAPAS).
+# (sin los que el ejecutable trata aparte por su número: 35 sala del guardián, 38 santuario oscuro, 41, 42...)
+TROZOS_MAPAS = [37, 36, 34, 33, 32, 44, 43, 40, 39, 30, 28, 22, 21, 26, 13]
+LIMITE_PAREJA = 0xB80000         # map_file_area_size (con parche_memoria_mapa): los dos mapas cargados juntos
+
+
+def _redondeo_carga(n):
+    return (n + 0x3FFFF) // 0x40000 * 0x40000          # MapLoad_OpenFile
+
+
+def mapas_disponibles(src_path):
+    """Los números de mapa con entrada en el DAT de todos los idiomas de la ISO (None si no es una ISO)."""
+    comun = None
+    for lg in ("SPA", "ENG", "FRA", "GER", "ITA"):
+        try:
+            _, t = _dat_table(src_path, lg)
+        except Exception:
+            t = None
+        if not t:
+            continue
+        nums = {int(k[:3]) for k in t if k.endswith(".map") and len(k) == 7 and k[:3].isdigit()}
+        comun = nums if comun is None else comun & nums
+    return comun
+
+
+def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, n0=3, n1=4, disponibles=None):
+    """(099.map, {otros mapas}, pulpo) con los niveles 0 y 1 troceados y unidos sin fundido, o None si no se puede
+    (entonces van como antes: un mapa por nivel y ChangeMap)."""
+    import kf4_editor
+    import kf4_trozos as kt
+    global TROZO
+    print("Sin fundido: troceando los niveles en mapas que se cargan solos...")
+    v1 = kf4_editor.MapaEditor(semilla, ruta1)
+    v1.construir()
+    fijar_offset(v1)
+    off1 = tuple(OFFSET)
+    v0 = kf4_editor.MapaEditor(semilla, ruta0)
+    v0.construir()
+    revisar(v0.geo, log)
+    fijar_offset(v0)
+    off0 = tuple(OFFSET)
+    salida = next((s_ for s_ in getattr(v0, "kf_salidas", []) if s_.get("nivel") == 1), None)
+    llegada = getattr(v1, "kf_llegadas", {}).get(0)
+    if not salida or not llegada:
+        log.append("AVISO: el nivel 0 no tiene salida al 1 (o el 1 no tiene llegada): van con fundido")
+        return None
+    D, M = kt.enlace(v0, v1, salida, llegada, log=log)
+    if not M:
+        log.append("AVISO: los pasillos de la salida del nivel 0 y la llegada al 1 no casan: van con fundido")
+        return None
+    dx, dy = round(D[0] / kt.CELDA), round(D[1] / kt.CELDA)
+    w0, w1 = kt.pesos(v0), kt.pesos(v1)
+    h0, h1 = kt.alturas(v0), kt.alturas(v1)
+    M = M & set(w0)
+    M1 = {(c[0] + dx, c[1] + dy) for c in M}
+    req = (D[0] * 100.0 + off1[0] - off0[0], -D[2] * 100.0 + off1[1] - off0[1], D[1] * 100.0 + off1[2] - off0[2])
+    pts = lambda v: [vv[0] for c in v.geo.render.values() for seqs in c.values() for s_ in seqs for vv in s_]
+    cielos = {}
+    for k, v in ((0, v0), (1, v1)):
+        p_ = pts(v)
+        cielos[k] = [tuple(min(q[i] for q in p_) for i in range(3)), tuple(max(q[i] for q in p_) for i in range(3))]
+    for intento in range(6):
+        enlace = kt.Trozo(0, M, "enlace", h0)
+        t0 = [kt.Trozo(0, c, f"nivel 0, parte {i + 1}", h0)
+              for i, c in enumerate(kt.rebanadas(w0, n0, set(w0) - M))]
+        t1 = [kt.Trozo(1, c, f"nivel 1, parte {i + 1}", h1)
+              for i, c in enumerate(kt.rebanadas(w1, n1, set(w1) - M1))]
+        trozos = t0 + [enlace] + t1
+        ident = lambda c: c
+
+        def puede(a, b):
+            return a.nivel == b.nivel or a is enlace or b is enlace
+
+        def desfase(a, b):
+            if a.nivel == b.nivel:
+                return ident, 0.0, (0.0, 0.0, 0.0)
+            if a is enlace:                      # b del nivel 1, visto desde el nivel 0
+                return (lambda c: (c[0] - dx, c[1] - dy)), -D[2], req
+            return (lambda c: (c[0] + dx, c[1] + dy)), D[2], tuple(-x for x in req)
+        kt.vecinos_y_zonas(trozos, puede, desfase)
+        ini = kt.celda(v0.inicio)
+        libres = [m_ for m_ in TROZOS_MAPAS if disponibles is None or m_ in disponibles]
+        if len(libres) < len(trozos) - 1:
+            log.append(f"AVISO: hacen falta {len(trozos) - 1} entradas de mapa libres en el DAT y la ISO solo tiene "
+                       f"{len(libres)}: van con fundido")
+            return None
+        for t in trozos:
+            t.mapa = 99 if (t.nivel == 0 and ini in t.celdas) else None
+        if not any(t.mapa == 99 for t in trozos):
+            min(t0, key=lambda t: min((c[0] - ini[0]) ** 2 + (c[1] - ini[1]) ** 2 for c in t.celdas)).mapa = 99
+        for t in trozos:
+            if t.mapa is None:
+                t.mapa = libres.pop(0)
+        mapas = {}
+        for nivel, v, ruta, off in ((0, v0, ruta0, off0), (1, None, ruta1, off1)):
+            if v is None or intento > 0:     # se vuelve a construir (el editor deja estado de su nivel)
+                v = kf4_editor.MapaEditor(semilla, ruta)
+                v.construir()
+            fijar_offset(v)
+            if nivel == 0:
+                pulpo0 = preparar_registros(src, v, [])
+            else:
+                pulpo1 = preparar_registros(src, v, [])
+            for t in trozos:
+                if t.nivel != nivel:
+                    continue
+                tabla = bytearray()
+                for b, xyz in t.vecinos:
+                    tabla += struct.pack("<3fHH", xyz[0], xyz[1], xyz[2], b.mapa, 0)
+                while len(tabla) < md.NEIGH_N * md.NEIGH:
+                    tabla += struct.pack("<3fHH", 0.0, 0.0, 0.0, 0xFFFF, 0)
+                TROZO = {"neigh": bytes(tabla[:md.NEIGH_N * md.NEIGH]), "cielo": cielos[nivel]}
+                print(f"  {t.nombre} -> {t.mapa:03d}.map ({len(t.celdas)} casillas, vecinos "
+                      f"{', '.join(f'{b.mapa:03d}' for b, _ in t.vecinos) or 'ninguno'})")
+                log_t = []
+                try:
+                    vista = kt.vista(v, t)
+                    mapas[t.mapa], _ = generar_mapa(src, vista, rumbo, log_t, d099, d031, cruz)
+                finally:
+                    TROZO = None
+                if t.mapa == 99:
+                    log.extend(log_t)
+                avisos = [l_ for l_ in log_t if "AVISO" in l_]
+                log.append(f"Trozo {t.nombre} -> {t.mapa:03d}.map: {len(mapas[t.mapa]) // 1024} KB, "
+                           f"{len(t.celdas)} casillas, {len(vista.enemigos)} bichos, vecinos: "
+                           + (", ".join(f"{b.mapa:03d}" + (" (otro nivel)" if b.nivel != t.nivel else "")
+                                        + f" [{t.puertas.get(b.nombre, 0)} casillas de paso]"
+                                        for b, _ in t.vecinos) or "ninguno")
+                           + (" | " + "; ".join(avisos) if avisos and t.mapa != 99 else ""))
+        grandes = [t for t in trozos if len(mapas[t.mapa]) > MAPA_MAXIMO]
+        parejas = [(a, b) for a in trozos for b, _ in a.vecinos
+                   if _redondeo_carga(len(mapas[a.mapa])) + _redondeo_carga(len(mapas[b.mapa])) > LIMITE_PAREJA]
+        if not grandes and not parejas:
+            break
+        malos = {t.nivel for t in grandes} | {t.nivel for p_ in parejas for t in p_ if t is not enlace}
+        log.append(f"Los trozos no caben de dos en dos en la memoria de mapas ({len(parejas)} parejas): se trocea más")
+        if 0 in malos:
+            n0 += 1
+        if 1 in malos or not malos:
+            n1 += 1
+    else:
+        log.append("AVISO: no hay forma de que los trozos quepan de dos en dos: van con fundido")
+        return None
+    pulpo = ({**(pulpo1[0] or {}), **(pulpo0[0] or {})}, {**(pulpo1[1] or {}), **(pulpo0[1] or {})},
+             {**(pulpo1[2] or {}), **(pulpo0[2] or {})}) if pulpo0 and pulpo1 else (pulpo0 or pulpo1)
+    mayor = max(_redondeo_carga(len(mapas[a.mapa])) + _redondeo_carga(len(mapas[b.mapa]))
+                for a in trozos for b, _ in a.vecinos)
+    log.append(f"Sin fundido: {len(trozos)} mapas ({n0} del nivel 0, el pasillo de enlace y {n1} del nivel 1); "
+               f"la pareja más grande ocupa {mayor / 1048576:.1f} MB de {LIMITE_PAREJA / 1048576:.1f}")
+    otros = {f"{k:03d}.map": d for k, d in mapas.items() if k != 99}
+    return mapas[99], otros, pulpo
 
 
 def main():
@@ -5898,6 +6078,40 @@ def main():
         import kf4_prologo
         v = kf4_prologo.Prologo(semilla)
     log.append(f"Zona: {zona}")
+    if zona == "editor" and nivel1_json and "--con-fundido" not in sys.argv:
+        ruta1 = nivel1_json if os.path.isabs(nivel1_json) else os.path.join(here, nivel1_json)
+        res = sin_fundido(src, ruta, ruta1, semilla, rumbo, log, d099, d031, cruz,
+                          disponibles=mapas_disponibles(src_path) if src.kind == "ISO" else None)
+        if res:
+            new_map, otros, pulpo = res
+            with open(os.path.join(outdir, "099.map"), "wb") as o:
+                o.write(new_map)
+            for nombre_o, d_o in otros.items():
+                with open(os.path.join(outdir, nombre_o), "wb") as o:
+                    o.write(d_o)
+            hecho = True
+            if not solo and src.kind == "ISO":
+                global OTROS_OBLIGATORIOS
+                OTROS_OBLIGATORIOS = True
+                try:
+                    iso_out, n = patch_iso(src_path, new_map, log, debug_ini, giro, mando, vida_numero, cruz,
+                                           exp_menu, pulpo, otros)
+                    log.append(f"ISO -> {iso_out}")
+                    with open(os.path.join(outdir, "iso_lista.txt"), "w", encoding="utf-8") as o:
+                        o.write(iso_out)
+                except RuntimeError as e:
+                    if not str(e).startswith("SIN_SITIO"):
+                        raise
+                    hecho = False
+                    log.append(f"AVISO: no hay sitio en la ISO para todos los trozos ({e}): van con fundido")
+                    print(log[-1])
+                finally:
+                    OTROS_OBLIGATORIOS = False
+            if hecho:
+                with open(os.path.join(outdir, "resumen.txt"), "w", encoding="utf-8") as o:
+                    o.write("\n".join(log) + "\n")
+                print("\n".join(log))
+                return
     v.construir()
     revisar(v.geo, log)
     log.append(f"Trozos extra para que no desaparezcan triángulos cerca de la cámara: {v.geo.trozos}")
