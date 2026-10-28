@@ -2306,7 +2306,7 @@ def _registro_de(cajas, x, z):
     return mejor
 
 
-def panel_kf(t, tris):
+def panel_kf(t, tris, subir=1.0):
     """La losa del 4 (t: plantilla del def 80) con la pared de verdad del King's Field: tris = [(textura, 3 x
     (punto del editor, uv, color, normal))]. Devuelve (modelo, colisión, registro de objeto, movimiento) o None.
     La losa se deja como en el 4 (su caja de colisión de 200 x 300 x 20, intacta): se gira para que su lado fino
@@ -2415,7 +2415,7 @@ def panel_kf(t, tris):
         mov = bytearray(mov)
         # el desplazamiento del movimiento va en unidades de la losa (la escala y del objeto lo multiplica: con más
         # subía por encima de su hueco y se veía el corte): que suba justo su altura
-        sube = alto_paso / sy
+        sube = alto_paso / sy * subir
         for viejo, nuevo_v in ((-280.0, -sube), (280.0, sube)):
             a_, b_ = struct.pack("<f", viejo), struct.pack("<f", nuevo_v)
             k = mov.find(a_)
@@ -2445,7 +2445,8 @@ def colocar_objetos_kf(objs, obj_secc, lista, plantillas, recs, log, tex_pared=N
         if t is None:
             continue
         if o.get("panel") and di == OBJ_SECRETA:
-            hecho = panel_kf(t, o["panel"])
+            # la puerta 129 sube un poco más que su altura (si no, desde debajo se le veía el canto)
+            hecho = panel_kf(t, o["panel"], 1.2 if o.get("kf") in PUERTAS_PESADAS else 1.0)
             if hecho:
                 modelo, colis, b, mov = hecho
                 sec_m += modelo

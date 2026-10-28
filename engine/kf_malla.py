@@ -154,7 +154,8 @@ class Datos:
 # objetos de decorado: los que no son de coger (< 120), cofres, puertas, paredes secretas, cielos/luna, zonas de
 # carga, el invisible ni trampas que se mueven (ObjectID de KFModTool, kf2/object.h)
 FUENTE_ID = 195
-PUERTAS_MARCO = {129}                  # puertas del King's Field que son una casilla entera (con su suelo y paredes)
+PUERTAS_MARCO = {129}
+HUECO_PUERTA_129 = 4200      # unidades del PS1 que sube su hueco por encima del techo (la hoja mide 3216 y sube 1,25 veces)                  # puertas del King's Field que son una casilla entera (con su suelo y paredes)
 NICHOS_KF = {131, 138, 209, 214}          # paredes con nicho (kf1_objetos.NICHOS): fijas, no suben
 # cuánto decorado: 2 todo (menos lo muy pesado), 1 solo lo ligero, 0 solo la fuente (si el mapa no cabe, kf4_valle
 # lo va bajando antes de quitar caras)
@@ -301,6 +302,33 @@ def _piezas(datos, editor, pad, h0):
             gx, gy, gz = gira(v)
             mundo.append((ox + gx * ESCALA, oy + gz * ESCALA, oz - gy * ESCALA))
         hoja = None
+        if oid in PUERTAS_MARCO and prims:
+            # el hueco del techo por el que sube la hoja: sus cuatro lados y su tapa, con la textura de las paredes
+            # del paso (sin él, debajo de la puerta abierta se veía el cielo por la unión)
+            pared = next((pr for pr in prims if pr[0] is not None and pr[4] is not None and abs(pr[4][0]) > 2048), None)
+            if pared:
+                tp_, cl_, uvs_, _, _ = pared
+                u0_, u1_ = min(u for u, _ in uvs_), max(u for u, _ in uvs_)
+                v0_, v1_ = min(v for _, v in uvs_), max(v for _, v in uvs_)
+                uvq = [(u0_, v1_), (u1_, v1_), (u0_, v0_), (u1_, v0_)]
+                verts = list(verts)
+                prims = list(prims)
+                Y0, Y1, X, Z = -3200, -3200 - HUECO_PUERTA_129, 1792, 520
+                for zs, nz in ((-Z, 4096), (Z, -4096)):
+                    b_ = len(verts)
+                    verts += [(-X, Y0, zs), (X, Y0, zs), (-X, Y1, zs), (X, Y1, zs)]
+                    prims.append((tp_, cl_, uvq, [b_, b_ + 1, b_ + 2, b_ + 3], (0, 0, nz)))
+                for xs, nx in ((-X, 4096), (X, -4096)):
+                    b_ = len(verts)
+                    verts += [(xs, Y0, -Z), (xs, Y0, Z), (xs, Y1, -Z), (xs, Y1, Z)]
+                    prims.append((tp_, cl_, uvq, [b_, b_ + 1, b_ + 2, b_ + 3], (nx, 0, 0)))
+                b_ = len(verts)
+                verts += [(-X, Y1, -Z), (X, Y1, -Z), (-X, Y1, Z), (X, Y1, Z)]
+                prims.append((tp_, cl_, uvq, [b_, b_ + 1, b_ + 2, b_ + 3], (0, 4096, 0)))
+                mundo = []
+                for v in verts:
+                    gx, gy, gz = gira(v)
+                    mundo.append((ox + gx * ESCALA, oy + gz * ESCALA, oz - gy * ESCALA))
         if oid in PUERTAS_MARCO:
             # la puerta que es una casilla entera (129): la hoja es la losa del medio (|z| <= 520 en el modelo),
             # sus caras grandes, su canto de abajo y los biseles que miran abajo; el resto (las paredes del paso,
@@ -311,7 +339,8 @@ def _piezas(datos, editor, pad, h0):
                 if n_ is None:
                     continue
                 zs = [verts[r][2] for r in pr[3]]
-                if max(abs(z_) for z_ in zs) <= 520 and abs(n_[0]) < 0.5 * 4096 and n_[1] >= 0:
+                ys = [verts[r][1] for r in pr[3]]
+                if max(abs(z_) for z_ in zs) <= 520 and abs(n_[0]) < 0.5 * 4096 and n_[1] >= 0 and max(ys) > -3199:
                     hoja.add(tuple(pr[3]))
         _SECRETA_ACTUAL[0] = (oid, (ox, oy, oz), 1e9, True, hoja)      # puerta: sus caras (o su hoja) al objeto
         yield x, z, prims, mundo, gira, int(round(ang / (math.pi / 2))) & 3

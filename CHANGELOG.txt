@@ -1,6 +1,14 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 31 (2026-10-28)
+------------------------------------
+- Door 129: it now has its shaft above the ceiling (four sides and a lid, with the passage wall texture), so the
+  sky no longer shows through the joint from under the open door. It also goes up 20% more than its height.
+- King's Field skeleton: the trunk (pelvis, belly, ribs, neck and skull) is placed as one piece onto the
+  soldier's trunk. Placed piece by piece, the ribs were squashed (the soldier's chest is short because of its
+  armour) and every piece came out turned a different way.
+
 Alpha 0.1 - revision 30 (2026-10-28)
 ------------------------------------
 - Skeleton and the other ported monsters: vertices stretched across the floor. The seam vertices are placed

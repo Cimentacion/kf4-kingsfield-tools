@@ -128,6 +128,16 @@ def esqueleto_chr(base, mo_t, vram):
         k = np.linalg.norm(b_c - a_c) / max(1e-6, np.linalg.norm(b_k - a_k))
         k = min(1.6, max(0.6, k))
         trans[nombre] = (R, k, a_k, a_c)
+    # el tronco entero (cadera, vientre, costillas, cuello y cráneo) de una pieza: un solo giro y una sola escala de
+    # la cadera del King's Field a la del soldado y de su cuello a la cabeza del soldado. Por trozos, las costillas
+    # se aplastaban (el pecho del soldado es corto: lleva coraza) y cada trozo salía girado distinto: un desastre
+    a_k = np.array([0.0, -960.0, 0.0]) * esc
+    b_k = np.array([0.0, -1610.0, 0.0]) * esc
+    a_c, b_c = org[2], org[18]
+    R = _girar(b_k - a_k, b_c - a_c)
+    k = np.linalg.norm(b_c - a_c) / max(1e-6, np.linalg.norm(b_k - a_k))
+    for nombre in ("cadera", "vientre", "pecho", "cuello", "cabeza"):
+        trans[nombre] = (R, k, a_k, a_c)
     trozos = [_trozo(v) for v in vs]
     duenos = [HUESO[t] for t in trozos]
     # triángulos (de 3 y de 4 lados, como el PS1) y vértices de cada parte o de su padre (la costura)
