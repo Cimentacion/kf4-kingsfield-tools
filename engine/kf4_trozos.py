@@ -682,7 +682,7 @@ def grupos(nivel, trozos):
             return
         g = t.grupo.get(ch)
         if g is None:
-            g = len(t.grupo) + 1
+            g = (len(t.grupo) + 1) if CON_PVS else 1
             if g > 254:
                 g = 0              # (no pasa: 254 trozos de geometría en un solo mapa)
             t.grupo[ch] = g
@@ -698,9 +698,27 @@ def grupos(nivel, trozos):
                 apunta(tuple(ch), nivel.dueno_poli(q))
 
 
+CON_PVS = False         # True: cada grupo ve solo lo que se alcanza andando; False: todo lo cargado se ve
+
+
 def visibilidad(trozos, desfase):
     """t.bloques: los bloques de flags de cada trozo (uno por grupo, 0x40 bytes)."""
     import struct
+    if not CON_PVS:
+        # todo lo de los dos mapas cargados se dibuja: cada bloque con todos los grupos propios y, del vecino, su
+        # grupo 0 y los 15 primeros (sin PVS los trozos llevan un grupo por registro solo para esto: ver grupos())
+        for a in trozos:
+            n = max([0] + list(getattr(a, "celdas_grupo", {}).keys())) + 1
+            lista = [(b.mapa, 1) for b, _ in a.vecinos] + [(b.mapa, 0) for b, _ in a.vecinos]
+            blk = bytearray(0x40)
+            for bit in range(min(n, 256)):
+                blk[bit // 8] |= 1 << (bit % 8)
+            for i in range(16):
+                t_, v_ = lista[i] if i < len(lista) else (255, 255)
+                blk[0x20 + i] = t_ & 0xFF
+                blk[0x30 + i] = v_ & 0xFF
+            a.bloques = bytes(blk) * n
+        return
     for a in trozos:
         n = max([0] + list(getattr(a, "celdas_grupo", {}).keys())) + 1
         # las puertas a cada vecino, en las coordenadas de a: casilla de a -> casillas de b al lado

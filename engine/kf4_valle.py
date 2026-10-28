@@ -3674,7 +3674,8 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
     tables += bytes(new_models - len(tables))
 
     out = bytearray(tables)
-    out += omd_blob + bytes(max(0, room_m - len(omd_blob)))
+    # (los trozos sin fundido, sin relleno hasta el hueco de 099: 1,5 MB de ceros menos por mapa = cargas más cortas)
+    out += omd_blob + bytes(0 if TROZO else max(0, room_m - len(omd_blob)))
     if bloque_cruz:
         import kf4_cruz
         # las fuentes curan con el guion y el efecto del propio 4 (fuentes_que_curan): la cura del código (destello
@@ -3692,7 +3693,7 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
     if RELLENO:          # prueba: bytes de más donde el motor no lee, para ver si un mapa grande cuelga el juego
         seccion += bytes((-(len(out) + len(seccion))) % 16) + bytes(RELLENO)
         log.append(f"PRUEBA: {RELLENO // 1024} KB de relleno")
-    out += seccion + bytes(max(0, room_c - len(seccion)))
+    out += seccion + bytes(0 if TROZO else max(0, room_c - len(seccion)))
     delta = len(out) - off_objm
     off_item = struct.unpack_from("<I", h, 0x20)[0]
     off_script = struct.unpack_from("<I", h, 0x4C)[0]
@@ -5855,7 +5856,7 @@ def mapas_disponibles(src_path):
     return comun
 
 
-def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.16, f1=0.16, disponibles=None,
+def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.42, f1=0.42, disponibles=None,
                 carpeta=None):
     """(099.map, {otros mapas}, pulpo) con los niveles 0 y 1 troceados y unidos sin fundido, o None si no se puede
     (entonces van como antes: un mapa por nivel y ChangeMap)."""
@@ -6013,6 +6014,9 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.1
     log.append(f"Sin fundido: {len(trozos)} mapas ({len(t0)} del nivel 0, el pasillo de enlace y {len(t1)} del nivel 1); "
                f"la pareja más grande ocupa {mayor / 1048576:.1f} MB de {LIMITE_PAREJA / 1048576:.1f}")
     otros = {f"{k:03d}.map": d for k, d in mapas.items() if k != 99}
+    # (para el simulador de carga: qué casillas lleva cada mapa y cómo encajan los niveles)
+    kt.ULTIMO = {"trozos": [(t.nivel, t.mapa, set(t.celdas), t.nombre) for t in trozos], "D": D, "M": set(M),
+                 "off": {0: off0, 1: off1}, "H": {0: dict(h0), 1: dict(h1)}, "inicio": v0.inicio}
     if carpeta:
         # la página para pintar los cortes, con los tamaños de esta vez para estimar los de otros cortes
         try:

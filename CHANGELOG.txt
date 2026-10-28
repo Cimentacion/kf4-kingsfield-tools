@@ -1,6 +1,23 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 55 (2026-10-29)
+------------------------------------
+- New load simulator (kf4_simula_carga.py): it walks through both levels over the generated maps doing what the
+  game does (MapLoad_Update with each record's neighbour request and the "must be loaded" flag, Map_MakeCurrent
+  when you step on the other map's floor, the draw list with the flag blocks) and compares every view with the
+  whole level, counting the holes within 40 m and the forced waits.
+- What it showed and what changed:
+  - The visibility groups of rev 54 left up to half the screen empty in some rooms: off. Everything of the two
+    loaded maps is drawn again (own groups, and the neighbour named in every block).
+  - The room-sized maps of rev 53 asked for the next room too late: 14 forced waits in 22 loads with a slow disc.
+    Back to bigger maps cut at narrow indoor passages (level 0: the shore + 2 inside + the link corridor; level 1:
+    5): 2 forced waits in 10 loads, holes 0.2 % of the screen on average.
+  - No more 1.5 MB of zeros padding each map up to 099's original layout: shorter loads (the link corridor is now
+    2 MB instead of 3.4).
+- How KFIV does it (checked on its maps): each map is a big area (3-6 MB) and only 1 to 5 records, the ones of
+  the connecting corridor, ask for the neighbour, a few of them forcing it; most records ask for nothing.
+
 Alpha 0.1 - revision 54 (2026-10-29)
 ------------------------------------
 - Found why the neighbouring map never showed even when loaded: KFIV draws only what the floor you stand on can
