@@ -59,6 +59,7 @@ Y_MIN, Y_MAX = -25.0, 245.0
 CRECE = 1.75         # cada fila lejana es 1.75 veces la anterior
 UV_TRAMO = 5.0      # unidades de UV que puede abarcar una tira (el límite real es ±8)
 TROZO_MAX = 2.6      # lado máximo de un trozo de geometría a la altura de los caminos (m)
+TROZO_MAX_ORIGINAL = TROZO_MAX
 BANDA_CERCA = (-4.0, 16.0)   # alturas donde puede estar la cámara (cornisas, casas, escaleras)
 FILA_MAX = 30.0      # tope (para que la textura no se salga de rango)
 ANCHO_CORNISA = 3.75
@@ -2341,6 +2342,21 @@ def _registro_de(cajas, x, z):
     return mejor
 
 
+PANELES_LUZ_UNICA = False      # (solo si el mapa no cabe) las puertas con un color de luz entero: las iguales comparten
+                               # modelo (en el nivel 1 hay 32 puertas de unos 30 KB cada una)
+
+
+def _luz_unica(tris):
+    """El mismo color de vértice en toda la puerta (su media, en escalones de 32): así las puertas iguales que están
+    en una luz parecida tienen el mismo modelo y se guardan una vez."""
+    cols = [v[2] for _, tri in tris for v in tri]
+    if not cols:
+        return tris
+    n = len(cols[0])
+    media = tuple(min(255.0, round(sum(c[k] for c in cols) / len(cols) / 32.0) * 32.0) for k in range(n))
+    return [(tex, [(v[0], v[1], media) + tuple(v[3:]) for v in tri]) for tex, tri in tris]
+
+
 def panel_kf(t, tris, subir=1.0):
     """La losa del 4 (t: plantilla del def 80) con la pared de verdad del King's Field: tris = [(textura, 3 x
     (punto del editor, uv, color, normal))]. Devuelve (modelo, colisión, registro de objeto, movimiento) o None.
@@ -2490,19 +2506,30 @@ def colocar_objetos_kf(objs, obj_secc, lista, plantillas, recs, log, tex_pared=N
             continue
         if o.get("panel") and di == OBJ_SECRETA:
             # la puerta 129 sube un poco más que su altura (si no, desde debajo se le veía el canto)
-            hecho = panel_kf(t, o["panel"], 1.2 if o.get("kf") in PUERTAS_PESADAS else 1.0)
+            tris_p = o["panel"]
+            if PANELES_LUZ_UNICA and o.get("es_puerta"):
+                tris_p = _luz_unica(tris_p)
+            hecho = panel_kf(t, tris_p, 1.2 if o.get("kf") in PUERTAS_PESADAS else 1.0)
             if hecho:
                 modelo, colis, b, mov = hecho
-                sec_m += modelo
-                sec_c += colis
-                imo = 0xFFFF
-                if mov:
-                    sec_mo += mov
-                    imo = nmo
-                    nmo += 1
-                struct.pack_into("<4H", b, 0x30, di, nm, nc, imo)
-                nm += 1
-                nc += 1
+                # paredes y puertas iguales (mismo modelo, colisión y movimiento en su espacio): una sola copia
+                clave_p = ("panel", bytes(modelo), bytes(colis), bytes(mov or b""))
+                if clave_p in indice:
+                    im_, ic_, imo = indice[clave_p]
+                    struct.pack_into("<4H", b, 0x30, di, im_, ic_, imo)
+                    cuenta["paneles repetidos (compartidos)"] += 1
+                else:
+                    sec_m += modelo
+                    sec_c += colis
+                    imo = 0xFFFF
+                    if mov:
+                        sec_mo += mov
+                        imo = nmo
+                        nmo += 1
+                    struct.pack_into("<4H", b, 0x30, di, nm, nc, imo)
+                    indice[clave_p] = (nm, nc, imo)
+                    nm += 1
+                    nc += 1
                 x, _, z = struct.unpack_from("<3f", b, 0)
                 struct.pack_into("<H", b, 0x38, _registro_de(cajas, x, z))
                 b[0x3D] = LUZ_PANEL
@@ -2677,6 +2704,89 @@ def guion_paneles(guion, log):
     g = g2
     log.append(f"Paredes secretas y puertas: {len(GUIONES_PANEL)} con su guion al abrirse (sonido; las paredes, temblor)")
     return struct.pack("<%dI" % len(g), *g) + bytes(len(guion) % 4)
+
+
+# ======================= Cambios de nivel (mapas portados de varios niveles del King's Field) =======================
+# Cada nivel portado es un mapa del 4 (el 0 en 099.map; los demás en la entrada de otro mapa del DAT, NIVEL_MAPA).
+# Al cargar un mapa el juego corre su guion 0x7FFF (MapChange_SetUpMap): se le pone delante uno nuevo que, si se
+# viene de otro nivel (marca en la variable de guion libre script_spare_var_block_a[0], que no se borra al cambiar
+# de mapa), pone al jugador donde se aparece al venir de ese nivel, y arranca un vigía: un hilo que cada 10
+# fotogramas mira si el jugador está en el área de una salida; entonces deja la marca y cambia de mapa (orden
+# 174, ChangeMap: aparece en el inicio del otro mapa, y su guion lo lleva a la llegada). El guion 0x7FFF de 099
+# sigue igual, con otra etiqueta.
+NIVEL_MAPA = {0: 99}             # nivel del King's Field -> número de mapa del 4 (main añade los demás)
+GUION_VIGIA, GUION_INICIO_VIEJO = 0x0F80, 0x0F81
+MARCA_NIVEL = 1000               # marca = MARCA_NIVEL + nivel de origen
+VAR_MARCA = (0x40D01, 0)         # int de script_spare_var_block_a (bloque 13 de script_game_var_blocks), +0
+SALIDA_ALTO = 300.0              # cm por encima y por debajo del suelo de la salida
+
+
+def guion_niveles(guion, v, log):
+    nivel = getattr(v, "kf_nivel", -1)
+    salidas = [s_ for s_ in getattr(v, "kf_salidas", []) if s_.get("nivel") in NIVEL_MAPA and s_.get("nivel") != nivel]
+    llegadas = {o_: p_ for o_, p_ in getattr(v, "kf_llegadas", {}).items() if o_ in NIVEL_MAPA and o_ != nivel}
+    if nivel < 0 or (not salidas and not llegadas):
+        return guion
+    E, F = 0x40000, 0x60000
+    fl = lambda x: struct.unpack("<I", struct.pack("<f", float(x)))[0]
+    PX, PY, PZ, ROT_Y, MAPIDX = (0x60201, 0), (0x60201, 4), (0x60201, 8), (0x60201, 0x14), (0x30201, 0x252)
+    L = [(0x60002, 0x20 + 4 * k) for k in range(3)]            # variables float del hilo
+    ADD, SUB, FIN = (0 << 8) | 4, (1 << 8) | 4, 0xFF
+
+    def set_(dest, a, op, b):
+        return [(0x196 << 16) | 8, dest[0], dest[1], a[0], a[1], op, b[0], b[1], FIN]
+
+    def si(conds, bloque, todas=True):      # if (y / o) de comparaciones (a, op, b): op 0 ==, 3 <, 2 >
+        w = [(0x192 << 16) | (len(conds) << 8) | (1 if todas else 0), len(bloque)]
+        for a, op, b in conds:
+            w += [a[0], a[1], op, b[0], b[1]]
+        return w + bloque
+    g = _palabras(guion)
+    try:
+        i0 = g.index((0x190 << 16) | 0x7FFF)
+    except ValueError:
+        log.append("AVISO: el mapa no tiene guion de inicio (0x7FFF); sin cambios de nivel")
+        return guion
+    usadas = {w & 0xFFFF for w in g if w >> 16 == 0x190}
+    if GUION_VIGIA in usadas or GUION_INICIO_VIEJO in usadas:
+        log.append("AVISO: etiquetas de los cambios de nivel ocupadas; sin cambios de nivel")
+        return guion
+    g[i0] = (0x190 << 16) | GUION_INICIO_VIEJO
+    inicio = [(0x190 << 16) | 0x7FFF]
+    for origen, p in sorted(llegadas.items()):
+        x, y, z = to_native((p["x"], p["y"], p["z"] + 0.05))
+        llevar = (set_(PX, (F, fl(x)), ADD, (F, fl(0))) + set_(PY, (F, fl(y)), ADD, (F, fl(0)))
+                  + set_(PZ, (F, fl(z)), ADD, (F, fl(0))) + set_(MAPIDX, (E, 0xFFFF), ADD, (E, 0))
+                  + set_(VAR_MARCA, (E, 0), ADD, (E, 0)))
+        inicio += si([(VAR_MARCA, 0, (E, MARCA_NIVEL + origen))], llevar)
+    inicio += set_(VAR_MARCA, (E, 0), ADD, (E, 0))
+    if salidas:
+        inicio += [(2 << 16) | 2, E, GUION_VIGIA, E, 1]                  # RunScript vigía, sin esperar
+    inicio += [(2 << 16) | 2, E, GUION_INICIO_VIEJO, E, 1, 0x191 << 16]  # el inicio de siempre
+    vigia = []
+    if salidas:
+        vigia = [(0x190 << 16) | GUION_VIGIA]
+        bucle = len(vigia)
+        vigia += [(1 << 16) | 1, E, 10]                                   # Wait 10
+        for s_ in salidas:
+            cx, cy, cz = to_native((s_["x"], s_["y"], s_["z"]))
+            hx, hz = s_["medio_x"] * 100.0, s_["medio_y"] * 100.0
+            vigia += set_(L[0], PX, SUB, (F, fl(cx))) + set_(L[1], PZ, SUB, (F, fl(cz))) + set_(L[2], PY, SUB, (F, fl(cy)))
+            ir = set_(VAR_MARCA, (E, MARCA_NIVEL + nivel), ADD, (E, 0)) + [(174 << 16) | 1, E, NIVEL_MAPA[s_["nivel"]],
+                                                                           0x191 << 16]
+            vigia += si([(L[0], 3, (F, fl(hx))), (L[0], 2, (F, fl(-hx))), (L[1], 3, (F, fl(hz))),
+                         (L[1], 2, (F, fl(-hz))), (L[2], 3, (F, fl(SALIDA_ALTO))), (L[2], 2, (F, fl(-SALIDA_ALTO)))], ir)
+        salto = len(vigia)
+        vigia += [(0x197 << 16) | ((bucle - (salto + 1)) & 0xFFFF), 0x191 << 16]
+    g2 = g[:i0] + inicio + vigia + g[i0:]
+    malas = _etiquetas_perdidas(g2, [0x7FFF, GUION_INICIO_VIEJO] + ([GUION_VIGIA] if salidas else []))
+    if malas:
+        log.append(f"AVISO: el guion de los cambios de nivel no se lee bien ({malas}); sin cambios de nivel")
+        return guion
+    log.append(f"Cambios de nivel: {len(salidas)} salidas ("
+               + ", ".join(f"al nivel {s_['nivel']} = mapa {NIVEL_MAPA[s_['nivel']]:03d}" for s_ in salidas)
+               + f"), llegadas desde {sorted(llegadas)}")
+    return struct.pack("<%dI" % len(g2), *g2) + bytes(len(guion) % 4)
 
 
 def _etiquetas_perdidas(g, etiquetas):
@@ -3295,6 +3405,7 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
     if getattr(valle, "kf_fuentes", None):
         guion = guion_fuente(guion, d099, log)
     guion = guion_paneles(guion, log)
+    guion = guion_niveles(guion, valle, log)
     out += guion
     # las texturas (paquetes DMA) tienen que empezar alineadas a 16 bytes, como en todos los mapas del juego: con el
     # guion de cierre de la revisión 8 quedaban a 4 y el juego se colgaba al cargar el mapa
@@ -4572,6 +4683,30 @@ def para_arma_con_exp(d_equip_a, d_option):
 
 
 
+# ======================= Más memoria para el archivo de mapa =======================
+# Memory_Init (core/memory.c) reparte el arena: ... archivo de mapa 0xA80000, trabajo de mapa 0x200000 (dos mitades:
+# la del mapa actual y la del vecino que se precarga al andar entre mapas). Los mapas portados no tienen vecinos,
+# así que se pasa 1 MB del trabajo al archivo: archivo 0xB80000, trabajo 0x100000 (el mapa usa la primera mitad y,
+# si le hiciera falta, la segunda, que nadie más usa). El arena sigue midiendo lo mismo.
+MEMORIA_LUI = (0x209A4C, 0x3C050020, 0x3C050010)    # lui a1, 0x20 -> 0x10: map_work_area_size
+MEMORIA_LUI2 = (0x209A50, 0x3C0600A8, 0x3C0600B8)   # lui a2, 0xA8 -> 0xB8: map_file_area_size
+MAPA_MAXIMO_GRANDE = 0xB80000 - 0x10000
+
+
+def exe_reconocido_memoria(e):
+    return all(struct.unpack_from("<I", e, va - 0xFF000)[0] in (a, b) for va, a, b in (MEMORIA_LUI, MEMORIA_LUI2))
+
+
+def parche_memoria_mapa(e, log):
+    if not exe_reconocido_memoria(e):
+        log.append("AVISO: no reconozco Memory_Init; el archivo de mapa se queda en 10,5 MB")
+        return False
+    for va, _, nuevo_ in (MEMORIA_LUI, MEMORIA_LUI2):
+        struct.pack_into("<I", e, va - 0xFF000, nuevo_)
+    log.append("Memoria: 11,5 MB para el archivo de mapa (antes 10,5; el trabajo del mapa vecino, que no hay, cede 1 MB)")
+    return True
+
+
 # ======================= IA propia de los bichos del King's Field (ia/kf1_ia.c) =======================
 # Un tipo de enemigo nuevo (chr.prm byte 0x02 = TIPO_KF1): la fila 0x53 de entity_type_handlers (0x3E6600 en
 # PAL; las filas 0x53-0x5F son "inertes" sin usar) apunta a KF1_Init (ia/kf1_ia.c, compilado por
@@ -4689,6 +4824,7 @@ def parchear_ejecutable(elf, giro, log, mando="dos_sticks", vida_numero=True, cr
         parche_escalon(e, log)
     if kf1_ia:
         parche_kf1_ia(e, log)
+    parche_memoria_mapa(e, log)
     if giro and abs(giro - 1.0) > 1e-6:
         hechos = 0
         for tabla, factor in ((GIRO_TOP, giro), (GIRO_GAIN, giro), (GIRO_LOSS, max(1.0, giro * 1.15))):
@@ -4811,7 +4947,7 @@ def ini_con_equipo(texto):
 
 
 def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", vida_numero=True, cruz=True, exp_menu=True,
-              pulpo=None):
+              pulpo=None, otros=None):
     """Copia la ISO una vez a '(valle).iso' y en las siguientes veces solo reescribe lo que cambia.
     debug_ini: '9999' etc. para que Partida nueva use ese ini de desarrollo; None = el normal."""
     base, ext = os.path.splitext(iso)
@@ -4857,6 +4993,12 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
     # 512 MB); y si tampoco, al final de la ISO (más allá de los 4 GB el lector de la PS2 se cuelga)
     destinos = {}
     destinos_chr = {m: {} for m in chrs}
+    otros = dict(otros or {})          # otros mapas nuevos {"037.map": bytes}: su entrada del DAT apunta a su sitio
+    for nombre_o, d_o in otros.items():
+        if len(d_o) > MAPA_MAXIMO:
+            raise RuntimeError(f"{nombre_o} ({len(d_o)} bytes) pasa de lo que el juego carga ({MAPA_MAXIMO})")
+    n_otro = {k: (len(d) + 2047) // 2048 * 2048 for k, d in otros.items()}
+    destinos_otro = {k: {} for k in otros}
 
     def buscar_en_dat(tabo, n, ocupados):
         """(offset en el DAT, nombres) de mapas seguidos que este mod no usa con n bytes, o None."""
@@ -4914,9 +5056,21 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
                 elif c and c[1] >= dummy_libre + n and c[0] >= d_off and c[0] + dummy_libre + n < (1 << 32):
                     destinos_chr[mdl][lg] = (c[0] + dummy_libre, "dentro de DUMMY.OUT")
                     dummy_libre += n
+        for nombre_o in otros:
+            n = n_otro[nombre_o]
+            m = buscar_en_dat(tabo, n, set(usados) | {nombre_o})
+            if m and d_off + m[0] + n < (1 << 32):
+                destinos_otro[nombre_o][lg] = (d_off + m[0], f"en su DAT, encima de {', '.join(m[1])}")
+                usados = list(usados) + m[1]
+            elif c and c[1] >= dummy_libre + n and c[0] >= d_off and c[0] + dummy_libre + n < (1 << 32):
+                destinos_otro[nombre_o][lg] = (c[0] + dummy_libre, "dentro de DUMMY.OUT")
+                dummy_libre += n
     for mdl in chrs:
         if not destinos_chr[mdl]:
             log.append(f"AVISO: no hay sitio seguro para chr/c{mdl:04d}.chr: va otro bicho en su lugar")
+    for nombre_o in otros:
+        if not destinos_otro[nombre_o]:
+            log.append(f"AVISO: no hay sitio para {nombre_o}: ese nivel no se pone")
     with open(out, "r+b") as f:
         f.truncate(fin_original)
         if grande:
@@ -4927,6 +5081,10 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
             for pos in sorted({d for d, _ in destinos_chr[mdl].values()}):
                 f.seek(pos)
                 f.write(datos_chr + bytes((-len(datos_chr)) % 2048))
+        for nombre_o, d_o in otros.items():
+            for pos in sorted({d for d, _ in destinos_otro[nombre_o].values()}):
+                f.seek(pos)
+                f.write(d_o + bytes((-len(d_o)) % 2048))
         total = f.seek(0, 2)
         f.seek(16 * 2048 + 80)            # tamaño del volumen (descriptor primario), por si algo lo mira
         f.write(struct.pack("<I", total // 2048) + struct.pack(">I", total // 2048))
@@ -4934,6 +5092,9 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
         log.append(f"Mapa de {len(new_map) // 1024} KB: no cabe en su hueco del DAT ({hueco0 // 1024} KB)")
         for lg, (pos, donde) in destinos.items():
             log.append(f"  {lg}: {donde} (byte {pos} de la ISO)")
+    for nombre_o, d_o in otros.items():
+        for lg, (pos, donde) in destinos_otro[nombre_o].items():
+            log.append(f"{nombre_o} (nivel nuevo) de {len(d_o) // 1024} KB  {lg}: {donde} (byte {pos} de la ISO)")
     for mdl, datos_chr in chrs.items():
         if destinos_chr[mdl]:
             log.append(f"chr/c{mdl:04d}.chr de {len(datos_chr) // 1024} KB")
@@ -4945,6 +5106,10 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
             continue
         _, orig = _dat_table(iso, lang)
         with open(out, "r+b") as f:
+            for nombre_o, d_o in otros.items():
+                if lang in destinos_otro[nombre_o] and nombre_o in orig:
+                    f.seek(orig[nombre_o][0] + 0x34)
+                    f.write(struct.pack("<III", len(d_o), n_otro[nombre_o], destinos_otro[nombre_o][lang][0] - dat_off))
             rec, _, alloc, off = orig["099.map"]
             if grande:
                 f.seek(rec + 0x34)
@@ -5270,6 +5435,25 @@ def preparar_registros(src, v, log):
     return chrs, regs, respaldo
 
 
+# si un mapa no cabe en la memoria de mapas se repite: primero quitando las caras que la roca tapa entera, luego
+# fundiendo a negro (y quitando) antes lo que queda bajo el agua
+PASOS_RECORTE = [("parte del decorado (solo barriles, mesas, sillas, la fuente...)",
+                  lambda km: setattr(km, "PROPS_NIVEL", 1)),
+                 ("el decorado (menos la fuente)", lambda km: setattr(km, "PROPS_NIVEL", 0)),
+                 ("lo hondo bajo el agua (negro desde 1,5 m)", lambda km: setattr(km, "FUNDIDO_AGUA", 1.5)),
+                 ("caras tapadas por la roca", lambda km: setattr(km, "QUITAR_OCULTAS", True)),
+                 ("toda cara que mira a roca (puede faltar alguna en lo alto de los riscos)",
+                  lambda km: setattr(km, "OCULTAS_ESTRICTO", True)),
+                 ("la luz pintada de las puertas (cada puerta de un solo tono: las iguales comparten modelo)",
+                  lambda km: globals().__setitem__("PANELES_LUZ_UNICA", True)),
+                 ("trozos más grandes (de muy cerca puede faltar algún triángulo un momento)",
+                  lambda km: (setattr(km, "LADO_MAXIMO", 5.5), globals().__setitem__("TROZO_MAX", 3.8))),
+                 ("trozos aún más grandes", lambda km: (setattr(km, "LADO_MAXIMO", 8.0),
+                                                       globals().__setitem__("TROZO_MAX", 5.2)))]
+MALLA_POR_DEFECTO = {}
+MAPA_NIVEL1 = 37          # la entrada del DAT del 037.map (su sitio lo ocupa el 099 grande) lleva el nivel 1
+
+
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
@@ -5279,6 +5463,7 @@ def main():
     mando = "dos_sticks"
     zona = "prologo"
     mapa_json = "mapa_torre.json"
+    nivel1_json = None
     debug_ini = None
     for i, a in enumerate(sys.argv):
         if a == "--semilla" and i + 1 < len(sys.argv):
@@ -5289,6 +5474,9 @@ def main():
             args = [x for x in args if x != sys.argv[i + 1]]
         if a == "--mapa" and i + 1 < len(sys.argv):
             mapa_json = sys.argv[i + 1]
+            args = [x for x in args if x != sys.argv[i + 1]]
+        if a == "--nivel1" and i + 1 < len(sys.argv):     # el nivel 1 del King's Field portado (otro .json)
+            nivel1_json = sys.argv[i + 1]
             args = [x for x in args if x != sys.argv[i + 1]]
         if a == "--zona" and i + 1 < len(sys.argv):
             zona = sys.argv[i + 1].lower()
@@ -5344,6 +5532,23 @@ def main():
                 src_path = os.path.join(carpeta, isos[0])
                 break
     src = md.Source(src_path)
+    if nivel1_json:
+        NIVEL_MAPA[1] = MAPA_NIVEL1
+    # el ejecutable de la ISO: si se le puede dar más memoria al mapa (parche_memoria_mapa), los mapas pueden ser
+    # más grandes (en las ISO de prueba sin ejecutable, también)
+    global MAPA_MAXIMO
+    try:
+        exe_ = next((k for k in getattr(src, "iso_files", {}) if k.startswith(("SLES_", "SLUS_", "SCES_", "SLPS_"))), None)
+        if exe_:
+            o_, n_ = src.iso_files[exe_]
+            with open(src_path, "rb") as f_:
+                f_.seek(o_)
+                if exe_reconocido_memoria(f_.read(n_)):
+                    MAPA_MAXIMO = MAPA_MAXIMO_GRANDE
+        elif getattr(src, "kind", "") == "ISO":
+            MAPA_MAXIMO = MAPA_MAXIMO_GRANDE
+    except Exception:
+        pass
     d099 = src.read("099.map")
     d031 = src.read("031.map")
     outdir = os.path.join(here, "kf4_valle")
@@ -5376,17 +5581,13 @@ def main():
         # si no cabe en la memoria de mapas se repite: primero quitando las caras que la roca tapa entera, luego
         # fundiendo a negro (y quitando) antes lo que queda bajo el agua
         import kf_malla
-        pasos = [("parte del decorado (solo barriles, mesas, sillas, la fuente...)",
-                  lambda: setattr(kf_malla, "PROPS_NIVEL", 1)),
-                 ("el decorado (menos la fuente)", lambda: setattr(kf_malla, "PROPS_NIVEL", 0)),
-                 ("lo hondo bajo el agua (negro desde 1,5 m)", lambda: setattr(kf_malla, "FUNDIDO_AGUA", 1.5)),
-                 ("caras tapadas por la roca", lambda: setattr(kf_malla, "QUITAR_OCULTAS", True)),
-                 ("toda cara que mira a roca (puede faltar alguna en lo alto de los riscos)",
-                  lambda: setattr(kf_malla, "OCULTAS_ESTRICTO", True))]
-        for nombre, aplicar in pasos:
+        global MALLA_POR_DEFECTO
+        MALLA_POR_DEFECTO = {k: getattr(kf_malla, k) for k in ("PROPS_NIVEL", "FUNDIDO_AGUA", "QUITAR_OCULTAS",
+                                                              "OCULTAS_ESTRICTO", "PAREDES_REALES", "LADO_MAXIMO")}
+        for nombre, aplicar in PASOS_RECORTE:
             if len(new_map) <= MAPA_MAXIMO:
                 break
-            aplicar()
+            aplicar(kf_malla)
             log.append(f"El mapa no cabía ({len(new_map)} bytes): se repite quitando {nombre}")
             v = kf4_editor.MapaEditor(semilla, ruta)
             v.construir()
@@ -5395,8 +5596,46 @@ def main():
             new_map, stats = generar_mapa(src, v, rumbo, log, d099, d031, cruz)
     with open(os.path.join(outdir, "099.map"), "wb") as o:
         o.write(new_map)
+    otros = {}
+    if nivel1_json and zona == "editor":
+        # el nivel 1 del King's Field: otro mapa (NIVEL_MAPA[1]), construido igual, con sus bichos en el mismo
+        # chr.prm (los registros y .chr nuevos de los dos mapas juntos)
+        import kf4_editor
+        import kf_malla
+        ruta1 = nivel1_json if os.path.isabs(nivel1_json) else os.path.join(here, nivel1_json)
+        if not os.path.isfile(ruta1):
+            raise SystemExit(f"No encuentro {ruta1}")
+        for k, v0 in MALLA_POR_DEFECTO.items():
+            setattr(kf_malla, k, v0)
+        globals()["TROZO_MAX"] = TROZO_MAX_ORIGINAL
+        globals()["PANELES_LUZ_UNICA"] = False
+        print(f"Generando el nivel 1 ({os.path.basename(ruta1)})...")
+        log.append(f"Nivel 1: {os.path.basename(ruta1)} -> {NIVEL_MAPA[1]:03d}.map")
+        v1 = kf4_editor.MapaEditor(semilla, ruta1)
+        v1.construir()
+        fijar_offset(v1)
+        pulpo1 = preparar_registros(src, v1, log)
+        mapa1, _ = generar_mapa(src, v1, rumbo, log, d099, d031, cruz)
+        for nombre, aplicar in PASOS_RECORTE:
+            if len(mapa1) <= MAPA_MAXIMO:
+                break
+            aplicar(kf_malla)
+            log.append(f"El nivel 1 no cabía ({len(mapa1)} bytes): se repite quitando {nombre}")
+            v1 = kf4_editor.MapaEditor(semilla, ruta1)
+            v1.construir()
+            fijar_offset(v1)
+            pulpo1 = preparar_registros(src, v1, [])
+            mapa1, _ = generar_mapa(src, v1, rumbo, log, d099, d031, cruz)
+        otros[f"{NIVEL_MAPA[1]:03d}.map"] = mapa1
+        with open(os.path.join(outdir, f"{NIVEL_MAPA[1]:03d}.map"), "wb") as o:
+            o.write(mapa1)
+        if pulpo1:
+            # los del nivel 0 mandan (sus texturas salen de la memoria de vídeo de su nivel)
+            pulpo = ({**(pulpo1[0] or {}), **(pulpo[0] or {})}, {**(pulpo1[1] or {}), **(pulpo[1] or {})},
+                     {**(pulpo1[2] or {}), **(pulpo[2] or {})}) if pulpo else pulpo1
     if not solo and src.kind == "ISO":
-        iso_out, n = patch_iso(src_path, new_map, log, debug_ini, giro, mando, vida_numero, cruz, exp_menu, pulpo)
+        iso_out, n = patch_iso(src_path, new_map, log, debug_ini, giro, mando, vida_numero, cruz, exp_menu, pulpo,
+                               otros)
         log.append(f"ISO -> {iso_out}")
         with open(os.path.join(outdir, "iso_lista.txt"), "w", encoding="utf-8") as o:
             o.write(iso_out)

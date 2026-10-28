@@ -24,14 +24,14 @@ CELDA_M = 2.5
 # --- enemigos: modelo de KF (EntityMeshID) -> (nombre, registro de chr.prm del 4, vuela) ---
 # (el 9 no se pone: es una llamita estática de 1 punto de experiencia que hay a montones por los niveles)
 ENEMIGOS = {
-    0: ("Green Slime", 2, False), 12: ("Green Slime", 2, False), 13: ("Green Slime", 2, False),
+    0: ("Green Slime", 94, False), 12: ("Green Slime", 2, False), 13: ("Green Slime", 2, False),
     19: ("Green Slime", 2, False), 1: ("Poison Slime", 3, False),
     2: ("Sigill", 6, False),                       # araña
-    4: ("Baltail", 16, False),                     # salamandra
+    4: ("Baltail", 96, True),                      # el suyo (kf4_portar, sobre el murciélago)
     6: ("Sting Fly", 10, True),                    # murciélago de sangre
     10: ("Ghost", 85, True),                       # segador
     11: ("Reik", 24, False),                       # armadura viviente
-    14: ("Head Eater", 18, False),                 # phagos
+    14: ("Head Eater", 95, False),                 # el suyo (kf4_portar, sobre la planta)
     15: ("Mogle", 12, False),                      # critter
     16: ("Snail", 63, False),                      # caracol gigante (MO.T[16]): kf4_caracol, registro 63 nuevo
     34: ("Copper Knight", 24, False),
@@ -55,7 +55,7 @@ ENEMIGOS = {
     107: ("Dragon Grass", 49, False),              # flor oscura
 }
 # vida de cada registro del 4 (chr.prm +0x0A), para repartir los que no caben entre los que sí
-VIDA = {77: 175, 65: 125, 63: 75, 48: 400, 13: 200, 2: 60, 3: 60, 6: 100, 10: 54, 11: 105, 12: 750, 16: 550, 18: 1, 19: 600, 24: 1800, 32: 3000, 34: 4500,
+VIDA = {94: 75, 95: 70, 96: 60, 77: 175, 65: 125, 63: 75, 48: 400, 13: 200, 2: 60, 3: 60, 6: 100, 10: 54, 11: 105, 12: 750, 16: 550, 18: 1, 19: 600, 24: 1800, 32: 3000, 34: 4500,
         39: 500, 40: 1400, 49: 500, 50: 250, 56: 210, 58: 800, 66: 1300, 67: 900, 68: 900, 73: 3800, 75: 5500,
         81: 205, 85: 300, 92: 200, 93: 540}
 # jefes y bichos enormes del 4: cuelgan el juego al cargar el mapa (probado con el 34, Earth King, y el 75,

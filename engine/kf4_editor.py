@@ -760,6 +760,11 @@ class MapaEditor(kp.Prologo):
         # hacia dónde mira cada enemigo al aparecer (el giro del mapa, como los cofres; sin él, al azar)
         self.giros = {(float(e["x"]), float(e["y"]), z_de(e)): float(e["giro"])
                       for e in m.get("enemigos", []) if e.get("giro") is not None}
+        # cambios de nivel de un mapa portado (kf4_valle.guion_niveles): salidas (área en el suelo y nivel al que
+        # llevan) y dónde se aparece al venir de cada nivel
+        self.kf_nivel = int((m.get("kf_malla") or {}).get("nivel", -1))
+        self.kf_salidas = [dict(s_) for s_ in m.get("salidas", []) if isinstance(s_, dict)]
+        self.kf_llegadas = {int(k): dict(v_) for k, v_ in (m.get("llegadas") or {}).items()}
         # cofres, puertas y paredes que se abren de un mapa portado (kf4_valle.colocar_objetos_kf)
         self.kf_objetos = [{"tipo": o["tipo"], "pos": (float(o["x"]), float(o["y"]), z_de(o)),
                             "giro": float(o.get("giro", 0.0)), "medida": o.get("medida"),

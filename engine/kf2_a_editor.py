@@ -655,6 +655,7 @@ def poner_enemigos_kf1(m, arch, nivel):
                                                           vecinos, techo_de, es_agua)
     m["enemigos"], m["items"] = enemigos, items
     m["kf_objetos"] = resto              # cofres (con lo que llevan dentro), puertas y paredes que se abren
+    salidas_y_llegadas(m, arch, nivel, pad, ox, oy, altura_capa)
     print("Enemigos: " + (", ".join(f"{n} {t}" for t, n in res["enemigos"].most_common()) or "ninguno"))
     print(f"  tipos del 4 usados: {', '.join(res['tipos_kf4'])}"
           + (f"  (otros cambiados: {res['cambiados']})" if res["cambiados"] else ""))
@@ -662,6 +663,50 @@ def poner_enemigos_kf1(m, arch, nivel):
         print(f"  sin equivalente (no se ponen): modelos {dict(res['sin_equivalente'])}")
     print(f"Objetos por el suelo: {res['objetos']}  cofres: {res['cofres']}  puertas: {res['puertas']}  "
           f"paredes secretas: {res['secretas']}")
+
+
+def salidas_y_llegadas(m, arch, nivel, pad, ox, oy, altura_capa):
+    """Los cambios de nivel del King's Field (objeto 240 con destino: su casilla de destino en los finos X, Y y el
+    nivel en el byte 4 de sus parámetros; el área, parámetros 2 y 3 en casillas). m["salidas"]: [{x, y, z,
+    medio_x, medio_y (m), nivel}]; m["llegadas"]: {nivel de origen: {x, y, z}} donde se aparece al venir de ese
+    nivel. Si se llega de un nivel anterior, el inicio del mapa es esa llegada."""
+    import kf1_objetos
+
+    def centro(fila_x, col_y, w=1, h=1):
+        return (ox + (col_y + pad + h / 2.0) * CELDA, oy + (fila_x + pad + w / 2.0) * CELDA)
+
+    def suelo(fila_x, col_y, capa):
+        for c in (capa, 1 - capa):
+            z = altura_capa(col_y, fila_x, c)
+            if z is not None:
+                return round(z, 3)
+        return 0.0
+    salidas, llegadas = [], {}
+    n_niveles = len(arch["FDAT.T"]) // 3
+    for origen in range(n_niveles):
+        try:
+            _, objs = kf1_objetos.leer(arch["FDAT.T"], origen)
+        except Exception:
+            continue
+        for o in objs:
+            if o["id"] != 240 or o["fx"] == 255 or len(o["param"]) < 5:
+                continue
+            destino = o["param"][4]
+            if origen == nivel and destino != nivel:
+                w, h = max(1, o["param"][2]), max(1, o["param"][3])
+                X, Y = centro(o["x"], o["y"], w, h)
+                salidas.append({"x": round(X, 3), "y": round(Y, 3), "z": suelo(o["x"], o["y"], o["capa"]),
+                                "medio_x": round(h * CELDA / 2, 3), "medio_y": round(w * CELDA / 2, 3),
+                                "nivel": destino})
+            elif destino == nivel and origen != nivel and origen not in llegadas:
+                X, Y = centro(o["fx"], o["fy"])
+                llegadas[origen] = {"x": round(X, 3), "y": round(Y, 3), "z": suelo(o["fx"], o["fy"], 0)}
+    m["salidas"], m["llegadas"] = salidas, {str(k): v for k, v in llegadas.items()}
+    antes = [k for k in llegadas if k < nivel]
+    if antes:
+        a = llegadas[max(antes)]
+        m["inicio"] = {"x": a["x"], "y": a["y"], "rumbo": 0}
+    print(f"Cambios de nivel: salidas a {sorted({s_['nivel'] for s_ in salidas})}, llegadas desde {sorted(llegadas)}")
 
 
 def main():

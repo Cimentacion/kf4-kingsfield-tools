@@ -62,6 +62,7 @@ if "%EXP%"=="0" set OPC=%OPC% --sin-exp
 if "%DEBUG%"=="1" set OPC=%OPC% --debug
 if defined KF_QUITAR set OPC=%OPC% --quitar %KF_QUITAR%
 if defined KF_RELLENO set OPC=%OPC% --relleno %KF_RELLENO%
+if defined KF_NIVEL1 set OPC=%OPC% --nivel1 "%KF_NIVEL1%"
 %PY% kf4_valle.py %OPC%
 if errorlevel 1 (
   echo.

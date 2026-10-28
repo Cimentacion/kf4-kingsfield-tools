@@ -38,6 +38,12 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
+rem El nivel 0 lleva tambien el nivel 1 (se pasa de uno a otro por la salida del King's Field)
+set KF_NIVEL1=
+if "%NIVEL%"=="0" (
+  %PY% kf2_a_editor.py "%KF2%" 1 mapa_nivel1.json
+  if not errorlevel 1 set KF_NIVEL1=mapa_nivel1.json
+)
 echo.
 echo Tu mapa anterior esta en mapa_torre_antes_kf2.json. Generando y abriendo el juego...
 call JUGAR_VALLE.bat editor

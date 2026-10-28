@@ -444,7 +444,11 @@ class Atlas:
         fp = fs.get(huecos_tex[HUECO_PALETAS])
         self.paletas_libres = [fp["TBP"] + k for k in range(fp["W"] * fp["H"] // 2 // 256)] if fp else []
         self.clave_paletas = huecos_tex[HUECO_PALETAS]
-        self.sitio = {}          # región -> (hueco, x, y, lado, cbp)
+        self.sitio = {}          # región -> (hueco, x, y, lado en el atlas, cbp)
+        self.escala = {}         # región -> lado en el atlas / lado en el PS1 (1, 1/2 o 1/4)
+        self.reducidas = 0
+        self.por_imagen = {}     # (lado, índices) -> primera región con esa imagen
+        self.compartidas = 0
         self.agua_usos = collections.Counter()   # regiones de agua -> polígonos
         self.agua = None         # (índices 128x128, paleta 16 x RGBA) de la fuente del agua animada
         self.paletas = {}        # cbp -> paleta 16 x RGBA
@@ -453,21 +457,42 @@ class Atlas:
         """img: índices (lado x lado) de la región; pal: 16 x RGBA. Devuelve True si cupo."""
         if region in self.sitio:
             return True
-        lado = img.shape[0]
+        lado0 = img.shape[0]
         if not self.paletas_libres:
             return False
-        for h in self.huecos:
-            for (x, y) in list(h["libres"]):
-                celdas = [(x + dx, y + dy) for dy in range(0, lado, CELDA_ATLAS) for dx in range(0, lado, CELDA_ATLAS)]
-                if x + lado > h["f"]["W"] or y + lado > h["f"]["H"] or any(c not in h["libres"] for c in celdas):
-                    continue
-                for c in celdas:
-                    h["libres"].remove(c)
-                h["img"][y:y + lado, x:x + lado] = img
-                cbp = self.paletas_libres.pop(0)
-                self.paletas[cbp] = pal
-                self.sitio[region] = (h, x, y, lado, cbp)
-                return True
+        # la misma imagen (los mismos índices) con otra paleta: el mismo sitio del atlas, otra paleta
+        clave_img = (lado0, img.tobytes())
+        if clave_img in self.por_imagen:
+            otra = self.por_imagen[clave_img]
+            h, x, y, lado, _ = self.sitio[otra]
+            cbp = self.paletas_libres.pop(0)
+            self.paletas[cbp] = pal
+            self.sitio[region] = (h, x, y, lado, cbp)
+            self.escala[region] = self.escala.get(otra, 1.0)
+            self.compartidas += 1
+            return True
+        # si no cabe entera, a la mitad (o a la cuarta parte): se ve algo más borrosa pero se dibuja
+        for paso in (1, 2, 4):
+            lado = lado0 // paso
+            if lado < 16:
+                break
+            im = img[::paso, ::paso] if paso > 1 else img
+            for h in self.huecos:
+                for (x, y) in list(h["libres"]):
+                    celdas = [(x + dx, y + dy) for dy in range(0, lado, CELDA_ATLAS) for dx in range(0, lado, CELDA_ATLAS)]
+                    if x + lado > h["f"]["W"] or y + lado > h["f"]["H"] or any(c not in h["libres"] for c in celdas):
+                        continue
+                    for c in celdas:
+                        h["libres"].remove(c)
+                    h["img"][y:y + lado, x:x + lado] = im
+                    cbp = self.paletas_libres.pop(0)
+                    self.paletas[cbp] = pal
+                    self.sitio[region] = (h, x, y, lado, cbp)
+                    self.escala[region] = 1.0 / paso
+                    self.por_imagen[clave_img] = region
+                    if paso > 1:
+                        self.reducidas += 1
+                    return True
         return False
 
 
@@ -637,7 +662,8 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
             else:
                 a, b, c = P[0], P[1], P[2]
                 n = _norm(_cross(_sub(b, a), _sub(c, a)))
-            uv = [((ax + min(u - cu, lado)) / W, (ay + min(vv - cv, lado)) / H) for (u, vv) in uvs]
+            k_ = 1.0 if agua else atlas.escala.get(region, 1.0)
+            uv = [((ax + min((u - cu) * k_, lado)) / W, (ay + min((vv - cv) * k_, lado)) / H) for (u, vv) in uvs]
             sec = _SECRETA_ACTUAL[0]
             es_puerta = bool(sec) and len(sec) > 3 and sec[3]
             marco = es_puerta and len(sec) > 4 and sec[4] is not None and tuple(refs) not in sec[4]
@@ -1712,7 +1738,9 @@ def inyectar(tex_blob, atlas, log=None):
         blob[o:o + n] = np.where(cambio, vram[a4], viejo).astype(np.uint8).tobytes()
     if log is not None:
         log.append(f"Texturas del King's Field: {len(atlas.sitio)} regiones en {usados} huecos, "
-                   f"{len(atlas.paletas)} paletas propias")
+                   f"{len(atlas.paletas)} paletas propias"
+                   + (f" ({atlas.reducidas} a menor tamaño: no cabían enteras)" if atlas.reducidas else "")
+                   + (f" ({atlas.compartidas} comparten imagen con otra paleta)" if atlas.compartidas else ""))
     return bytes(blob)
 
 

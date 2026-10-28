@@ -1,6 +1,30 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 42 (2026-10-28)
+------------------------------------
+- King's Field level 1 is ported too, as its own KFIV map (it goes in the DAT entry of 037.map), and the two
+  levels are connected where King's Field connects them: the level change objects (240 with a destination) give
+  the exit area, the target level and the tile where you appear.
+  - Walking into the exit of level 0 takes you to level 1, at King's Field's arrival tile (it is level 1's map
+    start). Walking into level 1's exit to level 0 takes you back, to the tile where King's Field puts you.
+  - How: each map gets a new start script (0x7FFF; the old one keeps running under another label) that, when you
+    come from the other level, moves you to the arrival point, and starts a watcher thread that checks every 10
+    frames whether you stand in an exit area; then it leaves a mark in a free script variable
+    (script_spare_var_block_a) and changes map (script command 174).
+  - Level 1 exits to levels 2 and 5 do nothing yet.
+  - JUGAR_KF2.bat: porting level 0 also ports level 1 (mapa_nivel1.json) and builds both
+    (kf4_valle.py --nivel1).
+- More memory for map files: Memory_Init gives the map file 11.5 MB instead of 10.5 MB, taking 1 MB from the map
+  work area (its second half is for the neighbouring map KFIV preloads while you walk between maps; the ported
+  maps have no neighbours). Level 1 needs it (11.6 MB without part of its decoration).
+- Texture atlas: regions with the same image and another palette share their place (level 0 now uses 4 of the
+  13 texture slots instead of all of them); a region that still doesn't fit goes at half or quarter size instead
+  of being left out. Level 1 had 650 polygons without texture before.
+- Doors and secret walls with identical models share them; if a map doesn't fit, doors can also be made with a
+  single light tone so the equal ones share their model, and the near-camera pieces can be bigger.
+- Level 1 monsters use the ported King's Field ones where they exist (Head Eater, Baltail, green slime, snail).
+
 Alpha 0.1 - revision 41 (2026-10-28)
 ------------------------------------
 - Locked chests and doors like in King's Field: the key a chest lid or a door asks for (third byte of its
