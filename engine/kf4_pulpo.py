@@ -405,7 +405,7 @@ ORDEN_MOV = ["quieto", "golpeado", "golpe_fuerte", "muerte", "tinta", "latigo", 
 # ataque de cerca (el latigazo)
 # las del escarabajo (registro 39): 0 quieto, 3 y 4 andar, 14 y 15 golpeado, 16 muerte, 20 y 21 los golpes de cerca,
 # 23 el escupitajo
-ANIMACION = {0: 0, 3: 6, 4: 6, 13: 0, 14: 1, 15: 2, 16: 3, 20: 5, 21: 5, 23: 4}
+ANIMACION = {0: 0, 3: 6, 4: 6, 13: 0, 14: 1, 15: 2, 16: 3, 20: 5, 21: 5, 22: 5, 23: 4}
 MAGIA_TINTA = 152            # chr.prm del escarabajo 39: su escupitajo
 
 
@@ -546,12 +546,37 @@ def chr_con(flor, modelo, mov, tex):
 
 
 # ---------------- chr.prm ----------------
+TIPO_KF1 = 0x53            # kf4_valle.TIPO_KF1: la IA propia (ia/kf1_ia.c)
+
+
+def _latigo(r, i, peso, alcance_cm, angulo, golpe_cm, fuerzas, radio):
+    """Latigazo i (chr.prm 0x240 + 0x88 i) con los números del King's Field: lo elige si estás a menos de
+    alcance_cm (de centro a centro) y a menos de angulo grados de su frente; el golpe llega a golpe_cm del centro,
+    en un arco de angulo grados, a mitad de la animación (fotogramas 24-30 de los 50 del latigazo)."""
+    o = 0x240 + 0x88 * i
+    r[o:o + 0x88] = bytes(0x88)
+    r[o], r[o + 1], r[o + 2], r[o + 3] = peso, 0, 10, 0       # peso, gira hasta el fotograma 0, 10 de respiro
+    struct.pack_into("<HHf", r, o + 4, 0, max(1, round(alcance_cm - radio - 100)), math.radians(angulo))
+    struct.pack_into("<9h", r, o + 0x10, *fuerzas)
+    struct.pack_into("<HHHH", r, o + 0x30, max(1, round(golpe_cm - radio)), angulo, 24, 30)
+
+
+def _ia_kf1(r, peso_giro, empieza_cm, sigue_cm, anda_hasta_cm=0):
+    """Datos que lee la IA propia (ia/kf1_ia.c)."""
+    r[2] = TIPO_KF1
+    r[0x14], r[0x15] = peso_giro                  # girarse: peso nuevo / si ya se estaba girando
+    struct.pack_into("<f", r, 0x1C, math.pi)      # te ve alrededor (en el King's Field, por la distancia)
+    struct.pack_into("<H", r, 0x18, max(1200, empieza_cm))
+    struct.pack_into("<hhhhh", r, 0x436, 0, anda_hasta_cm, empieza_cm, sigue_cm, 12)
+    r[0x3D8] = 0                                  # no escupe (en el King's Field tampoco)
+
+
 def pulpo_prm(base_rec):
-    """El Kraken grande, como en el King's Field (clase 0 del nivel 0, sus acciones del disco: docs/kf1_ia.md):
-    no se mueve (su "moverse" tiene velocidad 0: solo se gira hacia ti, desde 12 m), no escupe y tiene tres
-    latigazos: dos de 7 m (daño 100 y 120) y uno de 9,5 m (140). Aquí, sobre la IA del escarabajo (tipo 5): su
-    andar con la animación de quieto (sin avance: se queda en su sitio y se gira), los dos golpes de cerca del IV
-    y sin ataque a distancia. Daño a la escala del resto del port (el del King's Field / 3)."""
+    """El Kraken grande, como en el King's Field (clase 0 del nivel 0, sus acciones del disco: docs/kf1_ia.md),
+    con su IA propia (ia/kf1_ia.c, tipo TIPO_KF1): no anda; desde 12,2 m se gira hacia ti (hasta 14,6 m si ya
+    te seguía) y elige al azar como allí entre girarse (peso 100 / 140) y tres latigazos: 7,1 m (peso 160, daño
+    100), 7,1 m (160, 120) y 9,5 m (120, 140 + 64), a 52, 52 y 44 grados. Daño a la escala del resto del port
+    (el del King's Field / 3). Sobre el escarabajo (tipo 5): sus reacciones a los golpes y su muerte."""
     r = bytearray(base_rec)
     struct.pack_into("<H", r, 0, MODELO_PULPO)
     struct.pack_into("<H", r, 0x0A, 400)          # vida (1500 en el King's Field, a la cuarta parte)
@@ -564,28 +589,20 @@ def pulpo_prm(base_rec):
     ids = [0] * 0x20
     for anim, mov in ANIMACION.items():
         ids[anim] = mov
-    ids[3] = ids[4] = 0                           # andar = quieto: no avanza (en el King's Field, velocidad 0)
+    ids[3] = ids[4] = 0                           # girarse = quieto: no avanza (en el King's Field, velocidad 0)
     r[0x60:0x80] = bytes(ids)
-    o = 0x240
-    # latigazo corto: 7 m (5760 unidades del PS1), golpe a la mitad de la animación, a 1,2 m de altura, 52 grados
-    struct.pack_into("<HHf", r, o + 4, 0, 700, math.radians(52))
-    h = o + 0x10
-    struct.pack_into("<9h", r, h, 0, 37, 0, 0, 0, 0, 0, 0, 0)
-    struct.pack_into("<HHHH", r, h + 0x20, 700, 120, 24, 30)
-    # latigazo largo: 9,5 m, más fuerte (140 en el King's Field), 44 grados, algo menos frecuente (120 / 160)
-    o2 = o + 0x88
-    r[o2:o2 + 0x88] = r[o:o + 0x88]
-    r[o2] = 75
-    struct.pack_into("<HHf", r, o2 + 4, 0, 950, math.radians(44))
-    struct.pack_into("<9h", r, o2 + 0x10, 0, 47, 0, 0, 0, 0, 0, 0, 0)
-    struct.pack_into("<HHHH", r, o2 + 0x10 + 0x20, 950, 120, 24, 30)
-    r[0x3D8] = 0                                  # no escupe (en el King's Field tampoco)
+    radio = struct.unpack_from("<H", r, 0xCC)[0]
+    _latigo(r, 0, 160, 707, 52, 703, (0, 33, 0, 0, 0, 0, 0, 0, 0), radio)
+    _latigo(r, 1, 160, 707, 52, 703, (0, 40, 0, 0, 0, 0, 0, 0, 0), radio)
+    _latigo(r, 2, 120, 951, 44, 945, (0, 47, 21, 0, 0, 0, 0, 0, 0), radio)
+    _ia_kf1(r, (100, 140), 1220, 1460)
     return bytes(r)
 
 
 def mini_prm(grande_rec):
-    """El pulpito (clases 18, 27 y 29 del nivel 0): este sí anda (velocidad 31, como el andar del IV) y se queda a
-    2-2,6 m de ti; latigazos de 3,3 m (daño 37) y 4,1 m (45). Vida 250 en el King's Field (a la cuarta parte)."""
+    """El pulpito (clases 18, 27 y 29 del nivel 0): este sí anda (se arrastra hasta 2,6 m de ti, como allí, que se
+    queda a 2-2,6 m); latigazos de 3,3 m (daño 37), 3,3 m (37) y 4,1 m (45). Vida 250 en el King's Field (a la
+    cuarta parte)."""
     r = bytearray(grande_rec)
     struct.pack_into("<H", r, 0x0A, 65)
     struct.pack_into("<H", r, 0x0E, 12)
@@ -593,14 +610,9 @@ def mini_prm(grande_rec):
     ids = list(r[0x60:0x80])
     ids[3] = ids[4] = ANIMACION[3]                # este sí se arrastra
     r[0x60:0x80] = bytes(ids)
-    o = 0x240
-    struct.pack_into("<HHf", r, o + 4, 0, 330, math.radians(52))
-    struct.pack_into("<9h", r, o + 0x10, 0, 13, 0, 0, 0, 0, 0, 0, 0)
-    struct.pack_into("<HHHH", r, o + 0x30, 330, 35, 24, 30)
-    o2 = o + 0x88
-    r[o2] = 45
-    struct.pack_into("<HHf", r, o2 + 4, 0, 410, math.radians(44))
-    struct.pack_into("<9h", r, o2 + 0x10, 0, 15, 0, 0, 0, 0, 0, 0, 0)
-    struct.pack_into("<HHHH", r, o2 + 0x30, 410, 35, 24, 30)
-    r[0x3D8] = 0
+    radio = struct.unpack_from("<H", r, 0xCC)[0] * MINI_ESCALA / 100.0
+    _latigo(r, 0, 160, 328, 52, 328, (0, 12, 0, 0, 0, 0, 0, 0, 0), radio)
+    _latigo(r, 1, 160, 328, 52, 328, (0, 12, 0, 0, 0, 0, 0, 0, 0), radio)
+    _latigo(r, 2, 120, 414, 44, 414, (0, 15, 0, 0, 0, 0, 0, 0, 0), radio)
+    _ia_kf1(r, (100, 140), 1220, 1460, anda_hasta_cm=256)
     return bytes(r)

@@ -1,6 +1,20 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 37 (2026-10-28)
+------------------------------------
+- Kraken and baby Krakens have their own AI now, a new KFIV enemy type (0x53) written in C (engine/ia/kf1_ia.c)
+  and compiled into the executable as an extra ELF segment after the end of the program (the heap starts after
+  it). It decides like King's Field: each decision, turning towards you and each whip in reach draw a random
+  number up to their King's Field weight and the highest wins.
+- Kraken: doesn't walk, turns towards you from 12.2 m (keeps doing it up to 14.6 m), three whips like King's
+  Field: 7.1 m (52 degrees), 7.1 m (stronger) and 9.5 m (44 degrees). It keeps seeing you even if something is in
+  the way (the beetle AI stopped attacking when the line of sight was blocked).
+- Whip hits now reach as far as the whip is chosen from (before, the choice used the reach plus the body radius
+  plus 1 m, and the hit only the reach).
+- Baby Krakens: crawl up to 2.6 m from you, whips at 3.3, 3.3 and 4.1 m.
+- If the executable isn't the known SLES_509.20, they fall back to the beetle AI.
+
 Alpha 0.1 - revision 36 (2026-10-28)
 ------------------------------------
 - Kraken as in King's Field (its actions read from the game data and executable: docs/kf1_ia.md). It doesn't

@@ -1,0 +1,26 @@
+{
+ "va": 31846912,
+ "tam": 1728,
+ "init": 31848448,
+ "think": 31848508,
+ "juego": {
+  "Beetle_Init": 1231520,
+  "EntityAi_SensePlayer": 1659048,
+  "EntityAi_StepState": 1626616,
+  "EntityAi_StartAction": 1655024,
+  "EntityAi_TurnCommand": 1635352,
+  "EntityAi_MeleeAttack": 1574528,
+  "rand": 2367904,
+  "frame_counter": 4512852,
+  "player_state": 4273984
+ },
+ "firmas": {
+  "Beetle_Init": "b0ffbd279f0005240000b0ffffff0324",
+  "EntityAi_SensePlayer": "c0ffbd272000b2ff1000b1ff2d90a000",
+  "EntityAi_StepState": "cc0085900100062400160500031e0200",
+  "EntityAi_StartAction": "f0ffbd270000bfffca0080a05400828c",
+  "EntityAi_TurnCommand": "d0ffbd271000b1ff0000b0ff2d880000",
+  "EntityAi_MeleeAttack": "b0ffbd273000b3ff2000b2ff1000b1ff",
+  "rand": "4400023cc641043c3418458c6d4e8434"
+ }
+}

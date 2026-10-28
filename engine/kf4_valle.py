@@ -4549,8 +4549,63 @@ def para_arma_con_exp(d_equip_a, d_option):
     return _para_bytes(regs + nuevos, d_equip_a)
 
 
+
+# ======================= IA propia de los bichos del King's Field (ia/kf1_ia.c) =======================
+# Un tipo de enemigo nuevo (chr.prm byte 0x02 = TIPO_KF1): la fila 0x53 de entity_type_handlers (0x3E6600 en
+# PAL; las filas 0x53-0x5F son "inertes" sin usar) apunta a KF1_Init (ia/kf1_ia.c, compilado por
+# ia/construir.py). El código va en un segmento nuevo del ELF, justo tras el final del programa (_end), y el
+# montón (SetupHeap del arranque) empieza después. Sus bytes en el archivo van sobre las secciones .DVP.* (tablas
+# de depuración de las microprogramas del VU, que el cargador no lee).
+TIPO_KF1 = 0x53
+TABLA_TIPOS = 0x3E6600
+UPDATE_IA = 0x180D18                  # EntityAi_Update
+FILA_INERTE = (0x123680, 0x123728)    # Entity_InitInert, Entity_UpdateInert
+IA_OFF_ARCHIVO = 0x34EE00             # dentro de .DVP.ovlystrtab / overlays (no se cargan)
+IA_OFF_LIMITE = 0x3516E4              # tabla de secciones
+MONTON_LUI, MONTON_ADDIU = 0x10006C, 0x100074     # SetupHeap(_end, -1) en __start
+MONTON_ORIG = (0x3C0401E6, 0x2484F1B0)
+IA_KF1_OK = False                     # lo pone parche_kf1_ia; sin él los bichos con TIPO_KF1 vuelven al escarabajo
+
+
+def parche_kf1_ia(e, log):
+    global IA_KF1_OK
+    import json
+    IA_KF1_OK = False
+    aqui = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ia")
+    try:
+        info = json.load(open(os.path.join(aqui, "kf1_ia.json")))
+        code = open(os.path.join(aqui, "kf1_ia.bin"), "rb").read()
+    except OSError:
+        log.append("AVISO: falta ia/kf1_ia.bin; el Kraken usa la IA del escarabajo")
+        return
+    fo = lambda va: va - 0xFF000
+    ok = all(bytes(e[fo(info["juego"][k]):fo(info["juego"][k]) + 16]).hex() == f
+             for k, f in info.get("firmas", {}).items()) and info.get("firmas")
+    ok = ok and struct.unpack_from("<H", e, 0x2C)[0] == 1 and struct.unpack_from("<I", e, 0x1C)[0] == 0x34
+    ok = ok and not any(e[0x54:0x74])
+    ok = ok and struct.unpack_from("<II", e, fo(TABLA_TIPOS + 8 * TIPO_KF1)) == FILA_INERTE
+    ok = ok and (struct.unpack_from("<I", e, fo(MONTON_LUI))[0], struct.unpack_from("<I", e, fo(MONTON_ADDIU))[0]) \
+        == MONTON_ORIG
+    ok = ok and IA_OFF_ARCHIVO + len(code) <= IA_OFF_LIMITE and len(e) >= IA_OFF_LIMITE
+    if not ok:
+        log.append("AVISO: no reconozco el ejecutable para la IA del King's Field; el Kraken usa la del escarabajo")
+        return
+    va = info["va"]
+    e[IA_OFF_ARCHIVO:IA_OFF_ARCHIVO + len(code)] = code
+    struct.pack_into("<IIIIIIII", e, 0x54, 1, IA_OFF_ARCHIVO, va, va, len(code), len(code), 7, 0x10)
+    struct.pack_into("<H", e, 0x2C, 2)
+    monton = (va + len(code) + 0xFF) & ~0xFF
+    hi, lo = _hi_lo(monton)
+    struct.pack_into("<I", e, fo(MONTON_LUI), 0x3C040000 | hi)
+    struct.pack_into("<I", e, fo(MONTON_ADDIU), 0x24840000 | lo)
+    struct.pack_into("<II", e, fo(TABLA_TIPOS + 8 * TIPO_KF1), info["init"], UPDATE_IA)
+    IA_KF1_OK = True
+    log.append(f"IA del King's Field: tipo de enemigo {TIPO_KF1:#x} nuevo ({len(code)} bytes de código en {va:#x}):"
+               " Kraken y pulpitos eligen como en el King's Field")
+
+
 def parchear_ejecutable(elf, giro, log, mando="dos_sticks", vida_numero=True, cruz=True, exp_menu=True, cruz_off=None,
-                        escalon=True):
+                        escalon=True, kf1_ia=True):
     """Devuelve el ejecutable con el giro multiplicado y el mando cambiado. Siempre parte del original.
     mando: 'dos_sticks', 'dos_sticks_invertido' u 'original'."""
     e = bytearray(elf)
@@ -4610,6 +4665,8 @@ def parchear_ejecutable(elf, giro, log, mando="dos_sticks", vida_numero=True, cr
             log.append("AVISO: este ejecutable no es el SLES_509.20 que conozco; mando sin cambiar")
     if escalon:           # (solo para los mapas portados: sus escalones de casilla son de 0,78 y 1,25 m)
         parche_escalon(e, log)
+    if kf1_ia:
+        parche_kf1_ia(e, log)
     if giro and abs(giro - 1.0) > 1e-6:
         hechos = 0
         for tabla, factor in ((GIRO_TOP, giro), (GIRO_GAIN, giro), (GIRO_LOSS, max(1.0, giro * 1.15))):
@@ -4950,6 +5007,8 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
                         if mdl is not None and lang not in destinos_chr.get(mdl, {}):
                             rec = chr_nuevo[resp * 0x450:(resp + 1) * 0x450]   # sin sitio para su modelo: otro
                         chr_nuevo[r0:r0 + 0x450] = rec
+                        if chr_nuevo[r0 + 2] == TIPO_KF1 and not IA_KF1_OK:
+                            chr_nuevo[r0 + 2] = 5                        # sin la IA nueva: la del escarabajo
                     chr_nuevo = bytes(chr_nuevo)
                 f.seek(dat_off + oc)
                 f.write(chr_nuevo)

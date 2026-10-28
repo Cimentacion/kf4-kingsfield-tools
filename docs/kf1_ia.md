@@ -81,3 +81,27 @@ Kraken grande: 1500 de vida, 450 de experiencia.
 
 Pulpito: 250 de vida, 12 de experiencia. Sí anda (velocidad 31) y se queda a 2-2,6 m de ti. Latigazos de 3,3 m
 (37), 3,3 m (37) y 4,1 m (45). Su cabeza (clase 19): 250 de vida, 3 de experiencia, quieta.
+
+## En el King's Field IV: la IA propia (engine/ia)
+
+Los bichos del King's Field tienen un tipo de enemigo nuevo en el IV, el 0x53 (byte 0x02 del chr.prm). Las filas
+0x53-0x5F de `entity_type_handlers` (0x3E6600 en el SLES_509.20, kfiv-decomp) no las usa nadie; la 0x53 apunta
+a `KF1_Init` (engine/ia/kf1_ia.c), compilado con clang para MIPS II (o32, solo float) por engine/ia/construir.py,
+que comprueba que solo haya instrucciones del EE. El código va en un segmento nuevo del ELF justo tras el final
+del programa (0x1E5F200) y el montón del arranque empieza después. kf4_valle.parche_kf1_ia lo pone si las
+funciones del juego que llama tienen los bytes que se esperan; si no, los bichos vuelven a la IA del escarabajo.
+
+`KF1_Init` llama a `Beetle_Init` (golpes recibidos, muerte, moverse) y cambia su "pensar" por `KF1_Think`:
+- te ve (EntityAi_SensePlayer en modo 2: aunque algo tape la vista) desde chr.prm 0x43A cm (sigue hasta 0x43C);
+- cada decisión, como en el King's Field: girarse saca rand(0..peso) (0x14 nuevo, 0x15 si ya se giraba) y cada
+  latigazo al alcance (distancia, ángulo y altura de su registro de 0x240) rand(0..su peso); gana el mayor;
+- el latigazo es EntityAi_MeleeAttack con las ventanas de golpe del registro; girarse es EntityAi_Move con
+  EntityAi_TurnCommand; si 0x438 no es 0 anda hasta esa distancia (el pulpito);
+- mientras se gira no decide en cada fotograma: espera 0x43E fotogramas.
+
+| | Kraken | pulpito |
+|---|---|---|
+| girarse (pesos) | 100 / 140 | 100 / 140 |
+| latigazos (peso, alcance, ángulo) | 160 7,1 m 52°; 160 7,1 m 52°; 120 9,5 m 44° | 160 3,3 m; 160 3,3 m; 120 4,1 m |
+| anda | no | hasta 2,6 m de ti |
+| te sigue | de 12,2 m (14,6 si ya te seguía) | igual |
