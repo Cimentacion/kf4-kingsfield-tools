@@ -145,11 +145,11 @@ def rebanadas(w, n, celdas):
     return [t for t in trozos if t]
 
 
-def _distancias(celdas, otras, B=8):
-    """{casilla: distancia (en casillas) a la más cercana de otras}. Sin numpy ni scipy (en Windows no siempre
+def _cercanas(celdas, otras, B=8):
+    """{casilla: (distancia, la más cercana de otras)} (en casillas). Sin numpy ni scipy (en Windows no siempre
     están): las otras se reparten en cubos de B x B casillas y se miran los cubos en anillos crecientes."""
     if not otras:
-        return {c: 1e9 for c in celdas}
+        return {c: (1e9, None) for c in celdas}
     cubos = collections.defaultdict(list)
     for o in otras:
         cubos[(o[0] // B, o[1] // B)].append(o)
@@ -159,23 +159,247 @@ def _distancias(celdas, otras, B=8):
     out = {}
     for c in celdas:
         cx, cy = c[0] // B, c[1] // B
-        mejor = None
+        mejor, cual = None, None
         r = 0
-        while r <= lim:
+        while r <= lim + abs(cx - xs[0]) + abs(cy - ys[0]):
             for i in range(cx - r, cx + r + 1):
                 for j in range(cy - r, cy + r + 1):
                     if max(abs(i - cx), abs(j - cy)) != r:
                         continue
                     for o in cubos.get((i, j), ()):
                         d = (o[0] - c[0]) ** 2 + (o[1] - c[1]) ** 2
-                        if mejor is None or d < mejor:
-                            mejor = d
+                        if mejor is None or d < mejor or (d == mejor and o < cual):
+                            mejor, cual = d, o
             # lo que quede más allá del anillo r está a más de (r * B) casillas
             if mejor is not None and math.sqrt(mejor) <= r * B:
                 break
             r += 1
-        out[c] = math.sqrt(mejor) if mejor is not None else 1e9
+        out[c] = (math.sqrt(mejor), cual) if mejor is not None else (1e9, None)
     return out
+
+
+def _distancias(celdas, otras):
+    """{casilla: distancia (en casillas) a la más cercana de otras}."""
+    return {c: d for c, (d, _) in _cercanas(celdas, otras).items()}
+
+
+class Nivel:
+    """Lo que hace falta de un nivel para trocearlo: sus casillas de suelo (alturas), cuáles están al aire libre,
+    y de quién es cada tira de geometría: de la casilla de suelo a la que mira (las paredes van con la sala que las
+    ve, no con la roca de detrás: si no, al no estar cargado el trozo de al lado faltaban paredes) o, si no mira a
+    ningún suelo, de la casilla de suelo más cercana."""
+
+    def __init__(self, v):
+        self.v = v
+        self.H = dict(alturas(v))
+        techo = collections.defaultdict(list)
+        candidatas = set()
+        for by_tex in v.geo.render.values():
+            for seqs in by_tex.values():
+                for s in seqs:
+                    p = _centro([q[0] for q in s])
+                    n = s[0][3] if len(s[0]) > 3 and s[0][3] else (0.0, 0.0, 0.0)
+                    if n[2] < -0.6:
+                        techo[celda(p)].append(p[2])
+                    candidatas.add(self._mira(p, n))
+                    candidatas.add(celda(p))
+        for cc in v.geo.coll.values():
+            for polys in cc.values():
+                for q in polys:
+                    candidatas.add(celda(_centro(q)))
+        self.aire = {c for c, zs in self.H.items() if not (c in techo and min(techo[c]) > min(zs) + 0.5)}
+        suelo = set(self.H)
+        self._cerca = {c: o for c, (_, o) in _cercanas(candidatas - suelo, suelo).items()}
+        self.todas = candidatas | suelo
+        self.w = collections.Counter()
+        for by_tex in v.geo.render.values():
+            for seqs in by_tex.values():
+                for s in seqs:
+                    self.w[self.dueno_tira(s)] += len(s)
+        for cc in v.geo.coll.values():
+            for polys in cc.values():
+                for q in polys:
+                    self.w[self.dueno_poli(q)] += len(q)
+
+    @staticmethod
+    def _mira(p, n):
+        return celda((p[0] + n[0] * 0.6, p[1] + n[1] * 0.6))
+
+    def dueno_celda(self, c):
+        if c in self.H:
+            return c
+        o = self._cerca.get(c)
+        if o is None:
+            o = _cercanas([c], set(self.H))[c][1]
+            self._cerca[c] = o
+        return o
+
+    def dueno_tira(self, s):
+        p = _centro([q[0] for q in s])
+        n = s[0][3] if len(s[0]) > 3 and s[0][3] else (0.0, 0.0, 0.0)
+        m = self._mira(p, n)
+        if m in self.H and abs(n[2]) < 0.6:
+            return m                       # una pared: con el suelo al que mira
+        return self.dueno_celda(celda(p))
+
+    def dueno_poli(self, q):
+        return self.dueno_celda(celda(_centro(q)))
+
+    def dueno_punto(self, p):
+        return self.dueno_celda(celda(p))
+
+
+def particion(nivel, presupuesto, excluir=frozenset(), inicio=None):
+    """Las casillas de suelo del nivel (menos las excluidas) en trozos de peso <= presupuesto, cortando por donde
+    menos se ve, como los mapas del IV: nunca al aire libre (cada zona al aire libre unida va entera en un trozo,
+    desde fuera se ve lejos) y bajo techo por los pasillos estrechos.
+    Se crece desde una entrada (la zona al aire libre más grande, o la casilla de inicio): por capas de distancia
+    andando, y el trozo acaba en la capa con menos pasos a la siguiente (el pasillo más estrecho) de las que le
+    dejan un tamaño razonable; lo que queda detrás se separa en ramas, cada una con su entrada, y se sigue igual."""
+    H = nivel.H
+    nodos = set(H) - set(excluir)
+    w = {c: nivel.w.get(c, 0) + 1 for c in nodos}
+    ady = {c: [] for c in nodos}
+    for c in nodos:
+        for k in VECINAS4:
+            d = (c[0] + k[0], c[1] + k[1])
+            if d in nodos and _pasa(H[c], H[d]):
+                ady[c].append(d)
+    # grupos: cada zona al aire libre unida es un grupo que no se parte; cada casilla bajo techo, el suyo
+    grupo = {}
+    grupos = []
+    for c in sorted(nodos):
+        if c in grupo:
+            continue
+        g = len(grupos)
+        if c in nivel.aire:
+            miembros, pila = [c], [c]
+            grupo[c] = g
+            while pila:
+                x = pila.pop()
+                for d in ady[x]:
+                    if d in nivel.aire and d not in grupo:
+                        grupo[d] = g
+                        miembros.append(d)
+                        pila.append(d)
+        else:
+            grupo[c] = g
+            miembros = [c]
+        grupos.append(miembros)
+    gw = [sum(w[c] for c in m) for m in grupos]
+    gady = [set() for _ in grupos]
+    for c in nodos:
+        for d in ady[c]:
+            if grupo[d] != grupo[c]:
+                gady[grupo[c]].add(grupo[d])
+    paso = collections.Counter()           # pasos entre grupos (cuántas casillas se tocan)
+    for c in nodos:
+        for d in ady[c]:
+            if grupo[d] != grupo[c]:
+                paso[(grupo[c], grupo[d])] += 1
+
+    libres = set(range(len(grupos)))
+    trozos = []
+
+    def crecer(entrada):
+        """Un trozo desde los grupos de entrada (libres); devuelve sus grupos."""
+        dist = {g: 0 for g in entrada}
+        capas = [list(entrada)]
+        while True:
+            sig = []
+            for g in capas[-1]:
+                for h in gady[g]:
+                    if h in libres and h not in dist:
+                        dist[h] = len(capas)
+                        sig.append(h)
+            if not sig:
+                break
+            capas.append(sig)
+        pesos = [sum(gw[g] for g in capa) for capa in capas]
+        total = sum(pesos)
+        if total <= presupuesto:
+            return set(dist)
+        mejor, acum = None, 0
+        for k, capa in enumerate(capas[:-1]):
+            acum += pesos[k]
+            if acum > presupuesto and k > 0:
+                break
+            if acum < presupuesto * 0.5 and k + 1 < len(capas) and acum + pesos[k + 1] <= presupuesto:
+                continue          # (muy pequeño: un trozo que solo es la boca de un pasillo no sirve)
+            siguiente = set(capas[k + 1])
+            corte = sum(paso[(g, h)] for g in capa for h in gady[g] if h in siguiente)
+            clave = (corte, -acum)
+            if mejor is None or clave < mejor[0]:
+                mejor = (clave, k)
+        k = mejor[1] if mejor else 0
+        return {g for g, d_ in dist.items() if d_ <= k}
+
+    def ramas(conj):
+        quedan = set(conj)
+        out = []
+        while quedan:
+            g0 = min(quedan)
+            comp, pila = {g0}, [g0]
+            while pila:
+                x = pila.pop()
+                for h in gady[x]:
+                    if h in quedan and h not in comp:
+                        comp.add(h)
+                        pila.append(h)
+            out.append(comp)
+            quedan -= comp
+        return out
+
+    # la primera entrada: la zona al aire libre más grande (o el grupo del inicio)
+    aire = [g for g, m in enumerate(grupos) if m[0] in nivel.aire]
+    if aire:
+        primero = max(aire, key=lambda g: gw[g])
+    elif inicio is not None and nivel.dueno_punto(inicio) in grupo:
+        primero = grupo[nivel.dueno_punto(inicio)]
+    else:
+        primero = max(range(len(grupos)), key=lambda g: gw[g])
+    pendientes = [{primero}]
+    while libres:
+        if not pendientes:
+            # lo que no se puede alcanzar andando desde lo hecho (saltos, bajadas): desde su grupo más pesado
+            pendientes.append({max(libres, key=lambda g: gw[g])})
+        entrada = pendientes.pop(0) & libres
+        if not entrada:
+            continue
+        t = crecer(entrada)
+        libres -= t
+        trozos.append(t)
+        # lo que queda detrás de este trozo, rama por rama, con su entrada (lo que toca al trozo)
+        cerca = {h for g in t for h in gady[g] if h in libres}
+        for rama in ramas(libres):
+            e = rama & cerca
+            if e:
+                pendientes.append(e)
+    # los trozos muy pequeños, con el vecino más pequeño que los admita
+    def vecinos_de(t):
+        return {i for i, u in enumerate(trozos) if u is not t and any(h in u for g in t for h in gady[g])}
+    cambio = True
+    while cambio:
+        cambio = False
+        for t in sorted(trozos, key=lambda u: sum(gw[g] for g in u)):
+            pt = sum(gw[g] for g in t)
+            if pt >= presupuesto * 0.3:
+                continue
+            opciones = [i for i in vecinos_de(t) if sum(gw[g] for g in trozos[i]) + pt <= presupuesto]
+            if not opciones and len(trozos) > 1:
+                # suelto (sin vecino andando): con el trozo más cercano en línea recta que lo admita
+                yo = {c for g in t for c in grupos[g]}
+                resto = [(i, {c for g in u for c in grupos[g]}) for i, u in enumerate(trozos) if u is not t]
+                resto = [(min(_cercanas(list(yo)[:50], cs).values())[0], i) for i, cs in resto
+                         if sum(gw[g] for g in trozos[i]) + pt <= presupuesto]
+                opciones = [min(resto)[1]] if resto else []
+            if opciones:
+                i = min(opciones, key=lambda i: sum(gw[g] for g in trozos[i]))
+                trozos[i] |= t
+                trozos.remove(t)
+                cambio = True
+                break
+    return [{c for g in t for c in grupos[g]} for t in trozos]
 
 
 class Trozo:
@@ -249,37 +473,61 @@ def vecinos_y_zonas(trozos, puede, desfase, toque=1.5):
                 a.zonas[c] = j * 2
 
 
-def geo_de(valle, trozo):
+MARGEN = 3          # casillas de geometría de alrededor que lleva repetida cada trozo (7,5 m)
+
+
+def geo_de(nivel, trozo):
     """Un Geo con solo las tiras de las casillas del trozo, cada registro partido por zonas (la clave del trozo de
     geometría lleva la zona al final: ("G", i, j, zona))."""
     import kf4_valle
+    valle = nivel.v
     g = kf4_valle.Geo()
     g.trozos = valle.geo.trozos
     if hasattr(valle.geo, "banda"):
         g.banda = valle.geo.banda
+    # lo que se ve desde el trozo: su geometría y, repetida, la de alrededor (MARGEN casillas): las fachadas que dan
+    # a su zona, el principio de la sala de al lado... Así, mientras el vecino no está cargado, no se ve el vacío
+    # nada más pasar la frontera. Repetida en los dos mapas es la misma geometría en el mismo sitio.
+    area = {c for c in nivel.todas if nivel.dueno_celda(c) in trozo.celdas}
+    amplia = set()
+    m = getattr(trozo, "margen", MARGEN)
+    for (x, y) in area:
+        for i in range(-m, m + 1):
+            for j in range(-m, m + 1):
+                amplia.add((x + i, y + j))
+    fuera = amplia - area
+    cerca = {c: o for c, (_, o) in _cercanas(fuera, trozo.celdas).items()} if fuera else {}
+    trozo.repetidas = 0
     for ch, by_tex in valle.geo.render.items():
         for tex, seqs in by_tex.items():
             for s in seqs:
-                c = celda(_centro([v[0] for v in s]))
+                c = nivel.dueno_tira(s)
                 if c in trozo.celdas:
-                    g.render[tuple(ch) + (trozo.zonas[c],)][tex].append(s)
+                    g.render[tuple(ch) + (trozo.zonas.get(c, -1),)][tex].append(s)
+                    continue
+                k = celda(_centro([q[0] for q in s]))
+                if k in amplia:
+                    o = c if c in trozo.celdas else cerca.get(k)
+                    g.render[tuple(ch) + (trozo.zonas.get(o, -1),)][tex].append(s)
+                    trozo.repetidas += 1
     for ch, cc in valle.geo.coll.items():
         for kind, polys in cc.items():
             for q in polys:
-                c = celda(_centro(q))
+                c = nivel.dueno_poli(q)
                 if c in trozo.celdas:
-                    k = tuple(ch) + (trozo.zonas[c],)
+                    k = tuple(ch) + (trozo.zonas.get(c, -1),)
                     g.coll[k].setdefault(kind, [])
                     g.coll[k][kind].append(q)
     return g
 
 
-def vista(valle, trozo):
+def vista(nivel, trozo):
     """Una copia ligera del nivel con solo lo de las casillas del trozo (geometría, bichos, gente, objetos, fuentes,
     piedra de guardado) y sin cambios de nivel con fundido (ya no hacen falta)."""
+    valle = nivel.v
     v = copy.copy(valle)
-    dentro = lambda p: celda(p) in trozo.celdas
-    v.geo = geo_de(valle, trozo)
+    dentro = lambda p: nivel.dueno_punto(p) in trozo.celdas
+    v.geo = geo_de(nivel, trozo)
     v.enemigos = [(t, p) for t, p in valle.enemigos if dentro(p)]
     v.objetos = [(i, p) for i, p in getattr(valle, "objetos", []) if dentro(p)]
     v.kf_objetos = [o for o in getattr(valle, "kf_objetos", []) if dentro(o["pos"])]

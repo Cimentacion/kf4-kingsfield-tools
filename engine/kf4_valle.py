@@ -5836,7 +5836,7 @@ def mapas_disponibles(src_path):
     return comun
 
 
-def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, n0=3, n1=4, disponibles=None):
+def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.42, f1=0.42, disponibles=None):
     """(099.map, {otros mapas}, pulpo) con los niveles 0 y 1 troceados y unidos sin fundido, o None si no se puede
     (entonces van como antes: un mapa por nivel y ChangeMap)."""
     import kf4_editor
@@ -5862,9 +5862,9 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, n0=3, 
         log.append("AVISO: los pasillos de la salida del nivel 0 y la llegada al 1 no casan: van con fundido")
         return None
     dx, dy = round(D[0] / kt.CELDA), round(D[1] / kt.CELDA)
-    w0, w1 = kt.pesos(v0), kt.pesos(v1)
-    h0, h1 = kt.alturas(v0), kt.alturas(v1)
-    M = M & set(w0)
+    N0, N1 = kt.Nivel(v0), kt.Nivel(v1)
+    h0, h1 = N0.H, N1.H
+    M = M & set(h0)
     M1 = {(c[0] + dx, c[1] + dy) for c in M}
     req = (D[0] * 100.0 + off1[0] - off0[0], -D[2] * 100.0 + off1[1] - off0[1], D[1] * 100.0 + off1[2] - off0[2])
     pts = lambda v: [vv[0] for c in v.geo.render.values() for seqs in c.values() for s_ in seqs for vv in s_]
@@ -5874,10 +5874,11 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, n0=3, 
         cielos[k] = [tuple(min(q[i] for q in p_) for i in range(3)), tuple(max(q[i] for q in p_) for i in range(3))]
     for intento in range(6):
         enlace = kt.Trozo(0, M, "enlace", h0)
-        t0 = [kt.Trozo(0, c, f"nivel 0, parte {i + 1}", h0)
-              for i, c in enumerate(kt.rebanadas(w0, n0, set(w0) - M))]
-        t1 = [kt.Trozo(1, c, f"nivel 1, parte {i + 1}", h1)
-              for i, c in enumerate(kt.rebanadas(w1, n1, set(w1) - M1))]
+        enlace.margen = 0      # (alrededor del pasillo cada nivel tiene otra cosa: nada repetido)
+        p0 = kt.particion(N0, sum(N0.w.values()) * f0, M, v0.inicio)
+        p1 = kt.particion(N1, sum(N1.w.values()) * f1, M1)
+        t0 = [kt.Trozo(0, c, f"nivel 0, parte {i + 1}", h0) for i, c in enumerate(p0)]
+        t1 = [kt.Trozo(1, c, f"nivel 1, parte {i + 1}", h1) for i, c in enumerate(p1)]
         trozos = t0 + [enlace] + t1
         ident = lambda c: c
 
@@ -5891,7 +5892,7 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, n0=3, 
                 return (lambda c: (c[0] - dx, c[1] - dy)), -D[2], req
             return (lambda c: (c[0] + dx, c[1] + dy)), D[2], tuple(-x for x in req)
         kt.vecinos_y_zonas(trozos, puede, desfase)
-        ini = kt.celda(v0.inicio)
+        ini = N0.dueno_punto(v0.inicio)
         libres = [m_ for m_ in TROZOS_MAPAS if disponibles is None or m_ in disponibles]
         if len(libres) < len(trozos) - 1:
             log.append(f"AVISO: hacen falta {len(trozos) - 1} entradas de mapa libres en el DAT y la ISO solo tiene "
@@ -5906,9 +5907,11 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, n0=3, 
                 t.mapa = libres.pop(0)
         mapas = {}
         for nivel, v, ruta, off in ((0, v0, ruta0, off0), (1, None, ruta1, off1)):
+            Nv = N0
             if v is None or intento > 0:     # se vuelve a construir (el editor deja estado de su nivel)
                 v = kf4_editor.MapaEditor(semilla, ruta)
                 v.construir()
+                Nv = kt.Nivel(v)
             fijar_offset(v)
             if nivel == 0:
                 pulpo0 = preparar_registros(src, v, [])
@@ -5927,7 +5930,7 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, n0=3, 
                       f"{', '.join(f'{b.mapa:03d}' for b, _ in t.vecinos) or 'ninguno'})")
                 log_t = []
                 try:
-                    vista = kt.vista(v, t)
+                    vista = kt.vista(Nv, t)
                     mapas[t.mapa], _ = generar_mapa(src, vista, rumbo, log_t, d099, d031, cruz)
                 finally:
                     TROZO = None
@@ -5948,9 +5951,9 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, n0=3, 
         malos = {t.nivel for t in grandes} | {t.nivel for p_ in parejas for t in p_ if t is not enlace}
         log.append(f"Los trozos no caben de dos en dos en la memoria de mapas ({len(parejas)} parejas): se trocea más")
         if 0 in malos:
-            n0 += 1
+            f0 *= 0.85
         if 1 in malos or not malos:
-            n1 += 1
+            f1 *= 0.85
     else:
         log.append("AVISO: no hay forma de que los trozos quepan de dos en dos: van con fundido")
         return None
@@ -5958,7 +5961,7 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, n0=3, 
              {**(pulpo1[2] or {}), **(pulpo0[2] or {})}) if pulpo0 and pulpo1 else (pulpo0 or pulpo1)
     mayor = max(_redondeo_carga(len(mapas[a.mapa])) + _redondeo_carga(len(mapas[b.mapa]))
                 for a in trozos for b, _ in a.vecinos)
-    log.append(f"Sin fundido: {len(trozos)} mapas ({n0} del nivel 0, el pasillo de enlace y {n1} del nivel 1); "
+    log.append(f"Sin fundido: {len(trozos)} mapas ({len(t0)} del nivel 0, el pasillo de enlace y {len(t1)} del nivel 1); "
                f"la pareja más grande ocupa {mayor / 1048576:.1f} MB de {LIMITE_PAREJA / 1048576:.1f}")
     otros = {f"{k:03d}.map": d for k, d in mapas.items() if k != 99}
     return mapas[99], otros, pulpo

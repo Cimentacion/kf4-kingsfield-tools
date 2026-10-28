@@ -1,6 +1,22 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 50 (2026-10-28)
+------------------------------------
+- Streamed levels cut the way KFIV cuts its own maps (rev 48-49 cut them in straight slices, which split the
+  open-air shore of level 0 in three: from the middle part one side was always missing, and the secret walls whose
+  tile had no other geometry fell in no part and were lost).
+  - The open-air area of a level (all of it, with the sea and cliffs around it) is never cut: it is one map. Indoor
+    areas are grown from it layer by layer (walking distance) and cut where the passage to the next layer is
+    narrowest; what is left behind is split into branches, each with its own entrance.
+  - Every piece of geometry goes with the floor tile it faces (a wall with the room that sees it, not with the rock
+    behind it) or, if it faces no floor, with the nearest floor tile. Objects, enemies, people, fountains and save
+    stones go with the nearest floor tile, so none is lost.
+  - Each map also carries a copy of the geometry within 7.5 m around it (facades seen from the shore, the start of
+    the next room), so the neighbour not being loaded yet does not show as empty space at the border.
+  - Level 0: 3 maps (the shore is 099), level 1: 5 maps, plus the corridor that links them; largest pair 11.2 MB
+    of 11.5.
+
 Alpha 0.1 - revision 49 (2026-10-28)
 ------------------------------------
 - Fixed the crash "No module named 'scipy'" when building the streamed levels: kf4_trozos no longer needs scipy or
