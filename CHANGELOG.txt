@@ -1,6 +1,11 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 49 (2026-10-28)
+------------------------------------
+- Fixed the crash "No module named 'scipy'" when building the streamed levels: kf4_trozos no longer needs scipy or
+  numpy (the nearest-tile distances are computed with plain Python, same results).
+
 Alpha 0.1 - revision 48 (2026-10-28)
 ------------------------------------
 - No loading screen between King's Field levels (new kf4_trozos.py). Levels 0 and 1 are cut into several KFIV

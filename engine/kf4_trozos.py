@@ -145,16 +145,37 @@ def rebanadas(w, n, celdas):
     return [t for t in trozos if t]
 
 
-def _distancias(celdas, otras):
-    """{casilla: distancia (en casillas) a la más cercana de otras}."""
-    import numpy as np
-    from scipy.spatial import cKDTree
+def _distancias(celdas, otras, B=8):
+    """{casilla: distancia (en casillas) a la más cercana de otras}. Sin numpy ni scipy (en Windows no siempre
+    están): las otras se reparten en cubos de B x B casillas y se miran los cubos en anillos crecientes."""
     if not otras:
         return {c: 1e9 for c in celdas}
-    arbol = cKDTree(np.array(list(otras), dtype=float))
-    lista = list(celdas)
-    d, _ = arbol.query(np.array(lista, dtype=float))
-    return dict(zip(lista, d))
+    cubos = collections.defaultdict(list)
+    for o in otras:
+        cubos[(o[0] // B, o[1] // B)].append(o)
+    xs = [k[0] for k in cubos]
+    ys = [k[1] for k in cubos]
+    lim = max(max(xs) - min(xs), max(ys) - min(ys)) + 2
+    out = {}
+    for c in celdas:
+        cx, cy = c[0] // B, c[1] // B
+        mejor = None
+        r = 0
+        while r <= lim:
+            for i in range(cx - r, cx + r + 1):
+                for j in range(cy - r, cy + r + 1):
+                    if max(abs(i - cx), abs(j - cy)) != r:
+                        continue
+                    for o in cubos.get((i, j), ()):
+                        d = (o[0] - c[0]) ** 2 + (o[1] - c[1]) ** 2
+                        if mejor is None or d < mejor:
+                            mejor = d
+            # lo que quede más allá del anillo r está a más de (r * B) casillas
+            if mejor is not None and math.sqrt(mejor) <= r * B:
+                break
+            r += 1
+        out[c] = math.sqrt(mejor) if mejor is not None else 1e9
+    return out
 
 
 class Trozo:
