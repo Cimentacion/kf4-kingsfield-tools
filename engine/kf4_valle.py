@@ -2357,6 +2357,43 @@ def _luz_unica(tris):
     return [(tex, [(v[0], v[1], media) + tuple(v[3:]) for v in tri]) for tex, tri in tris]
 
 
+def _tiras_con_sentido(tris):
+    """Triángulos (3 puntos, tuplas) -> tiras en las que cada triángulo conserva su sentido: el triángulo j de la
+    tira es (t[j], t[j+1], t[j+2]) si j es par y (t[j+1], t[j], t[j+2]) si es impar."""
+    def mismo(a, b):
+        return a in (b, b[1:] + b[:1], b[2:] + b[:2])
+    por_arista = collections.defaultdict(list)
+    for i, t in enumerate(tris):
+        for a, b in ((0, 1), (1, 2), (2, 0)):
+            por_arista[frozenset((t[a], t[b]))].append(i)
+    usado = [False] * len(tris)
+    out = []
+    for i0, t in enumerate(tris):
+        if usado[i0]:
+            continue
+        usado[i0] = True
+        tira = list(t)
+        while True:
+            a, b = tira[-2], tira[-1]
+            impar = (len(tira) - 2) % 2 == 1         # el triángulo que se añadiría
+            sig = None
+            for j in por_arista[frozenset((a, b))]:
+                if usado[j]:
+                    continue
+                c = next((q for q in tris[j] if q not in (a, b)), None)
+                if c is None:
+                    continue
+                if mismo((b, a, c) if impar else (a, b, c), tris[j]):
+                    sig = (j, c)
+                    break
+            if sig is None:
+                break
+            usado[sig[0]] = True
+            tira.append(sig[1])
+        out.append(tira)
+    return out
+
+
 def panel_kf(t, tris, subir=1.0):
     """La losa del 4 (t: plantilla del def 80) con la pared de verdad del King's Field: tris = [(textura, 3 x
     (punto del editor, uv, color, normal))]. Devuelve (modelo, colisión, registro de objeto, movimiento) o None.
@@ -2405,12 +2442,37 @@ def panel_kf(t, tris, subir=1.0):
     for tex, tri in tris:
         por_tex.setdefault(tex, []).append(tri)
     paquetes = []
-    TRI_PAQ = MAXV // 3            # (como el mapa: 30 puntos por paquete; h[0x8E] es un byte)
+    nv_total = 0
+
+    def punto(v):
+        p, uv, col, n = v
+        x, y, z = to_native(p)
+        dx, dz = x - cx, z - cz
+        lx, lz = dx * ca - dz * sa, dx * sa + dz * ca        # el giro de la losa, deshecho
+        lx, ly, lz = lx / sx, (y - y_pie) / sy, lz / sz
+        nx, ny, nz = n[0], -n[2], n[1]
+        nx, nz = nx * ca - nz * sa, nx * sa + nz * ca
+        nx, ny, nz = nx / sx, ny / sy, nz / sz
+        ln = math.sqrt(nx * nx + ny * ny + nz * nz) or 1.0
+        return (int(round(clamp(lx, -32000, 32000))), int(round(clamp(ly, -32000, 32000))),
+                int(round(clamp(lz, -32000, 32000))), int(nx / ln * 4096), int(ny / ln * 4096), int(nz / ln * 4096),
+                int(round(uv[0] * 4096)), int(round(uv[1] * 4096)),
+                int(clamp(col[0], 0, 255)), int(clamp(col[1], 0, 255)), int(clamp(col[2], 0, 255)))
+
     for tex, lista_t in por_tex.items():
         tbp, cbp, tbw, w, hh, psm = tex
-        for i0 in range(0, len(lista_t), TRI_PAQ):
-            trozo = lista_t[i0:i0 + TRI_PAQ]
-            nv = 3 * len(trozo)
+        # en tiras (cada triángulo de más, un punto en vez de tres: las puertas troceadas eran de 30 KB): solo se
+        # junta un triángulo si en la tira queda con su mismo sentido. El sentido de un triángulo de la tira depende
+        # de la paridad de su primer punto en el paquete (por eso antes se daban la vuelta los impares): cada punto
+        # j de una tira va en un sitio del paquete de su misma paridad (si no, un punto de relleno sin dibujar)
+        seqs = _tiras_con_sentido([tuple(punto(v) for v in tri) for tri in lista_t])
+        cur = []
+
+        def cerrar(cur):
+            nonlocal nv_total
+            if not cur:
+                return
+            nv = len(cur)
             h = bytearray(cab1)
             t0 = struct.unpack_from("<Q", h, 0x40)[0]
             t0 &= ~((0x3FFF) | (0x3F << 14) | (0x3F << 20) | (0xF << 26) | (0xF << 30) | (0x3FFF << 37))
@@ -2420,28 +2482,31 @@ def panel_kf(t, tris, subir=1.0):
             h[0x70] = nv
             h[0x8E] = (nv * 4) & 0xFF
             cuerpo = bytearray()
-            for kt, tri in enumerate(trozo):
-                orden = (0, 1, 2) if kt % 2 == 0 else (1, 0, 2)      # la tira cambia el sentido en cada impar
-                for k, idx in enumerate(orden):
-                    p, uv, col, n = tri[idx]
-                    x, y, z = to_native(p)
-                    dx, dz = x - cx, z - cz
-                    lx, lz = dx * ca - dz * sa, dx * sa + dz * ca        # el giro de la losa, deshecho
-                    lx, ly, lz = lx / sx, (y - y_pie) / sy, lz / sz
-                    nx, ny, nz = n[0], -n[2], n[1]
-                    nx, nz = nx * ca - nz * sa, nx * sa + nz * ca
-                    nx, ny, nz = nx / sx, ny / sy, nz / sz
-                    ln = math.sqrt(nx * nx + ny * ny + nz * nz) or 1.0
-                    cuerpo += struct.pack("<4h4h4h4H", int(round(clamp(lx, -32000, 32000))),
-                                          int(round(clamp(ly, -32000, 32000))), int(round(clamp(lz, -32000, 32000))), 1,
-                                          int(nx / ln * 4096), int(ny / ln * 4096), int(nz / ln * 4096),
-                                          -32768 if k < 2 else 0,
-                                          int(round(uv[0] * 4096)), int(round(uv[1] * 4096)), 4096, 0,
-                                          int(clamp(col[0], 0, 255)), int(clamp(col[1], 0, 255)),
-                                          int(clamp(col[2], 0, 255)), 128)
+            for q, adc in cur:
+                cuerpo += struct.pack("<4h4h4h4H", q[0], q[1], q[2], 1, q[3], q[4], q[5], -32768 if adc else 0,
+                                      q[6], q[7], 4096, 0, q[8], q[9], q[10], 128)
             cola = bytearray(16)
             cola[15] = 0x14 if not paquetes else 0x17
             paquetes.append(bytes(h) + bytes(cuerpo) + bytes(cola))
+            nv_total += nv
+
+        for seq in seqs:
+            j = 0                                 # primer punto de la tira que falta por poner
+            while j < len(seq) - 2:
+                relleno = (len(cur) - j) % 2      # el punto j tiene que caer en un sitio de su paridad
+                if len(cur) + relleno + 3 > MAXV:
+                    cerrar(cur)
+                    cur = []
+                    relleno = j % 2
+                if relleno:
+                    cur.append((seq[j], True))
+                k = min(len(seq), j + MAXV - len(cur))
+                for i in range(j, k):
+                    cur.append((seq[i], i < j + 2))
+                if k >= len(seq):
+                    break
+                j = k - 2                         # la tira sigue en el paquete siguiente desde sus 2 últimos
+        cerrar(cur)
     # la malla 0 de la plantilla es un conito blanco de marca (20 de alto, sin textura) en el pie de la losa: con la
     # escala de la pared salía grande y se veía debajo de las puertas abiertas. Sus puntos, todos a 0 (no se ve)
     cab0 = bytearray(m[:off1])
@@ -2456,7 +2521,7 @@ def panel_kf(t, tris, subir=1.0):
     nuevo += m[length:]                                  # la parte de textura propia del objeto, tal cual
     struct.pack_into("<I", nuevo, 0, nuevo_len)
     struct.pack_into("<H", nuevo, 6, min(65535, len(tris) + 3))
-    struct.pack_into("<I", nuevo, 8, 3 * len(tris) + 5)
+    struct.pack_into("<I", nuevo, 8, nv_total + 5)
     struct.pack_into("<II", nuevo, 0x10 + 48 + 36, off1, len(paquetes))
     b = bytearray(t["rec"])
     struct.pack_into("<4f", b, 0x00, cx, y_pie, cz, 0.0)
@@ -3374,16 +3439,18 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
 
     out = bytearray(tables)
     out += omd_blob + bytes(max(0, room_m - len(omd_blob)))
-    new_coll = len(out)
-    seccion = bytearray(csk_blob)
     if bloque_cruz:
-        # las fuentes que curan del mapa portado (la WaterWell del King's Field): en el espacio del juego
         import kf4_cruz
         # las fuentes curan con el guion del propio juego (fuentes_que_curan): la cura del código, apagada
         bloque_cruz = kf4_cruz.poner_fuentes(bloque_cruz, [])
-        # las ilustraciones de la cruz van detrás de la colisión (el motor no lee esa parte), alineadas a 16
-        seccion += bytes((-(len(out) + len(seccion))) % 16)
-        seccion += bloque_cruz
+        # las ilustraciones de la cruz van justo antes de la colisión (detrás de los modelos: el motor no lee esa
+        # parte), alineadas a 16: el código las encuentra a len(bloque) bytes antes del offset de la colisión de la
+        # cabecera, en cualquier mapa (antes iban detrás de la colisión, en un sitio distinto en cada mapa, y en el
+        # nivel 1 no se encontraban: ocupaban sin servir)
+        out += bytes((-len(out)) % 16)
+        out += bloque_cruz
+    new_coll = len(out)
+    seccion = bytearray(csk_blob)
     if RELLENO:          # prueba: bytes de más donde el motor no lee, para ver si un mapa grande cuelga el juego
         seccion += bytes((-(len(out) + len(seccion))) % 16) + bytes(RELLENO)
         log.append(f"PRUEBA: {RELLENO // 1024} KB de relleno")
@@ -3572,7 +3639,16 @@ _R = {"zero": 0, "v0": 2, "v1": 3, "a0": 4, "a1": 5, "a2": 6, "a3": 7, "t0": 8, 
       "s5": 21, "s6": 22, "s7": 23, "t8": 24, "t9": 25, "sp": 29, "ra": 31}
 _I = {"addiu": 0x09, "slti": 0x0A, "sltiu": 0x0B, "lh": 0x21, "sb": 0x28, "andi": 0x0C, "ori": 0x0D, "lui": 0x0F, "lbu": 0x24, "lhu": 0x25,
       "lw": 0x23, "sh": 0x29, "sw": 0x2B, "sd": 0x3F, "ld": 0x37}
-_F = {"addu": 0x21, "subu": 0x23, "and": 0x24, "or": 0x25, "nor": 0x27, "slt": 0x2A, "move": 0x2D}
+_F = {"addu": 0x21, "subu": 0x23, "and": 0x24, "or": 0x25, "nor": 0x27, "slt": 0x2A, "sltu": 0x2B, "move": 0x2D}
+
+
+def _buscar_bloque_cruz(k, _=None):
+    """t1 = el mapa cargado -> t1 = su bloque de la cruz, que acaba donde empieza la colisión (cabecera +0x08) y
+    lleva su tamaño en su última palabra: vale para todos los mapas portados (cada uno lo tiene en otro sitio y
+    puede ser de otro tamaño). Si el juego ya hubiera pasado ese offset a dirección (mayor que la base del mapa), se
+    usa tal cual."""
+    return [("lw", "t2", 8, "t1"), ("sltu", "t3", "t2", "t1"), ("beq", "t3", "zero", f"abs{k}"), ("nop",),
+            ("addu", "t2", "t2", "t1"), f"abs{k}", ("lw", "t3", -4, "t2"), ("subu", "t1", "t2", "t3")]
 
 
 def _ensamblar(prog, base):
@@ -3959,7 +4035,6 @@ COLOR_VIDA_SOMBRA = 0x80000000
 
 def codigo_vida_textura(cruz, off_bloque):
     import kf4_cruz as kc
-    oh, ol = _hi_lo(off_bloque)
     mh, ml = _hi_lo(MAP_SLOT_MEMORY)
     orh, orl = _hi_lo(ORBE)
     ph, pl = _hi_lo(PLAYER_STATE)
@@ -3989,7 +4064,7 @@ def codigo_vida_textura(cruz, off_bloque):
          ("lui", "t0", mh), ("addiu", "t0", "t0", ml)]
     for k, hueco in enumerate((0x1C, 0x1C + 0x58)):              # el bloque, en cualquiera de los dos mapas
         p += [("lw", "t1", hueco, "t0"), ("beq", "t1", "zero", f"no{k}"), ("nop",),
-              ("lui", "t2", oh), ("addiu", "t2", "t2", ol), ("addu", "t1", "t1", "t2"),
+             ] + _buscar_bloque_cruz(k, off_bloque) + [
               ("lw", "t3", 0, "t1"), ("lui", "t4", f0 >> 16), ("ori", "t4", "t4", f0 & 0xFFFF),
               ("bne", "t3", "t4", f"no{k}"), ("nop",),
               ("lw", "t3", 4, "t1"), ("lui", "t4", f1 >> 16), ("ori", "t4", "t4", f1 & 0xFFFF),
@@ -4145,7 +4220,6 @@ DORADO = 0x8060A8C0                          # color del marco recién cambiado 
 
 def codigo_dibujo_cruz(off_bloque, con_texto=True):
     import kf4_cruz as kc
-    oh, ol = _hi_lo(off_bloque)
     mh, ml = _hi_lo(MAP_SLOT_MEMORY)
     ph, pl = _hi_lo(PLAYER_STATE)
     dh, dl = _hi_lo(CRUZ_DATOS)
@@ -4158,7 +4232,7 @@ def codigo_dibujo_cruz(off_bloque, con_texto=True):
          ("lui", "t0", mh), ("addiu", "t0", "t0", ml)]
     for k, hueco in enumerate((0x1C, 0x1C + 0x58)):          # el mapa puede estar en cualquiera de los dos huecos
         p += [("lw", "t1", hueco, "t0"), ("beq", "t1", "zero", f"no{k}"), ("nop",),
-              ("lui", "t2", oh), ("addiu", "t2", "t2", ol), ("addu", "t1", "t1", "t2"),
+             ] + _buscar_bloque_cruz(k, off_bloque) + [
               ("lw", "t3", 0, "t1"), ("lui", "t4", f0 >> 16), ("ori", "t4", "t4", f0 & 0xFFFF),
               ("bne", "t3", "t4", f"no{k}"), ("nop",),
               ("lw", "t3", 4, "t1"), ("lui", "t4", f1 >> 16), ("ori", "t4", "t4", f1 & 0xFFFF),
@@ -4686,8 +4760,8 @@ def para_arma_con_exp(d_equip_a, d_option):
 # ======================= Más memoria para el archivo de mapa =======================
 # Memory_Init (core/memory.c) reparte el arena: ... archivo de mapa 0xA80000, trabajo de mapa 0x200000 (dos mitades:
 # la del mapa actual y la del vecino que se precarga al andar entre mapas). Los mapas portados no tienen vecinos,
-# así que se pasa 1 MB del trabajo al archivo: archivo 0xB80000, trabajo 0x100000 (el mapa usa la primera mitad y,
-# si le hiciera falta, la segunda, que nadie más usa). El arena sigue midiendo lo mismo.
+# así que se pasa 1 MB del trabajo al archivo: archivo 0xB80000, trabajo 0x100000 (se reparte en dos mitades, la del
+# mapa actual y la del vecino; los mapas del IV usan la primera). El arena sigue midiendo lo mismo.
 MEMORIA_LUI = (0x209A4C, 0x3C050020, 0x3C050010)    # lui a1, 0x20 -> 0x10: map_work_area_size
 MEMORIA_LUI2 = (0x209A50, 0x3C0600A8, 0x3C0600B8)   # lui a2, 0xA8 -> 0xB8: map_file_area_size
 MAPA_MAXIMO_GRANDE = 0xB80000 - 0x10000
@@ -4967,8 +5041,10 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
             elf = f.read(size)
         import kf4_cruz
         i_cruz = new_map.find(kf4_cruz.FIRMA)
-        nuevo = parchear_ejecutable(elf, giro, log, mando, vida_numero, cruz, exp_menu,
-                                    i_cruz if i_cruz >= 0 and i_cruz % 16 == 0 else None)
+        c_ = struct.unpack_from("<I", new_map, 8)[0]                 # el bloque acaba donde empieza la colisión
+        ok_cruz = i_cruz >= 0 and i_cruz % 16 == 0 and c_ > i_cruz and \
+            struct.unpack_from("<I", new_map, c_ - 4)[0] == c_ - i_cruz
+        nuevo = parchear_ejecutable(elf, giro, log, mando, vida_numero, cruz, exp_menu, c_ - i_cruz if ok_cruz else None)
         with open(out, "r+b") as f:
             f.seek(off)
             f.write(nuevo)
@@ -5240,7 +5316,7 @@ def generar_mapa(src, v, rumbo, log, d099=None, d031=None, cruz=True):
             return src.read(nombre) if src.has(nombre) else None
         except Exception:
             return None
-    bloque = kf4_cruz.construir_bloque(leer, log)        # también lleva las cifras de la vida
+    bloque = kf4_cruz.construir_bloque(leer, log, CRUZ_COLORES)   # también lleva las cifras de la vida
     tipos = [t for t, _ in getattr(v, "enemigos", [])]
     # tamaño del archivo de cada bicho: si pasa de 512 KB (un bloque de pool) el juego se cuelga al cargarlo
     # (EntityPool_CopyLoadedFile, kfiv-decomp)
@@ -5437,7 +5513,9 @@ def preparar_registros(src, v, log):
 
 # si un mapa no cabe en la memoria de mapas se repite: primero quitando las caras que la roca tapa entera, luego
 # fundiendo a negro (y quitando) antes lo que queda bajo el agua
-PASOS_RECORTE = [("parte del decorado (solo barriles, mesas, sillas, la fuente...)",
+PASOS_RECORTE = [("color de las ilustraciones de la cruz (16 colores en vez de 256: casi no se nota y el bloque "
+                  "ocupa la mitad)", lambda km: globals().__setitem__("CRUZ_COLORES", 16)),
+                 ("parte del decorado (solo barriles, mesas, sillas, la fuente...)",
                   lambda km: setattr(km, "PROPS_NIVEL", 1)),
                  ("el decorado (menos la fuente)", lambda km: setattr(km, "PROPS_NIVEL", 0)),
                  ("lo hondo bajo el agua (negro desde 1,5 m)", lambda km: setattr(km, "FUNDIDO_AGUA", 1.5)),
@@ -5451,6 +5529,7 @@ PASOS_RECORTE = [("parte del decorado (solo barriles, mesas, sillas, la fuente..
                  ("trozos aún más grandes", lambda km: (setattr(km, "LADO_MAXIMO", 8.0),
                                                        globals().__setitem__("TROZO_MAX", 5.2)))]
 MALLA_POR_DEFECTO = {}
+CRUZ_COLORES = 256        # las ilustraciones de la cruz en el mapa (16 si no cabe: PASOS_RECORTE)
 MAPA_NIVEL1 = 37          # la entrada del DAT del 037.map (su sitio lo ocupa el 099 grande) lleva el nivel 1
 
 
@@ -5605,10 +5684,12 @@ def main():
         ruta1 = nivel1_json if os.path.isabs(nivel1_json) else os.path.join(here, nivel1_json)
         if not os.path.isfile(ruta1):
             raise SystemExit(f"No encuentro {ruta1}")
+        estado0 = ({k: getattr(kf_malla, k) for k in MALLA_POR_DEFECTO}, TROZO_MAX, PANELES_LUZ_UNICA, CRUZ_COLORES)
         for k, v0 in MALLA_POR_DEFECTO.items():
             setattr(kf_malla, k, v0)
         globals()["TROZO_MAX"] = TROZO_MAX_ORIGINAL
         globals()["PANELES_LUZ_UNICA"] = False
+        globals()["CRUZ_COLORES"] = 256
         print(f"Generando el nivel 1 ({os.path.basename(ruta1)})...")
         log.append(f"Nivel 1: {os.path.basename(ruta1)} -> {NIVEL_MAPA[1]:03d}.map")
         v1 = kf4_editor.MapaEditor(semilla, ruta1)
@@ -5626,9 +5707,27 @@ def main():
             fijar_offset(v1)
             pulpo1 = preparar_registros(src, v1, [])
             mapa1, _ = generar_mapa(src, v1, rumbo, log, d099, d031, cruz)
-        otros[f"{NIVEL_MAPA[1]:03d}.map"] = mapa1
-        with open(os.path.join(outdir, f"{NIVEL_MAPA[1]:03d}.map"), "wb") as o:
-            o.write(mapa1)
+        if len(mapa1) > MAPA_MAXIMO:
+            # ni con todo lo quitado: se juega el nivel 0 solo (sin su salida al 1) en vez de no generar nada
+            log.append(f"AVISO: el nivel 1 no cabe ni aligerado ({len(mapa1)} bytes de {MAPA_MAXIMO}): va solo el "
+                       f"nivel 0, sin la salida al 1")
+            print(log[-1])
+            del NIVEL_MAPA[1]
+            pulpo1 = None
+            for k, v0 in estado0[0].items():
+                setattr(kf_malla, k, v0)
+            globals()["TROZO_MAX"], globals()["PANELES_LUZ_UNICA"], globals()["CRUZ_COLORES"] = estado0[1:]
+            v = kf4_editor.MapaEditor(semilla, ruta)
+            v.construir()
+            fijar_offset(v)
+            pulpo = preparar_registros(src, v, [])
+            new_map, stats = generar_mapa(src, v, rumbo, log, d099, d031, cruz)
+            with open(os.path.join(outdir, "099.map"), "wb") as o:
+                o.write(new_map)
+        else:
+            otros[f"{NIVEL_MAPA[1]:03d}.map"] = mapa1
+            with open(os.path.join(outdir, f"{NIVEL_MAPA[1]:03d}.map"), "wb") as o:
+                o.write(mapa1)
         if pulpo1:
             # los del nivel 0 mandan (sus texturas salen de la memoria de vídeo de su nivel)
             pulpo = ({**(pulpo1[0] or {}), **(pulpo[0] or {})}, {**(pulpo1[1] or {}), **(pulpo[1] or {})},

@@ -1,6 +1,19 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 43 (2026-10-28)
+------------------------------------
+- Fix: building level 1 could stop with "037.map (... bytes) pasa de lo que el juego carga" on the real ISO.
+  - The quick-equip cross illustrations block (about 600 KB on the real disc) is now placed right before the
+    collision section and ends with its own size, so the game code finds it in any map. Before, it sat after the
+    collision at an offset that only matched level 0: level 1 carried it without being able to use it.
+  - New first shrink step for a map that doesn't fit: the cross illustrations in 16 colours instead of 256 (a
+    better quantiser that keeps the background transparent: they look almost the same). The block is half the size.
+  - King's Field doors and walls (the moving panels) are written as triangle strips instead of loose triangles,
+    keeping each triangle's facing. Smaller objects section.
+  - If a level 1 still doesn't fit after every step, level 0 is rebuilt without its exit to level 1 and the ISO is
+    built anyway (with a warning), instead of stopping with an error.
+
 Alpha 0.1 - revision 42 (2026-10-28)
 ------------------------------------
 - King's Field level 1 is ported too, as its own KFIV map (it goes in the DAT entry of 037.map), and the two

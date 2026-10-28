@@ -128,23 +128,23 @@ def marco():
     return np.concatenate([np.clip(rgb, 0, 255), a[..., None]], axis=2)
 
 
-def paleta(img):
-    """(índices 8 bits, paleta 256 x RGBA) con k-medias sencillo."""
+def paleta(img, n=256):
+    """(índices, paleta n x RGBA) con k-medias sencillo."""
     px = img.reshape(-1, 4)
     q = np.round(px / np.array([4, 4, 4, 4])) * np.array([4, 4, 4, 4])
     uniq, inv = np.unique(q, axis=0, return_inverse=True)
     inv = inv.reshape(-1)
-    if len(uniq) <= 256:
-        pal = np.zeros((256, 4))
+    if len(uniq) <= n:
+        pal = np.zeros((n, 4))
         pal[:len(uniq)] = uniq
         return inv.astype(np.uint8), np.clip(pal, 0, 255).astype(np.uint8)
     w = np.array([1.0, 1.0, 1.0, 2.0])
     rng = np.random.default_rng(1)
-    cent = px[rng.choice(len(px), 256, replace=False)].astype(float)
-    for _ in range(10):
+    cent = px[rng.choice(len(px), n, replace=False)].astype(float)
+    for _ in range(10 if n > 16 else 16):
         d = (((px[:, None, :] - cent[None, :, :]) * w) ** 2).sum(axis=2)
         lab = d.argmin(axis=1)
-        for k in range(256):
+        for k in range(n):
             sel = px[lab == k]
             if len(sel):
                 cent[k] = sel.mean(axis=0)
@@ -193,6 +193,52 @@ def trozo(destino, img, poner_alpha=False):
     qwc = len(gif) // 16
     # como Texture_BuildPacket: etiqueta DMA (qwc + 1 cuádruples) y, delante de los datos GIF, el código VIF
     # DIRECTHL: la cadena de dibujo va por el canal VIF1 y sin él el VIF lee el GIF como órdenes y se cuelga
+    return struct.pack("<IIII", qwc + 1, 0, 0, 0) + struct.pack("<IIII", 0, 0, 0, 0x51000000 | qwc) + gif
+
+
+def paleta16(img):
+    """(índices 2D, paleta 16 x RGBA) para una ilustración: el 0 es el fondo transparente y los otros 15 salen de
+    k-medias solo sobre lo que tiene dibujo (con todo, medio cuadro de fondo se comía colores)."""
+    h, w = img.shape[:2]
+    px = img.reshape(-1, 4).astype(float)
+    dib = px[:, 3] > 6
+    idx = np.zeros(len(px), np.uint8)
+    pal = np.zeros((16, 4))
+    if dib.any():
+        sub = px[dib]
+        peso = np.array([1.0, 1.0, 1.0, 1.5])
+        rng = np.random.default_rng(1)
+        # inicio k-medias++: cada centro nuevo, lejos de los que ya hay
+        cent = [sub[rng.integers(len(sub))]]
+        for _ in range(14):
+            d = np.min([(((sub - c) * peso) ** 2).sum(axis=1) for c in cent], axis=0)
+            if d.sum() <= 0:
+                break
+            cent.append(sub[rng.choice(len(sub), p=d / d.sum())])
+        cent = np.array(cent)
+        for _ in range(20):
+            d = (((sub[:, None, :] - cent[None, :, :]) * peso) ** 2).sum(axis=2)
+            lab = d.argmin(axis=1)
+            for k in range(len(cent)):
+                sel = sub[lab == k]
+                if len(sel):
+                    cent[k] = sel.mean(axis=0)
+        idx[dib] = lab + 1
+        pal[1:1 + len(cent)] = cent
+    return idx.reshape(h, w), np.clip(np.round(pal), 0, 255).astype(np.uint8)
+
+
+def trozo_icono(destino, img, colores=256):
+    """La ilustración de una casilla: de 8 bits (256 colores) o, para ahorrar sitio en el mapa, de 4 (16 colores:
+    la mitad de bytes y una paleta de 64 en vez de 1024)."""
+    if colores == 256:
+        return trozo(destino, img)
+    idx, pal = paleta16(img)
+    nib = (idx[:, 0::2] & 15) | ((idx[:, 1::2] & 15) << 4)
+    gif = _subida(TBP[destino], 2, 0x14, img.shape[1], img.shape[0], nib.astype(np.uint8).tobytes())
+    gif += _subida(CBP[destino], 1, 0x00, 8, 2, np.asarray(pal, np.uint8).tobytes())
+    gif += _gif_ad([(0x3F, 0)], eop=True)
+    qwc = len(gif) // 16
     return struct.pack("<IIII", qwc + 1, 0, 0, 0) + struct.pack("<IIII", 0, 0, 0, 0x51000000 | qwc) + gif
 
 
@@ -286,15 +332,15 @@ def atlas_letras(letra, codigos):
     return img, pal, mapa, n
 
 
-def tex0(destino, ancho=ANCHO, alto=ALTO):
-    return (TBP[destino] | (2 << 14) | (0x13 << 20) | ((ancho.bit_length() - 1) << 26) | ((alto.bit_length() - 1) << 30) | (1 << 34) | (0 << 35)
+def tex0(destino, ancho=ANCHO, alto=ALTO, psm=0x13):
+    return (TBP[destino] | (2 << 14) | (psm << 20) | ((ancho.bit_length() - 1) << 26) | ((alto.bit_length() - 1) << 30) | (1 << 34) | (0 << 35)
             | (CBP[destino] << 37) | (1 << 61))
 
 
-def sprite(destino, x, y, w, h, rgba=(0x80, 0x80, 0x80, 0x80)):
+def sprite(destino, x, y, w, h, rgba=(0x80, 0x80, 0x80, 0x80), psm=0x13):
     """ScreenSprite (0x40 bytes) como los que prepara Hud_InitSprite."""
     b = bytearray(0x40)
-    struct.pack_into("<QQ", b, 0, tex0(destino), 0x60)
+    struct.pack_into("<QQ", b, 0, tex0(destino, psm=psm), 0x60)
     struct.pack_into("<i", b, 0x10, 0x156)
     b[0x14:0x18] = bytes(rgba)
     struct.pack_into("<HHIii", b, 0x20, _hud(x), _hud(y), 0, 0, 0)
@@ -357,24 +403,25 @@ def poner_fuentes(bloque, puntos, radio=450.0, alto=300.0):
     return bytes(b)
 
 
-def construir_bloque(leer, log):
-    """leer(nombre) -> bytes o None. Devuelve el bloque o None si no hay ilustraciones."""
+def construir_bloque(leer, log, colores=256):
+    """leer(nombre) -> bytes o None. Devuelve el bloque o None si no hay ilustraciones. colores: 256 o 16 (las
+    ilustraciones de las casillas a 4 bits: el bloque ocupa casi la mitad)."""
     nam = leer("param/item_nam.prm")
     if not nam:
         log.append("Cruz: sin item_nam.prm, sin ilustraciones")
         return None
-    if nam in _HECHO:                       # el editor comprueba el mapa muchas veces: se hace una sola
-        bloque, lineas = _HECHO[nam]
+    if (nam, colores) in _HECHO:            # el editor comprueba el mapa muchas veces: se hace una sola
+        bloque, lineas = _HECHO[(nam, colores)]
         log.extend(lineas)
         return bloque
     n0 = len(log)
-    bloque = _construir(leer, nam, log)
+    bloque = _construir(leer, nam, log, colores)
     if bloque is not None:
-        _HECHO[nam] = (bloque, log[n0:])
+        _HECHO[(nam, colores)] = (bloque, log[n0:])
     return bloque
 
 
-def _construir(leer, nam, log):
+def _construir(leer, nam, log, colores=256):
     modelo = [struct.unpack_from("<H", nam, i * 64 + 0x30)[0] for i in range(len(nam) // 64)]
     cache = {}
 
@@ -404,7 +451,7 @@ def _construir(leer, nam, log):
             clave = (destino, m)
             if clave not in por_destino:
                 por_destino[clave] = len(trozos)
-                trozos.append(trozo(destino, img))
+                trozos.append(trozo_icono(destino, img, colores))
             mapas[off][k] = por_destino[clave]
     if len(trozos) == 1:
         log.append("Cruz: no encuentro las ilustraciones de menu/select2; la cruz va sin dibujos")
@@ -421,7 +468,7 @@ def _construir(leer, nam, log):
             img = icono(ilustracion(d))
             img[..., :3] = np.clip(img[..., :3] * BRILLO_ICONO, 0, 255)
             por_imagen[clave] = len(trozos)
-            trozos.append(trozo(3, img))
+            trozos.append(trozo_icono(3, img, colores))
             n_mag += 1
         mapas[OFF_MAGIAS][i] = por_imagen[clave]
     log.append(f"Cruz: {n_mag} ilustraciones de magia" if n_mag else "Cruz: no encuentro menu/select/mNNNN.mod (magia sin dibujo)")
@@ -449,7 +496,8 @@ def _construir(leer, nam, log):
     for c, (x, y) in enumerate(CASILLAS):
         # el arma (derecha) con su tamaño de antes, que se veía bien; los demás, casi como la casilla
         iw, ih, dx, dy = (ICONO_ARMA_W, ICONO_ARMA_H, 3, -4) if c == 0 else (ICONO_W, ICONO_H, ICONO_DX, ICONO_DY)
-        spr += sprite(1 + c, x + (CASILLA_W - iw) // 2 + dx, y + (CASILLA_H - ih) // 2 + dy, iw, ih)
+        spr += sprite(1 + c, x + (CASILLA_W - iw) // 2 + dx, y + (CASILLA_H - ih) // 2 + dy, iw, ih,
+                      psm=0x13 if colores == 256 else 0x14)
     # tabla de texturas: cabecera, entradas y trozos (las posiciones cuentan desde la cabecera)
     n = len(trozos)
     pos = 0x10 + n * 0x10
@@ -481,9 +529,13 @@ def _construir(leer, nam, log):
         bloque[OFF_TEXTO_TROZO] = 0xFF
     bloque += tabla
     bloque += bytes((-len(bloque)) % 16)
+    # al final, 16 bytes con el tamaño del bloque en su última palabra: el código lo encuentra hacia atrás desde
+    # donde empieza la colisión del mapa (va justo antes), sea del tamaño que sea en cada mapa
+    bloque += bytes(12) + struct.pack("<I", len(bloque) + 16)
     log.append("Cruz: " + (f"letras del menú para la magia y las cantidades ({texto_datos[2]} de {texto_datos[3]})"
                            if texto_datos else "sin letras (no encontré font.tmr o param/magic.prm)"))
     log.append(f"Cruz: {n - 1 - (1 if cifras_datos else 0) - (1 if texto_datos else 0)} ilustraciones del juego"
                + (" y las cifras del menú para la vida" if cifras_datos else " (sin cifras del menú: no encontré menu/font.tmr)")
-               + f" ({len(bloque) // 1024} KB dentro de 099.map)")
+               + (" de 16 colores" if colores != 256 else "")
+               + f" ({len(bloque) // 1024} KB dentro del mapa)")
     return bytes(bloque)
