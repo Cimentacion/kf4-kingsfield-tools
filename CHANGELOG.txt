@@ -1,6 +1,16 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 53 (2026-10-29)
+------------------------------------
+- Streamed levels cut room by room: the open-air part of a level is one map on its own, and the inside is cut into
+  small maps (about one room or a few rooms each, cut at doorways and narrow passages), so walking towards an exit
+  loads the room behind it while the one you came from is dropped. Level 0: the shore and 7 inside maps; level 1: 9;
+  plus the link corridor (18 maps, largest pair 9.2 MB of 11.5).
+- Denser fog under a roof in the streamed levels (fog block 2: clear up to 7 m, closed at 30 m; the open air keeps
+  the old fog), so the rooms that are not loaded are not seen.
+- More free map entries for the pieces (never the maps the executable treats specially).
+
 Alpha 0.1 - revision 52 (2026-10-28)
 ------------------------------------
 - Streaming no longer thrashes. Before, every floor tile asked for its nearest neighbour map, so walking through

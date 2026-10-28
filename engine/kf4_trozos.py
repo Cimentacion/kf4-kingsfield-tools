@@ -383,7 +383,11 @@ def particion(nivel, presupuesto, excluir=frozenset(), inicio=None, primeras=Non
         entrada = pendientes.pop(0) & libres
         if not entrada:
             continue
-        t = crecer(entrada)
+        if all(grupos[g][0] in nivel.aire for g in entrada) and not trozos:
+            # lo de fuera, entero y solo: un mapa (desde fuera se ve lejos; dentro la niebla corta la vista)
+            t = set(entrada)
+        else:
+            t = crecer(entrada)
         libres -= t
         trozos.append(t)
         # lo que queda detrás de este trozo, rama por rama, con su entrada (lo que toca al trozo)
@@ -526,19 +530,19 @@ def geo_de(nivel, trozo):
             for s in seqs:
                 c = nivel.dueno_tira(s)
                 if c in trozo.celdas:
-                    g.render[tuple(ch) + (trozo.zonas.get(c, -1),)][tex].append(s)
+                    g.render[tuple(ch) + (trozo.zonas.get(c, -1), c not in nivel.aire)][tex].append(s)
                     continue
                 k = celda(_centro([q[0] for q in s]))
                 if k in amplia:
                     o = c if c in trozo.celdas else cerca.get(k)
-                    g.render[tuple(ch) + (trozo.zonas.get(o, -1),)][tex].append(s)
+                    g.render[tuple(ch) + (trozo.zonas.get(o, -1), c not in nivel.aire)][tex].append(s)
                     trozo.repetidas += 1
     for ch, cc in valle.geo.coll.items():
         for kind, polys in cc.items():
             for q in polys:
                 c = nivel.dueno_poli(q)
                 if c in trozo.celdas:
-                    k = tuple(ch) + (trozo.zonas.get(c, -1),)
+                    k = tuple(ch) + (trozo.zonas.get(c, -1), c not in nivel.aire)
                     g.coll[k].setdefault(kind, [])
                     g.coll[k][kind].append(q)
     return g

@@ -3241,7 +3241,8 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
         origin = to_native((cx, cy, cz))
         rec = {"origin": origin, "omd": -1, "csk": -1}
         if TROZO:
-            rec["zona"] = ch[-1]          # kf4_trozos: el vecino que pide este registro
+            rec["zona"] = ch[-2]          # kf4_trozos: el vecino que pide este registro
+            rec["dentro"] = bool(ch[-1])  # bajo techo: niebla cerrada (NIEBLA_DENTRO)
         if ch[0] == "A":
             # agua: registro tardío (bit 0 de las marcas, como el agua de 000/016/026/099): se dibuja después de
             # componer la textura animada (modo 1 de la tabla) y por encima de lo demás, transparente
@@ -3529,6 +3530,12 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
         o = i * 0x20
         struct.pack_into("<4f", blocks, o, 0.0, 0.0, -12.0, niebla_k)
         struct.pack_into("<Q", blocks, o + 0x10, fogcol)
+    # la niebla de dentro (trozos sin fundido): el juego calcula 255 - niebla = base + k / distancia (cm, como los
+    # bloques de map_setup.c: -318.75 y 1147500 = de 20 a 36 m); aquí sin niebla hasta NIEBLA_DENTRO_M[0] y cerrada
+    # del todo a NIEBLA_DENTRO_M[1]
+    z0, z1 = NIEBLA_DENTRO_M[0] * 100.0, NIEBLA_DENTRO_M[1] * 100.0
+    k_d = 255.0 / (1.0 / z0 - 1.0 / z1)
+    struct.pack_into("<4f", blocks, NIEBLA_DENTRO * 0x20, 0.0, 0.0, -k_d / z1, k_d)
 
     # bloque de luz de los enemigos: luna fría desde arriba, relleno cálido, ambiente suficiente
     lb = LUZ_ENEMIGOS * 0x80 + 0x400
@@ -3597,6 +3604,9 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
         b[0x38] = 1      # bloque de flags
         b[0x39] = 0
         b[0x3A] = 0xFF   # sin vecino que precargar
+        if r.get("dentro") and not r.get("tarde"):
+            b[0x34] = NIEBLA_DENTRO   # bajo techo la niebla cierra antes: no se ve hasta el trozo que no está cargado
+            b[0x36] = NIEBLA_DENTRO
         z_ = r.get("zona", -1)
         if TROZO and z_ is not None and z_ >= 0:
             b[0x3A] = z_ >> 1        # el origen (vecino) que carga el juego mientras lo pisas
@@ -5806,6 +5816,8 @@ PASOS_RECORTE = [("color de las ilustraciones de la cruz (16 colores en vez de 2
                                                        globals().__setitem__("TROZO_MAX", 5.2)))]
 MALLA_POR_DEFECTO = {}
 CRUZ_COLORES = 256        # las ilustraciones de la cruz en el mapa (16 si no cabe: PASOS_RECORTE)
+NIEBLA_DENTRO = 2           # bloque de niebla de los registros bajo techo de los trozos sin fundido
+NIEBLA_DENTRO_M = (7.0, 30.0)   # m: hasta aquí no hay niebla / aquí ya no se ve nada
 OTROS_OBLIGATORIOS = False   # (trozos) si un mapa no tiene sitio en la ISO, no se parchea: se vuelve a lo de antes
 TROZO = None              # kf4_trozos: {"neigh": tabla de vecinos, "cielo": puntos} del trozo que se monta
 MAPA_NIVEL1 = 37          # la entrada del DAT del 037.map (su sitio lo ocupa el 099 grande) lleva el nivel 1
@@ -5816,7 +5828,7 @@ MAPA_NIVEL1 = 37          # la entrada del DAT del 037.map (su sitio lo ocupa el
 # ni fundido a negro entre trozos ni entre niveles. El trozo con el inicio del nivel 0 es el 099; los demás van en
 # las entradas del DAT de mapas del 4 que el mod no usa (TROZOS_MAPAS).
 # (sin los que el ejecutable trata aparte por su número: 35 sala del guardián, 38 santuario oscuro, 41, 42...)
-TROZOS_MAPAS = [37, 36, 34, 33, 32, 44, 43, 40, 39, 30, 28, 22, 21, 26, 13]
+TROZOS_MAPAS = [37, 36, 34, 33, 32, 44, 43, 40, 39, 30, 28, 23, 22, 21, 14, 13, 7, 6, 5, 113, 114]
 LIMITE_PAREJA = 0xB80000         # map_file_area_size (con parche_memoria_mapa): los dos mapas cargados juntos
 
 
@@ -5839,7 +5851,7 @@ def mapas_disponibles(src_path):
     return comun
 
 
-def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.42, f1=0.42, disponibles=None,
+def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.16, f1=0.16, disponibles=None,
                 carpeta=None):
     """(099.map, {otros mapas}, pulpo) con los niveles 0 y 1 troceados y unidos sin fundido, o None si no se puede
     (entonces van como antes: un mapa por nivel y ChangeMap)."""
