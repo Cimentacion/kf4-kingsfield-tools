@@ -490,10 +490,10 @@ def _sombra(v, n):
     return (min(255.0, 128 * f * 0.94), min(255.0, 128 * f), min(255.0, 128 * f * 1.02), 128.0)
 INVERTIR = True
 MAGIA_CHORRO = 58           # param/magic.prm: Hidrocañón (Hydro Cannon) nivel 1, la magia de agua del jugador
-# el Kraken del King's Field mira hacia +z (los dos brazos largos y los ojos están de ese lado) y los bichos del IV
-# miran hacia -z: sin girarlo salía mirando al lado contrario. Media vuelta alrededor del eje vertical (un giro, no
-# un espejo: las caras y las normales siguen igual) de los vértices, los huesos y los giros de los movimientos
-GIRO_180 = True
+# Media vuelta del modelo alrededor del eje vertical (vértices, huesos y giros de los movimientos). Se puso en la
+# rev 21 porque el Kraken salía mirando al lado contrario, pero eso era el giro de los enemigos del mapa (arreglado
+# luego aparte): con su IA propia, que lo gira hacia ti, enseñaba la espalda. Sin la media vuelta mira de frente.
+GIRO_180 = False
 
 
 def modelo_pulpo(flor, esq, bloques, piv):

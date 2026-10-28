@@ -1,6 +1,12 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 39 (2026-10-28)
+------------------------------------
+- Kraken and baby Krakens showed you their back when they turned to you: the half turn added to the model in
+  rev 21 was really making up for the map facing of enemies, fixed separately later. Removed: with their own AI
+  turning them to you, they now face you.
+
 Alpha 0.1 - revision 38 (2026-10-28)
 ------------------------------------
 - The Kraken only appeared when you were very close: the load distance rule for crowded areas (rev 34) had cut
