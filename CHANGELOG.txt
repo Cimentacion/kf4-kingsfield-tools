@@ -1,6 +1,22 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 52 (2026-10-28)
+------------------------------------
+- Streaming no longer thrashes. Before, every floor tile asked for its nearest neighbour map, so walking through
+  the middle of a map with two neighbours loaded one, then the other, then the first again, non-stop (frame drops,
+  and the stair to level 1 never finished loading). Now a tile only asks for a neighbour within 25 m walking of the
+  border with it; further in, nothing is asked and what is loaded stays.
+- The link corridor between the levels is found again where the exit and the arrival say: the match was searched
+  20 m around and, after rev 51, a similar place elsewhere won (wrong offset, the link to level 1 broken). Now it is
+  the longest repeated corridor through the exit tile, with the height difference of the exit and the arrival.
+- Everything in level 1 that touches the link corridor goes in one map, so the link has a single neighbour there.
+- New page CORTES_NIVELES.html (written next to kf4_valle.py on every streamed build): each level seen from above
+  with its maps in colours, outdoor hatched, the link corridor, start and exit. Paint the maps with the mouse (brush
+  or bucket), see the estimated size of each map and of every pair that is loaded together (red if it does not
+  fit), and save cortes.json next to kf4_valle.py: the next build uses those cuts.
+- The console says at the end how many maps were made and reminds of the page.
+
 Alpha 0.1 - revision 51 (2026-10-28)
 ------------------------------------
 - The opening walls are back: rev 45 read the tile layer value 254 as "empty" and took the height of the other

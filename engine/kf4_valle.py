@@ -5839,7 +5839,8 @@ def mapas_disponibles(src_path):
     return comun
 
 
-def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.42, f1=0.42, disponibles=None):
+def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.42, f1=0.42, disponibles=None,
+                carpeta=None):
     """(099.map, {otros mapas}, pulpo) con los niveles 0 y 1 troceados y unidos sin fundido, o None si no se puede
     (entonces van como antes: un mapa por nivel y ChangeMap)."""
     import kf4_editor
@@ -5875,11 +5876,25 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.4
     for k, v in ((0, v0), (1, v1)):
         p_ = pts(v)
         cielos[k] = [tuple(min(q[i] for q in p_) for i in range(3)), tuple(max(q[i] for q in p_) for i in range(3))]
+    # los trozos pintados a mano en CORTES_NIVELES.html (cortes.json junto a kf4_valle.py), si los hay
+    manual = {}
+    cortes = os.path.join(carpeta, "cortes.json") if carpeta else None
+    if cortes and os.path.isfile(cortes):
+        for clave_, Nn, ex in (("0", N0, M), ("1", N1, M1)):
+            r_, motivo = kt.leer_cortes(cortes, clave_, Nn, ex)
+            if r_:
+                manual[clave_] = r_
+                log.append(f"Nivel {clave_}: los cortes de cortes.json ({len(r_)} trozos)")
+            else:
+                log.append(f"AVISO: cortes.json, nivel {clave_}: {motivo}; se corta solo")
+    junto_enlace = {(c[0] + a_, c[1] + b_) for c in M1 for a_, b_ in kt.VECINAS4} - M1
     for intento in range(6):
         enlace = kt.Trozo(0, M, "enlace", h0)
         enlace.margen = 0      # (alrededor del pasillo cada nivel tiene otra cosa: nada repetido)
-        p0 = kt.particion(N0, sum(N0.w.values()) * f0, M, v0.inicio)
-        p1 = kt.particion(N1, sum(N1.w.values()) * f1, M1)
+        a0 = kt.particion(N0, sum(N0.w.values()) * f0, M, v0.inicio)
+        a1 = kt.particion(N1, sum(N1.w.values()) * f1, M1, primeras=junto_enlace & set(h1))
+        p0 = manual.get("0") or a0
+        p1 = manual.get("1") or a1
         t0 = [kt.Trozo(0, c, f"nivel 0, parte {i + 1}", h0) for i, c in enumerate(p0)]
         t1 = [kt.Trozo(1, c, f"nivel 1, parte {i + 1}", h1) for i, c in enumerate(p1)]
         trozos = t0 + [enlace] + t1
@@ -5953,10 +5968,18 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.4
             break
         malos = {t.nivel for t in grandes} | {t.nivel for p_ in parejas for t in p_ if t is not enlace}
         log.append(f"Los trozos no caben de dos en dos en la memoria de mapas ({len(parejas)} parejas): se trocea más")
-        if 0 in malos:
-            f0 *= 0.85
-        if 1 in malos or not malos:
-            f1 *= 0.85
+        for a_, b_ in parejas:
+            log.append(f"  {a_.nombre} ({len(mapas[a_.mapa]) / 1048576:.1f} MB) + {b_.nombre} "
+                       f"({len(mapas[b_.mapa]) / 1048576:.1f} MB)")
+        for k_ in sorted(malos or {1}):
+            if str(k_) in manual:
+                log.append(f"AVISO: tus cortes del nivel {k_} (cortes.json) no caben de dos en dos en memoria: se "
+                           f"corta solo (mira CORTES_NIVELES.html, las parejas en rojo)")
+                del manual[str(k_)]
+            elif k_ == 0:
+                f0 *= 0.85
+            else:
+                f1 *= 0.85
     else:
         log.append("AVISO: no hay forma de que los trozos quepan de dos en dos: van con fundido")
         return None
@@ -5967,6 +5990,23 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.4
     log.append(f"Sin fundido: {len(trozos)} mapas ({len(t0)} del nivel 0, el pasillo de enlace y {len(t1)} del nivel 1); "
                f"la pareja más grande ocupa {mayor / 1048576:.1f} MB de {LIMITE_PAREJA / 1048576:.1f}")
     otros = {f"{k:03d}.map": d for k, d in mapas.items() if k != 99}
+    if carpeta:
+        # la página para pintar los cortes, con los tamaños de esta vez para estimar los de otros cortes
+        try:
+            base = len(mapas[enlace.mapa])
+            datos = {"niveles": {
+                "0": kt.datos_nivel(N0, [t.celdas for t in t0], a0, M, v0.inicio, (salida["x"], salida["y"])),
+                "1": kt.datos_nivel(N1, [t.celdas for t in t1], a1, M1, None, (llegada["x"], llegada["y"]))},
+                "base": base, "limite": LIMITE_PAREJA - 0x40000, "enlace_mb": base / 1048576}
+            datos["niveles"]["0"]["texto_salida"] = "salida al nivel 1"
+            datos["niveles"]["1"]["texto_salida"] = "llegada desde el nivel 0"
+            for clave_, Nn, ts in (("0", N0, t0), ("1", N1, t1)):
+                ks = sorted((len(mapas[t.mapa]) - base) / max(1, sum(Nn.w.get(c, 0) for c in t.celdas)) for t in ts)
+                datos["niveles"][clave_]["k"] = ks[len(ks) // 2] if ks else 30.0
+            kt.escribir_html(os.path.join(carpeta, "CORTES_NIVELES.html"), datos)
+            log.append("Cortes: abre CORTES_NIVELES.html para ver y cambiar dónde se corta cada nivel")
+        except Exception as e:
+            log.append(f"(no pude escribir CORTES_NIVELES.html: {e})")
     return mapas[99], otros, pulpo
 
 
@@ -6087,7 +6127,7 @@ def main():
     if zona == "editor" and nivel1_json and "--con-fundido" not in sys.argv:
         ruta1 = nivel1_json if os.path.isabs(nivel1_json) else os.path.join(here, nivel1_json)
         res = sin_fundido(src, ruta, ruta1, semilla, rumbo, log, d099, d031, cruz,
-                          disponibles=mapas_disponibles(src_path) if src.kind == "ISO" else None)
+                          disponibles=mapas_disponibles(src_path) if src.kind == "ISO" else None, carpeta=here)
         if res:
             new_map, otros, pulpo = res
             with open(os.path.join(outdir, "099.map"), "wb") as o:
@@ -6117,6 +6157,9 @@ def main():
                 with open(os.path.join(outdir, "resumen.txt"), "w", encoding="utf-8") as o:
                     o.write("\n".join(log) + "\n")
                 print("\n".join(log))
+                print("\n" + "=" * 78 + "\n" + next((l_ for l_ in log if l_.startswith("Sin fundido: ") and "mapas" in l_), "")
+                      + "\nPara cambiar dónde se corta cada nivel, abre CORTES_NIVELES.html (en esta carpeta)."
+                      + "\n" + "=" * 78)
                 return
     v.construir()
     revisar(v.geo, log)

@@ -78,37 +78,49 @@ def enlace(v0, v1, salida, llegada, radio=20.0, log=None):
     base = (llegada["x"] - salida["x"], llegada["y"] - salida["y"])
     r = int(radio / CELDA)
     zona0 = [(s[0] + i, s[1] + j) for i in range(-r, r + 1) for j in range(-r, r + 1) if (s[0] + i, s[1] + j) in H0]
+    dz_esperada = float(salida.get("z", 0.0)) - float(llegada.get("z", 0.0))
+
+    def pasillo(iguales):
+        """Lo que casa unido a la casilla de la salida (o a una de al lado): el pasillo repetido."""
+        ini = next((k for k in [s] + [(s[0] + i, s[1] + j) for i in (-1, 0, 1) for j in (-1, 0, 1)]
+                    if k in iguales), None)
+        if ini is None:
+            return set()
+        M_, pila = {ini}, [ini]
+        while pila:
+            a_, b_ = pila.pop()
+            for k in ((a_ + 1, b_), (a_ - 1, b_), (a_, b_ + 1), (a_, b_ - 1)):
+                if k in iguales and k not in M_:
+                    M_.add(k)
+                    pila.append(k)
+        return M_
     mejor = None
-    for di in range(-8, 9):
-        for dj in range(-8, 9):
+    for di in range(-6, 7):
+        for dj in range(-6, 7):
             dx = round(base[0] / CELDA) + di
             dy = round(base[1] / CELDA) + dj
             dzs = collections.Counter()
             for c in zona0:
                 k = (c[0] + dx, c[1] + dy)
                 if k in H1:
-                    for a in H0[c]:
-                        for b in H1[k]:
-                            dzs[round(a - b, 1)] += 1
+                    for a_ in H0[c]:
+                        for b_ in H1[k]:
+                            if abs((a_ - b_) - dz_esperada) <= 3.0:     # a la altura de la salida y la llegada
+                                dzs[round(a_ - b_, 1)] += 1
             if not dzs:
                 continue
             dz = dzs.most_common(1)[0][0]
-            n = sum(1 for c in zona0 if (c[0] + dx, c[1] + dy) in H1 and _iguales(H0[c], H1[(c[0] + dx, c[1] + dy)], dz))
-            if mejor is None or n > mejor[0]:
-                mejor = (n, dx, dy, dz)
-    if not mejor or mejor[0] < 4:
+            iguales = {c for c in zona0 if (c[0] + dx, c[1] + dy) in H1
+                       and _iguales(H0[c], H1[(c[0] + dx, c[1] + dy)], dz)}
+            M_ = pasillo(iguales)
+            # el pasillo más largo que pasa por la salida; a igualdad, el más cerca de donde dicen la salida y la
+            # llegada (antes contaba todo lo que casaba en 20 m y a veces ganaba otro sitio parecido)
+            clave = (len(M_), -(abs(di) + abs(dj)))
+            if M_ and (mejor is None or clave > mejor[0]):
+                mejor = (clave, dx, dy, dz, M_, len(iguales))
+    if not mejor or len(mejor[4]) < 4:
         return None, None
-    n, dx, dy, dz = mejor
-    iguales = {c for c in zona0 if (c[0] + dx, c[1] + dy) in H1 and _iguales(H0[c], H1[(c[0] + dx, c[1] + dy)], dz)}
-    # el pasillo: lo que casa unido a la casilla de la salida (o a la que casa más cerca de ella)
-    ini = s if s in iguales else min(iguales, key=lambda c: (c[0] - s[0]) ** 2 + (c[1] - s[1]) ** 2)
-    M, pila = {ini}, [ini]
-    while pila:
-        a, b = pila.pop()
-        for k in ((a + 1, b), (a - 1, b), (a, b + 1), (a, b - 1)):
-            if k in iguales and k not in M:
-                M.add(k)
-                pila.append(k)
+    _, dx, dy, dz, M, n = mejor
     # la dz exacta: la media de las diferencias del pasillo
     difs = [a - b for c in M for a in H0[c] for b in H1[(c[0] + dx, c[1] + dy)] if abs(a - b - dz) < 0.35]
     dz = sum(difs) / len(difs) if difs else dz
@@ -249,7 +261,7 @@ class Nivel:
         return self.dueno_celda(celda(p))
 
 
-def particion(nivel, presupuesto, excluir=frozenset(), inicio=None):
+def particion(nivel, presupuesto, excluir=frozenset(), inicio=None, primeras=None):
     """Las casillas de suelo del nivel (menos las excluidas) en trozos de peso <= presupuesto, cortando por donde
     menos se ve, como los mapas del IV: nunca al aire libre (cada zona al aire libre unida va entera en un trozo,
     desde fuera se ve lejos) y bajo techo por los pasillos estrechos.
@@ -352,13 +364,18 @@ def particion(nivel, presupuesto, excluir=frozenset(), inicio=None):
 
     # la primera entrada: la zona al aire libre más grande (o el grupo del inicio)
     aire = [g for g, m in enumerate(grupos) if m[0] in nivel.aire]
-    if aire:
+    primeros = {grupo[c] for c in (primeras or ()) if c in grupo}
+    if primeros:
+        # (el nivel 1: todo lo que toca el pasillo del enlace en un mismo trozo, para que el enlace tenga un solo
+        # vecino en ese nivel)
+        primero = None
+    elif aire:
         primero = max(aire, key=lambda g: gw[g])
     elif inicio is not None and nivel.dueno_punto(inicio) in grupo:
         primero = grupo[nivel.dueno_punto(inicio)]
     else:
         primero = max(range(len(grupos)), key=lambda g: gw[g])
-    pendientes = [{primero}]
+    pendientes = [primeros or {primero}]
     while libres:
         if not pendientes:
             # lo que no se puede alcanzar andando desde lo hecho (saltos, bajadas): desde su grupo más pesado
@@ -421,6 +438,9 @@ def _pasa(za, zb):
     return any(abs(a - b) <= PASO for a in za for b in zb)
 
 
+ZONA_PASOS = 10     # casillas andando (25 m) desde la puerta a un vecino en las que el juego ya lo va cargando
+
+
 def vecinos_y_zonas(trozos, puede, desfase, toque=1.5):
     """Para cada trozo: sus vecinos y la zona de cada casilla (qué vecino pide el juego mientras la pisas).
     Vecinos: los trozos cuyas casillas tocan las suyas (en las coordenadas de su nivel; si no se ven, no hace falta
@@ -457,6 +477,7 @@ def vecinos_y_zonas(trozos, puede, desfase, toque=1.5):
                             sig.append(n)
                 frente = sig
             cand.append((b, xyz, d, camino, 0 if b.nivel == a.nivel else 1))
+        cand = [x for x in cand if any(v_ == 0 for v_ in x[3].values())]     # solo los que se alcanzan andando
         a.vecinos = [(b, xyz) for b, xyz, _, _, _ in cand]
         a.puertas = {b.nombre: sum(1 for v_ in camino.values() if v_ == 0) for b, _, _, camino, _ in cand}
         a.zonas = {}
@@ -465,12 +486,14 @@ def vecinos_y_zonas(trozos, puede, desfase, toque=1.5):
                 a.zonas[c] = -1
                 continue
             por_camino = [(cand[i][3][c], cand[i][4], i) for i in range(len(cand)) if c in cand[i][3]]
-            if por_camino:
-                pasos, _, j = min(por_camino)
+            pasos, _, j = min(por_camino) if por_camino else (None, 0, 0)
+            if pasos is not None and pasos <= ZONA_PASOS:
                 a.zonas[c] = j * 2 + (1 if pasos <= 1 else 0)
             else:
-                j = min(range(len(cand)), key=lambda i: (cand[i][2][c], cand[i][4]))
-                a.zonas[c] = j * 2
+                # lejos de todas las puertas: no pide nada (se queda cargado lo que hubiera). Antes cada casilla pedía
+                # siempre su vecino más cercano y, andando por el medio de un trozo con dos vecinos, el juego cargaba
+                # uno, luego el otro, luego el primero... sin parar (tirones y la escalera del enlace sin llegar)
+                a.zonas[c] = -1
 
 
 MARGEN = 3          # casillas de geometría de alrededor que lleva repetida cada trozo (7,5 m)
@@ -539,3 +562,88 @@ def vista(nivel, trozo):
     v.kf_llegadas = {}
     v._trozo = trozo
     return v
+
+
+# ======================= Cortes a mano (cortes_niveles.html) =======================
+# La página CORTES_NIVELES.html (la escribe cada generación sin fundido, con los datos de los dos niveles dentro)
+# enseña cada nivel desde arriba con sus trozos; se pintan a mano y se guarda cortes.json junto a kf4_valle.py.
+# La siguiente generación usa esos trozos (si casan con el nivel y caben de dos en dos en memoria).
+
+def _caja(nivel):
+    cs = set(nivel.H) | set(getattr(nivel, "todas", ()))
+    xs = [c[0] for c in cs]
+    ys = [c[1] for c in cs]
+    return min(xs), min(ys), max(xs) - min(xs) + 1, max(ys) - min(ys) + 1
+
+
+def datos_nivel(nivel, trozos, auto, excluir, inicio=None, salida=None):
+    """Lo que la página necesita de un nivel (listas por casilla, fila a fila de sur a norte)."""
+    x0, y0, w, h = _caja(nivel)
+    n = w * h
+    alt, pisos, aire, roca, peso, enl, tro, aut = ([-999] * n, [0] * n, [0] * n, [0] * n, [0] * n, [0] * n,
+                                                   [0] * n, [0] * n)
+    k_ = lambda c: (c[1] - y0) * w + (c[0] - x0)
+    for c in getattr(nivel, "todas", ()):
+        if 0 <= c[0] - x0 < w and 0 <= c[1] - y0 < h:
+            roca[k_(c)] = 1
+    for c, zs in nivel.H.items():
+        i = k_(c)
+        alt[i] = int(round(max(zs) * 10))
+        pisos[i] = len({round(z) for z in zs})
+        aire[i] = 1 if c in nivel.aire else 0
+        peso[i] = int(nivel.w.get(c, 0))
+        enl[i] = 1 if c in excluir else 0
+    for j, t in enumerate(trozos):
+        for c in t:
+            tro[k_(c)] = j + 1
+    for j, t in enumerate(auto):
+        for c in t:
+            aut[k_(c)] = j + 1
+    rel = lambda p: [celda(p)[0] - x0, celda(p)[1] - y0] if p else None
+    return {"x0": x0, "y0": y0, "w": w, "h": h, "suelos": len(nivel.H), "alt": alt, "pisos": pisos, "aire": aire,
+            "roca": roca, "peso": peso, "enlace": enl, "trozo": tro, "auto": aut, "inicio": rel(inicio),
+            "salida": rel(salida), "k": 30.0}
+
+
+def escribir_html(ruta, datos):
+    import json
+    import os
+    plantilla = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cortes_niveles.html")
+    with open(plantilla, encoding="utf-8") as f:
+        html = f.read()
+    html = html.replace("/*DATOS*/null", json.dumps(datos, separators=(",", ":")))
+    with open(ruta, "w", encoding="utf-8") as f:
+        f.write(html)
+
+
+def leer_cortes(ruta, clave, nivel, excluir):
+    """Los trozos pintados a mano para un nivel (lista de conjuntos de casillas de suelo), o (None, motivo)."""
+    import json
+    try:
+        with open(ruta, encoding="utf-8") as f:
+            d = json.load(f)["niveles"][clave]
+    except (OSError, ValueError, KeyError) as e:
+        return None, f"no se puede leer ({e})"
+    if d.get("suelos") != len(nivel.H):
+        return None, "es de otra versión del nivel (no casan las casillas)"
+    x0, y0, w, h = d["x0"], d["y0"], d["w"], d["h"]
+    t = d["trozo"]
+    pintadas = {}
+    for c in nivel.H:
+        if c in excluir:
+            continue
+        i, j = c[0] - x0, c[1] - y0
+        v = t[j * w + i] if 0 <= i < w and 0 <= j < h else 0
+        if v > 0:
+            pintadas[c] = v
+    if not pintadas:
+        return None, "no tiene nada pintado"
+    sin = [c for c in nivel.H if c not in excluir and c not in pintadas]
+    if sin:
+        cerca = _cercanas(sin, set(pintadas))
+        for c in sin:
+            pintadas[c] = pintadas[cerca[c][1]]
+    grupos = collections.defaultdict(set)
+    for c, v in pintadas.items():
+        grupos[v].add(c)
+    return [grupos[v] for v in sorted(grupos)], None
