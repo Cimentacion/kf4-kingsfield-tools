@@ -1,6 +1,13 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 36 (2026-10-28)
+------------------------------------
+- Kraken as in King's Field (its actions read from the game data and executable: docs/kf1_ia.md). It doesn't
+  walk (only turns towards you from 12 m) and doesn't spit. It has a 7 m whip and a stronger 9.5 m one.
+- Baby Krakens as in King's Field: they crawl, keep 2-2.6 m away from you, whip at 3.3 and 4.1 m.
+- docs/kf1_ia.md: how King's Field picks and runs each monster action (types, parameters, units).
+
 Alpha 0.1 - revision 35 (2026-10-28)
 ------------------------------------
 - Kraken: new AI base, the spitting beetle of KFIV (record 39, type 5). It comes after you crawling, whips up

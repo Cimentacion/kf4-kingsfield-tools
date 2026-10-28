@@ -547,11 +547,14 @@ def chr_con(flor, modelo, mov, tex):
 
 # ---------------- chr.prm ----------------
 def pulpo_prm(base_rec):
-    """El registro del pulpo a partir del del escarabajo escupidor del IV (registro 39, tipo 5): su IA se acerca,
-    da golpes de cerca y escupe de lejos. El arrastrarse mueve al bicho con la raíz del movimiento."""
+    """El Kraken grande, como en el King's Field (clase 0 del nivel 0, sus acciones del disco: docs/kf1_ia.md):
+    no se mueve (su "moverse" tiene velocidad 0: solo se gira hacia ti, desde 12 m), no escupe y tiene tres
+    latigazos: dos de 7 m (daño 100 y 120) y uno de 9,5 m (140). Aquí, sobre la IA del escarabajo (tipo 5): su
+    andar con la animación de quieto (sin avance: se queda en su sitio y se gira), los dos golpes de cerca del IV
+    y sin ataque a distancia. Daño a la escala del resto del port (el del King's Field / 3)."""
     r = bytearray(base_rec)
     struct.pack_into("<H", r, 0, MODELO_PULPO)
-    struct.pack_into("<H", r, 0x0A, 400)          # vida
+    struct.pack_into("<H", r, 0x0A, 400)          # vida (1500 en el King's Field, a la cuarta parte)
     struct.pack_into("<H", r, 0x0E, 450)          # experiencia (la del King's Field: 450)
     struct.pack_into("<H", r, 0x06, 120)          # radio contra el mapa
     struct.pack_into("<H", r, 0x08, 250)          # alto contra el mapa
@@ -561,36 +564,43 @@ def pulpo_prm(base_rec):
     ids = [0] * 0x20
     for anim, mov in ANIMACION.items():
         ids[anim] = mov
+    ids[3] = ids[4] = 0                           # andar = quieto: no avanza (en el King's Field, velocidad 0)
     r[0x60:0x80] = bytes(ids)
-    # el latigazo: el primer golpe de cerca del escarabajo (su ataque funciona), con el alcance de los brazos
     o = 0x240
-    struct.pack_into("<HHf", r, o + 4, 0, 450, math.radians(70))
+    # latigazo corto: 7 m (5760 unidades del PS1), golpe a la mitad de la animación, a 1,2 m de altura, 52 grados
+    struct.pack_into("<HHf", r, o + 4, 0, 700, math.radians(52))
     h = o + 0x10
-    struct.pack_into("<9h", r, h, 0, 35, 0, 0, 0, 0, 15, 0, 0)  # golpe y agua
-    struct.pack_into("<HHHH", r, h + 0x20, 500, 120, 26, 34)
-    # el segundo golpe de cerca (animación 21) también es el latigazo, más flojo
+    struct.pack_into("<9h", r, h, 0, 37, 0, 0, 0, 0, 0, 0, 0)
+    struct.pack_into("<HHHH", r, h + 0x20, 700, 120, 24, 30)
+    # latigazo largo: 9,5 m, más fuerte (140 en el King's Field), 44 grados, algo menos frecuente (120 / 160)
     o2 = o + 0x88
     r[o2:o2 + 0x88] = r[o:o + 0x88]
-    r[o2] = 60
-    # la tinta: el escupitajo del escarabajo (magia 152), de 4 a 20 m, en el fotograma 40 de la tinta
-    q = 0x3D8
-    r[q] = 70
-    struct.pack_into("<HH", r, q + 4, 400, 2000)
-    struct.pack_into("<HH", r, q + 0x10, MAGIA_TINTA, 40)
+    r[o2] = 75
+    struct.pack_into("<HHf", r, o2 + 4, 0, 950, math.radians(44))
+    struct.pack_into("<9h", r, o2 + 0x10, 0, 47, 0, 0, 0, 0, 0, 0, 0)
+    struct.pack_into("<HHHH", r, o2 + 0x10 + 0x20, 950, 120, 24, 30)
+    r[0x3D8] = 0                                  # no escupe (en el King's Field tampoco)
     return bytes(r)
 
 
 def mini_prm(grande_rec):
-    """El pulpito: el registro del grande a la escala de su clase, con la vida y la experiencia del King's Field
-    (patas 250 + capucha 250 de vida en el original, a la cuarta parte como todo lo portado; 12 + 3 de experiencia)."""
+    """El pulpito (clases 18, 27 y 29 del nivel 0): este sí anda (velocidad 31, como el andar del IV) y se queda a
+    2-2,6 m de ti; latigazos de 3,3 m (daño 37) y 4,1 m (45). Vida 250 en el King's Field (a la cuarta parte)."""
     r = bytearray(grande_rec)
-    struct.pack_into("<H", r, 0x0A, 125)
-    struct.pack_into("<H", r, 0x0E, 15)
+    struct.pack_into("<H", r, 0x0A, 65)
+    struct.pack_into("<H", r, 0x0E, 12)
     r[0xD2] = MINI_ESCALA
-    h = 0x240 + 0x10
-    struct.pack_into("<9h", r, h, 0, 18, 0, 0, 0, 0, 8, 0, 0)          # golpe y agua: más flojo que el grande
-    struct.pack_into("<HHf", r, 0x240 + 4, 0, 200, math.radians(70))     # alcance a su tamaño
-    struct.pack_into("<HHHH", r, h + 0x20, 260, 60, 26, 34)
-    r[0x3D8] = 0                                                          # los pulpitos no escupen
-    r[0x240 + 0x88] = 0                                                   # ni dan el segundo golpe
+    ids = list(r[0x60:0x80])
+    ids[3] = ids[4] = ANIMACION[3]                # este sí se arrastra
+    r[0x60:0x80] = bytes(ids)
+    o = 0x240
+    struct.pack_into("<HHf", r, o + 4, 0, 330, math.radians(52))
+    struct.pack_into("<9h", r, o + 0x10, 0, 13, 0, 0, 0, 0, 0, 0, 0)
+    struct.pack_into("<HHHH", r, o + 0x30, 330, 35, 24, 30)
+    o2 = o + 0x88
+    r[o2] = 45
+    struct.pack_into("<HHf", r, o2 + 4, 0, 410, math.radians(44))
+    struct.pack_into("<9h", r, o2 + 0x10, 0, 15, 0, 0, 0, 0, 0, 0, 0)
+    struct.pack_into("<HHHH", r, o2 + 0x30, 410, 35, 24, 30)
+    r[0x3D8] = 0
     return bytes(r)
