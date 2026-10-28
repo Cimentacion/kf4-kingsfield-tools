@@ -1,6 +1,14 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 47 (2026-10-28)
+------------------------------------
+- Fixed the invisible walls of level 0 (and level 1): the secret walls, doors and niche lids were tied to a water
+  record (100 m wide, drawn in the late pass), which never counts as "seen", so the game did not draw them although
+  their collision was there. Every map object is now tied to the smallest normal record that holds it.
+- The healing fountain uses KFIV's own fountain script and effect again (the blue-flash code cure of rev 46 is off).
+  It did not heal in rev 44-45 for the same reason: its object was tied to the water record and could not be used.
+
 Alpha 0.1 - revision 46 (2026-10-28)
 ------------------------------------
 - The healing fountain of level 0 heals again with X near it: the fountain table of the cross block (position and

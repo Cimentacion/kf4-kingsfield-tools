@@ -2331,14 +2331,23 @@ def _retexturar(modelo, tex, uvmap=None):
     return bytes(b)
 
 
+def _cajas_de(recs):
+    """[(índice, caja)] de los registros a los que se puede atar un objeto: los del decorado normal. Un objeto se ve
+    (y se puede usar) solo los fotogramas en que su registro se dibuja con efectos (MAP_RECORD_FRAME_EFFECTS): los
+    registros del agua (tardíos, cajas de 100 m) y el cielo no valen; atado a uno de ellos la fuente no se podía usar
+    y las paredes secretas no se dibujaban."""
+    return [(k, r["box"]) for k, r in enumerate(recs) if "box" in r and not r.get("tarde") and "raw" not in r]
+
+
 def _registro_de(cajas, x, z):
-    """El registro (trozo) que contiene el punto, o el más cercano."""
-    mejor, dist = 0, 1e30
+    """El registro (trozo) que contiene el punto (el más pequeño si hay varios), o el más cercano."""
+    mejor, clave = 0, (1e30, 1e30)
     for k, ((a0, _, a2), (b0, _, b2)) in cajas:
         dx = max(a0 - x, 0, x - b0)
         dz = max(a2 - z, 0, z - b2)
-        if dx * dx + dz * dz < dist:
-            mejor, dist = k, dx * dx + dz * dz
+        c = (dx * dx + dz * dz, (b0 - a0) * (b2 - a2))
+        if c < clave:
+            mejor, clave = k, c
     return mejor
 
 
@@ -2563,7 +2572,7 @@ def colocar_objetos_kf(objs, obj_secc, lista, plantillas, recs, log, tex_pared=N
     objs = bytearray(objs)
     cuenta = collections.Counter()
     defs = {"cofre": OBJ_COFRE, "puerta": OBJ_PUERTA, "secreta": OBJ_SECRETA, "barril": OBJ_BARRIL}
-    cajas = [(k, r["box"]) for k, r in enumerate(recs) if "box" in r]
+    cajas = _cajas_de(recs)
     for o in lista:
         di = defs.get(o["tipo"])
         t = plantillas.get(di)
@@ -2649,13 +2658,7 @@ def colocar_objetos_kf(objs, obj_secc, lista, plantillas, recs, log, tex_pared=N
         struct.pack_into("<4f", b, 0x20, sx, sy, sz, 1.0)
         struct.pack_into("<4H", b, 0x30, di, im, ic, imo)
         # registro (trozo) donde está: el que lo contiene, o el más cercano
-        mejor, dist = 0, 1e30
-        for k, ((a0, _, a2), (b0, _, b2)) in cajas:
-            dx = max(a0 - x, 0, x - b0)
-            dz = max(a2 - z, 0, z - b2)
-            if dx * dx + dz * dz < dist:
-                mejor, dist = k, dx * dx + dz * dz
-        struct.pack_into("<H", b, 0x38, mejor)
+        struct.pack_into("<H", b, 0x38, _registro_de(cajas, x, z))
         b[0x3D] = LUZ_OBJETOS_KF
         if di == OBJ_COFRE:
             struct.pack_into("<h", b, 0x44, int(o.get("objeto", 0)))
@@ -3124,20 +3127,14 @@ def fuentes_que_curan(h, objs, fuentes, recs, log):
         struct.pack_into("<4H", plantilla, 0x30, 512, 0xFFFF, 0xFFFF, 0xFFFF)
     struct.pack_into("<HH", plantilla, 0x40, GUION_FUENTE, 0)
     struct.pack_into("<H", plantilla, 0x58, 0)            # sin guion de usar un objeto (el cristal)
-    cajas = [(k, r["box"]) for k, r in enumerate(recs) if "box" in r]
+    cajas = _cajas_de(recs)
     objs = bytearray(objs)
     for p in fuentes:
         x, y, z = to_native(p)
         y -= FUENTE_ALTO
         b = bytearray(plantilla)
         struct.pack_into("<4f", b, 0x00, x, y, z, 0.0)
-        mejor, dist = 0, 1e30
-        for k, ((a0, _, a2), (b0, _, b2)) in cajas:
-            dx = max(a0 - x, 0, x - b0)
-            dz = max(a2 - z, 0, z - b2)
-            if dx * dx + dz * dz < dist:
-                mejor, dist = k, dx * dx + dz * dz
-        struct.pack_into("<H", b, 0x38, mejor)
+        struct.pack_into("<H", b, 0x38, _registro_de(cajas, x, z))
         objs += b
     return bytes(objs), len(fuentes)
 
@@ -3501,7 +3498,7 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
                 log.append("AVISO: no encuentro el punto de guardado de 099: sin piedras de guardado")
             else:
                 plantilla_g = bytes(objs[k_g * md.OBJREC:(k_g + 1) * md.OBJREC])
-                cajas_g = [(k, r["box"]) for k, r in enumerate(recs) if "box" in r]
+                cajas_g = _cajas_de(recs)
                 for j, o in enumerate(guardas):
                     b_ = bytearray(plantilla_g)
                     x_, y_, z_ = to_native(o["pos"])
@@ -3657,9 +3654,10 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
     out += omd_blob + bytes(max(0, room_m - len(omd_blob)))
     if bloque_cruz:
         import kf4_cruz
-        # las fuentes que curan: con X cerca (la cura del código: vida llena y destello azul en toda la pantalla,
-        # como la del King's Field) y además el guion del 4 si la usas mirándola (fuentes_que_curan)
-        bloque_cruz = kf4_cruz.poner_fuentes(bloque_cruz, [to_native(p_) for p_ in getattr(valle, "kf_fuentes", [])])
+        # las fuentes curan con el guion y el efecto del propio 4 (fuentes_que_curan): la cura del código (destello
+        # azul), apagada. La de la revisión 44 no curaba porque el objeto de la fuente quedaba atado a un registro del
+        # agua, que no cuenta como visto (_cajas_de)
+        bloque_cruz = kf4_cruz.poner_fuentes(bloque_cruz, [])
         # las ilustraciones de la cruz van justo antes de la colisión (detrás de los modelos: el motor no lee esa
         # parte), alineadas a 16: el código las encuentra a len(bloque) bytes antes del offset de la colisión de la
         # cabecera, en cualquier mapa (antes iban detrás de la colisión, en un sitio distinto en cada mapa, y en el
