@@ -1,6 +1,12 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 46 (2026-10-28)
+------------------------------------
+- The healing fountain of level 0 heals again with X near it: the fountain table of the cross block (position and
+  radius) is filled again, so the patched code fills your health and flashes the screen blue, as in King's Field.
+  Using the fountain while facing it still runs KFIV's own fountain script too.
+
 Alpha 0.1 - revision 45 (2026-10-28)
 ------------------------------------
 - The cloud sky is back over the open parts of the ported levels (rev 44 had removed it and the shore was black).

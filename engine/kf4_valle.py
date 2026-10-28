@@ -3657,8 +3657,9 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
     out += omd_blob + bytes(max(0, room_m - len(omd_blob)))
     if bloque_cruz:
         import kf4_cruz
-        # las fuentes curan con el guion del propio juego (fuentes_que_curan): la cura del código, apagada
-        bloque_cruz = kf4_cruz.poner_fuentes(bloque_cruz, [])
+        # las fuentes que curan: con X cerca (la cura del código: vida llena y destello azul en toda la pantalla,
+        # como la del King's Field) y además el guion del 4 si la usas mirándola (fuentes_que_curan)
+        bloque_cruz = kf4_cruz.poner_fuentes(bloque_cruz, [to_native(p_) for p_ in getattr(valle, "kf_fuentes", [])])
         # las ilustraciones de la cruz van justo antes de la colisión (detrás de los modelos: el motor no lee esa
         # parte), alineadas a 16: el código las encuentra a len(bloque) bytes antes del offset de la colisión de la
         # cabecera, en cualquier mapa (antes iban detrás de la colisión, en un sitio distinto en cada mapa, y en el
