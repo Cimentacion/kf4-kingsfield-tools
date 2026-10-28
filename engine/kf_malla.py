@@ -156,7 +156,8 @@ class Datos:
 FUENTE_ID = 195
 PUERTAS_MARCO = {129}
 HUECO_PUERTA_129 = 4200      # unidades del PS1 que sube su hueco por encima del techo (la hoja mide 3216 y sube 1,25 veces)                  # puertas del King's Field que son una casilla entera (con su suelo y paredes)
-NICHOS_KF = {131, 138, 209, 214}          # paredes con nicho (kf1_objetos.NICHOS): fijas, no suben
+NICHOS_KF = {131, 138, 209, 214}          # paredes con nicho (kf1_objetos.NICHOS): la pared fija, la tapa sube
+NICHO_HUNDIR = 0.08                        # m que se mete la tapa del nicho en la pared
 # cuánto decorado: 2 todo (menos lo muy pesado), 1 solo lo ligero, 0 solo la fuente (si el mapa no cabe, kf4_valle
 # lo va bajando antes de quitar caras)
 PROPS_NIVEL = 2
@@ -253,11 +254,23 @@ def _piezas(datos, editor, pad, h0):
         ox = editor.ox + (x + pad + ffz) * C
         oy = editor.oy + (z + pad + ffx) * C
         oz = (elev - h0) * ALTURA_M - fz * ESCALA
+        if oid in NICHOS_KF:
+            # la pared con nicho no es simétrica: como el decorado, media vuelta (salía mirando a la roca y con el
+            # hueco hacia el pasillo; el objeto de dentro queda detrás, en la casilla de la roca)
+            ang = ang + math.pi
         ca, sa = math.cos(ang), math.sin(ang)
 
         def gira(v, ca=ca, sa=sa):
             x_, y_, z_ = v
             return x_ * ca + z_ * sa, y_, -x_ * sa + z_ * ca
+        tapa = None
+        if oid in NICHOS_KF:
+            # la tapa cuadrada del hueco (la placa de x = -897 a -768 delante del agujero): al objeto que se abre
+            tapa = frozenset(tuple(pr[3]) for pr in prims
+                             if pr[3] and all(-900 <= verts[i][0] <= -765 and abs(verts[i][2]) <= 455
+                                              and -1545 <= verts[i][1] <= -630 for i in pr[3]))
+            gx_, _, gz_ = gira((1.0, 0.0, 0.0))
+            atras = (-gx_ * NICHO_HUNDIR, -gz_ * NICHO_HUNDIR, 0.0)     # (x del modelo -> mundo: x, gz -> y)
         if oid not in NICHOS_KF:
             # la pared que sube del King's Field (130): la de abajo va de x = 3 a 256 y la de encima del techo, de
             # -256 a 0, metida en la roca. Desde un lado la de abajo quedaba 31 cm hundida en su hueco: su cara de ese
@@ -286,7 +299,8 @@ def _piezas(datos, editor, pad, h0):
         for v in verts:
             gx, gy, gz = gira(v)
             mundo.append((ox + gx * ESCALA, oy + gz * ESCALA, oz - gy * ESCALA))
-        _SECRETA_ACTUAL[0] = (oid, (ox, oy, oz), oz + 3200 * ESCALA - 0.05)
+        _SECRETA_ACTUAL[0] = (oid, (ox, oy, oz), oz + 3200 * ESCALA - 0.05) if tapa is None else \
+            (oid, (ox, oy, oz), oz + 3200 * ESCALA - 0.05, False, None, tapa, atras)
         yield x, z, prims, mundo, gira, int(round(ang / (math.pi / 2))) & 3
     for (x, z, oid, verts, prims, elev, ffx, ffz, ang, fz) in getattr(datos, "puertas_mov", []):
         ox = editor.ox + (x + pad + ffz) * C
@@ -551,10 +565,24 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
     suelo_tex = {}            # casilla -> (clave, u0, v0, du, dv) de una cara de suelo suya (para los huecos)
     suelo_alt = {}
     paneles = {}              # posición de la puerta secreta -> [(textura, triángulo)] de la pared que sube
+    sin_huella = set()        # paneles que no llevan las caras de arriba y abajo añadidas (puertas, tapas de nicho)
     secreta_fijas = {}        # caras fijas de los modelos de pared secreta (suelo, techo, marco): pos -> [(grupo, tri)]
     suelos_secreta = set()    # casillas bajo el suelo de los modelos de pared secreta (se les pone suelo)
     con_suelo = set()         # casillas con alguna cara de suelo (mirando arriba)
     editor.kf_paneles = paneles
+    # el plano de la pared de cada nicho (punto y normal horizontal, en el mundo): la casilla del King's Field puede
+    # traer su propia pared lisa justo ahí (la verde de 209), que tapaba el hueco; esas caras de la casilla se quitan
+    C_ = editor.celda
+    planos_nicho = collections.defaultdict(list)
+    for (x, z, oid, verts, prims, elev, ffx, ffz, ang, fz) in getattr(datos, "secretas", []):
+        if oid not in NICHOS_KF:
+            continue
+        a_ = ang + math.pi
+        ca_, sa_ = math.cos(a_), math.sin(a_)
+        ox_ = editor.ox + (x + pad + ffz) * C_
+        oy_ = editor.oy + (z + pad + ffx) * C_
+        px_, pz_ = -768 * ca_, 768 * sa_                       # gira((-768, 0, 0))
+        planos_nicho[(x, z)].append(((ox_ + px_ * ESCALA, oy_ + pz_ * ESCALA), (ca_, -sa_)))
     cantos = []
     mar = {}
     negros = []
@@ -651,6 +679,14 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
                 clave = (h["clave"][0], cbp)
                 plantillas[clave] = h["clave"]
             P = [mundo[r] for r in refs]
+            if rot >= 0 and _SECRETA_ACTUAL[0] is None and (x, z) in planos_nicho and len(P) >= 3:
+                tapa_hueco = False
+                for (q0, nq) in planos_nicho[(x, z)]:
+                    if all(abs((p_[0] - q0[0]) * nq[0] + (p_[1] - q0[1]) * nq[1]) < 0.06 for p_ in P):
+                        tapa_hueco = True
+                if tapa_hueco:
+                    caras["pared de casilla delante de un nicho"] += 1
+                    continue
             vista = _visible(P, nrm_ps, rot, editor, pad, datos) if QUITAR_OCULTAS and rot >= 0 else True
             if not vista:
                 caras["ocultas"] += 1
@@ -665,6 +701,20 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
             k_ = 1.0 if agua else atlas.escala.get(region, 1.0)
             uv = [((ax + min((u - cu) * k_, lado)) / W, (ay + min((vv - cv) * k_, lado)) / H) for (u, vv) in uvs]
             sec = _SECRETA_ACTUAL[0]
+            if sec and len(sec) > 5 and sec[5] and tuple(refs) in sec[5] and not agua:
+                # la tapa del nicho: al objeto que sube al abrirlo, un poco hundida en la pared (al subir se mete
+                # dentro de la pared de encima del hueco, sin asomar ni parpadear con ella)
+                P = [(p_[0] + sec[6][0], p_[1] + sec[6][1], p_[2]) for p_ in P]
+                fuera = [(p[0] + n[0] * 0.4, p[1] + n[1] * 0.4, p[2] + n[2] * 0.4) for p in P]
+                cols = azular([(luz_kf(editor, q, n, _interior(editor, q, cache_int))
+                                if LUZ_INTERIOR else editor.luzv(q, n, _interior(editor, q, cache_int)))
+                               for q in fuera], P)
+                tex = (h["f"]["TBP"], cbp, h["f"]["TBW"], W, H, 0x14)
+                cara = [(P[k], uv[k], cols[k], n) for k in range(len(P))]
+                paneles.setdefault(sec[1], []).extend(
+                    (tex, tuple(cara[k] for k in tri)) for tri in (((0, 1, 2), (1, 3, 2)) if len(P) == 4 else ((0, 1, 2),)))
+                sin_huella.add(sec[1])
+                continue
             es_puerta = bool(sec) and len(sec) > 3 and sec[3]
             marco = es_puerta and len(sec) > 4 and sec[4] is not None and tuple(refs) not in sec[4]
             if marco:
@@ -683,6 +733,7 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
                 cara = [(P[k], uv[k], cols[k], n) for k in range(len(P))]
                 paneles.setdefault(sec[1], []).extend(
                     (tex, tuple(cara[k] for k in tri)) for tri in (((0, 1, 2), (1, 3, 2)) if len(P) == 4 else ((0, 1, 2),)))
+                sin_huella.add(sec[1])
                 continue
             if sec and nrm_ps is not None and nrm_ps[1] > 0 and all(abs(p_[2] - sec[1][2]) < 0.05 for p_ in P):
                 continue     # la cara de debajo de la pared (a ras de suelo, mirando abajo): se veía como una franja negra
@@ -927,13 +978,22 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
         # la cara de abajo de la pared que sube (el modelo del King's Field no la tiene: abierta se veían las dos
         # caras sueltas, como dos papeles), y la de arriba: con la textura y el color de la propia pared
         for k_, caras_ in paneles.items():
+            if k_ in sin_huella:
+                continue         # (las puertas del King's Field ya son cerradas: sobresalían placas claras arriba y abajo)
             pts_ = [v[0] for _, tri in caras_ for v in tri]
             if not pts_:
                 continue
-            tex_, tri0 = caras_[0]
-            us_ = [v[1][0] for _, tri in caras_ for v in tri]
-            vs_ = [v[1][1] for _, tri in caras_ for v in tri]
-            col_ = tuple(sum(v[2][q] for _, tri in caras_ for v in tri) / (3 * len(caras_)) * 0.7 for q in range(3))
+            # la textura y su trozo: los de la cara más grande (con el rango de UV de todas las caras cogía trozos
+            # de otras texturas del atlas: salían placas claras de colores sueltos)
+            def _area_t(tri):
+                a_, b_, c_ = (v[0] for v in tri)
+                n_ = _cross(_sub(b_, a_), _sub(c_, a_))
+                return math.sqrt(n_[0] ** 2 + n_[1] ** 2 + n_[2] ** 2)
+            tex_, tri0 = max(caras_, key=lambda ct: _area_t(ct[1]))
+            mismas = [tri for t_, tri in caras_ if t_ == tex_]
+            us_ = [v[1][0] for v in tri0]
+            vs_ = [v[1][1] for v in tri0]
+            col_ = tuple(sum(v[2][q] for tri in mismas for v in tri) / (3 * len(mismas)) * 0.5 for q in range(3))
             x0_, x1_ = min(p[0] for p in pts_), max(p[0] for p in pts_)
             y0_, y1_ = min(p[1] for p in pts_), max(p[1] for p in pts_)
             # solo bajo la losa de verdad: las dos caras grandes de la pared y lo que hay entre ellas (la caja de
@@ -1528,6 +1588,11 @@ def _juntar_mar(editor, mar, negros, clave_negra, lecho_negro, por_grupo, pad):
 LUZ_INTERIOR = True
 LUZ_KF_BASE = 0.62          # nivel de una pared a media altura (x 128 en el color de vértice)
 LUZ_KF_TONO = (1.08, 1.0, 0.86)
+CALIDO_DESDE, CALIDO_HASTA = 1.1, 3.2     # m sobre el suelo de delante: desde ahí la pared se va calentando
+CALIDO_TONO = (1.32, 1.09, 0.80)          # r, g, b en lo más alto (y en el techo)
+CALIDO_BRILLO = 1.2
+CALIDO_TECHO = 0.8
+MANCHA_TONO = (0.07, 0.02, -0.06)         # manchas grandes (unos 20 m) más cálidas o más frías
 CRISTAL_ID = 163           # objeto de decorado del King's Field: el cristal sobre pedestal
 CRISTAL_DESDE = 0.38        # fracción de la altura donde acaba el pedestal y empieza el cristal
 CRISTAL_TONO = (0.85, 1.15, 1.0)
@@ -1555,6 +1620,7 @@ def luz_kf(editor, p, n, interior):
         return dia
     nz = n[2]
     base = 0.82 + 0.18 * nz if nz >= 0 else 0.82 + 0.30 * nz       # suelo 1, pared 0,82, techo 0,52
+    calido = 0.0
     if nz < 0.5:
         # paredes y techo: la sombra al pie (según la altura sobre el suelo que tienen delante) y el color pintado
         # de delante (el del borde de la casilla es el de la roca)
@@ -1563,6 +1629,11 @@ def luz_kf(editor, p, n, interior):
         t = max(0.0, min(1.0, h / 1.3))
         ao = 0.62 + 0.38 * t * t * (3 - 2 * t)
         m = editor.color_en(q[0], q[1])
+        # lo alto de las paredes y el techo, más cálido y algo más claro (luz de antorcha que sube)
+        tc = max(0.0, min(1.0, (h - CALIDO_DESDE) / (CALIDO_HASTA - CALIDO_DESDE)))
+        calido = tc * tc * (3 - 2 * tc)
+        if nz < -0.5:
+            calido = max(calido, CALIDO_TECHO)
     else:
         ao = 1.0
         m = editor.color_en(p[0], p[1])
@@ -1573,7 +1644,15 @@ def luz_kf(editor, p, n, interior):
     r = getattr(editor, "ruido", None)
     var = 0.9 + 0.2 * r.v(p[0] * 0.17 + p[2] * 0.11, p[1] * 0.17, 23) if r else 1.0
     k = LUZ_KF_BASE * base * ao * var * 128.0
-    col = tuple(max(0.0, min(255.0, k * LUZ_KF_TONO[q] * m[q])) for q in range(3))
+    # manchas grandes de tono, unas más cálidas y otras más neutras (el pasillo entero de un mismo gris era soso)
+    tono = LUZ_KF_TONO
+    if r:
+        w_ = r.v(p[0] * 0.045 + 3.1, p[1] * 0.045 - 1.7, 71)
+        tono = tuple(tono[q] * (1.0 + MANCHA_TONO[q] * (w_ - 0.5) * 2.0) for q in range(3))
+    if calido > 0:
+        tono = tuple(tono[q] * (1.0 + (CALIDO_TONO[q] - 1.0) * calido) for q in range(3))
+        k *= 1.0 + (CALIDO_BRILLO - 1.0) * calido
+    col = tuple(max(0.0, min(255.0, k * tono[q] * m[q])) for q in range(3))
     return tuple(dia[q] * (1 - w) + col[q] * w for q in range(3))
 
 

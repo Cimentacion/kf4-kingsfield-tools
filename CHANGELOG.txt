@@ -1,6 +1,32 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 44 (2026-10-28)
+------------------------------------
+- People who talk. The King's Field NPCs of levels 0 and 1 (the fisherman on the shore; in level 1 the boatman,
+  the locksmith, Nola, the herb seller, Fai, the Verdite knight and the miner) are placed where King's Field puts
+  them, and talking to them (use button) shows what they say, translated to Spanish.
+  - Their conversations are read from FDAT.T (block 0 of the class, tag 0x70, the same language as the western
+    King's Field II): one section per visit, and the last one repeats, as in the original.
+  - Each NPC is a KFIV townsperson record (101, 102, 104, 105, 107, 109, 118, 126) with its own talk script
+    (spawn +0x4E): the player stops, the NPC turns to you and the message boxes come up. Visits are counted in
+    script_spare_var_block_a.
+  - The messages go into font.txc (ids from 7000, free in the PAL disc), in their place if they fit, otherwise
+    elsewhere in the DAT with the entry repointed.
+  - Shops: the boatman and the herb seller sell what their King's Field shop sells (GAME.EXE, 120-byte tables at
+    0x8006D388), with KFIV's trade screen (command 171) and its stock set by the script. The locksmith sells
+    copies of the keys you carry.
+- Wall niches (King's Field objects 131/209: a wall with a small square lid). They were placed turned 180 degrees
+  and could not be used. Now they face the corridor, the lid is an object that slides up into the wall when you
+  use it (no camera shake), and what King's Field hides inside (gold, antidote, crystal) is there to pick up.
+  - Level 0's green-wall niches were also covered by the tile's own flat wall; those faces are removed.
+- Warmer light: the upper part of walls and ceilings get a warm tint and a bit more light, and large patches
+  of slightly warmer or cooler tone break up the uniform grey.
+- No more sky through gaps: King's Field has no sky (the end of a corridor that continues in another level, the
+  cave mouth were black). Ported levels no longer get KFIV's cloud dome, and their fog is near black.
+- Doors no longer get the light plates added above and below them (only secret walls, which need them); those
+  plates take one texture and colour from the largest face instead of a mix of atlas regions.
+
 Alpha 0.1 - revision 43 (2026-10-28)
 ------------------------------------
 - Fix: building level 1 could stop with "037.map (... bytes) pasa de lo que el juego carga" on the real ISO.

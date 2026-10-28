@@ -468,7 +468,7 @@ def _resto(lista, sin, cuenta, cambio, elegidos, objetos, altura_capa, vecinos, 
                 d["z"] = round(z, 3)
             cofres.append(d)
             continue
-        if oid not in (121, 123) and oid not in PUERTAS and oid not in PUERTAS_SECRETAS and oid not in BARRILES:
+        if oid not in (121, 123) and oid not in PUERTAS and oid not in SECRETAS and oid not in BARRILES:
             continue
         if (col, fila) in puestas:          # puertas de dos hojas: una por casilla
             continue
@@ -522,6 +522,8 @@ def _resto(lista, sin, cuenta, cambio, elegidos, objetos, altura_capa, vecinos, 
             # del IV, con su colisión, quedaba atravesada y al subir la pared seguía habiendo una pared invisible)
             giro = (o["giro"] / 4096 * 2 * math.pi + math.pi / 2) % math.pi
             d.update(tipo="secreta", giro=round(giro, 4), medida=[CELDA_M, round(alto, 3)])
+            if oid in NICHOS:
+                d["nicho"] = True        # solo con su tapa del King's Field (kf_malla): sin ella no se pone
             secretas.append(d)
     resumen = {
         "enemigos": collections.Counter(d["kf"] for d in lista),

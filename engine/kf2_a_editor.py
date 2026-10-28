@@ -81,6 +81,29 @@ def leer_archivos(ruta, nombres=("FDAT.T", "RTIM.T", "RTMD.T")):
     return out
 
 
+def leer_exe(ruta, nombre="GAME.EXE"):
+    """El ejecutable del juego (para las tiendas): suelto junto a CD/ (carpeta extraída) o de la imagen del disco."""
+    cands = []
+    if os.path.isdir(ruta):
+        cands += [os.path.join(ruta, nombre), os.path.join(ruta, "..", nombre), os.path.join(ruta, "..", "..", nombre)]
+    else:
+        d = os.path.dirname(os.path.abspath(ruta))
+        cands += [os.path.join(d, nombre), os.path.join(d, "..", nombre), os.path.join(d, "..", "..", nombre)]
+    for c in cands:
+        if os.path.isfile(c):
+            return open(c, "rb").read()
+    try:
+        import kf2_extraer as kx
+        binario = kx.buscar_bin(ruta if os.path.isdir(ruta) else os.path.dirname(ruta))
+        if not binario:
+            return None
+        disco = kx.Disco(binario)
+        e = next((x for x in disco.archivos() if x[0].upper().endswith("/" + nombre) or x[0].upper() == nombre), None)
+        return disco.leer(e[1], e[2]) if e else None
+    except Exception:
+        return None
+
+
 def leer_t(ruta):
     return leer_archivos(ruta)["FDAT.T"]
 
@@ -656,6 +679,19 @@ def poner_enemigos_kf1(m, arch, nivel):
     m["enemigos"], m["items"] = enemigos, items
     m["kf_objetos"] = resto              # cofres (con lo que llevan dentro), puertas y paredes que se abren
     salidas_y_llegadas(m, arch, nivel, pad, ox, oy, altura_capa)
+    # la gente que habla (y vende): kf1_npc.py; sus tiendas, de GAME.EXE (en la carpeta de encima de CD/COM)
+    import kf1_npc
+    m["npcs"] = kf1_npc.para_editor(arch["FDAT.T"], nivel, pad, ox, oy, CELDA, altura_capa,
+                                    set(kf1_objetos.ENEMIGOS))
+    exe = arch.get("GAME.EXE")
+    if exe:
+        tiendas = kf1_npc.tiendas(exe)
+        m["tiendas_kf1"] = {str(n_["servicio"] & 0x0F): tiendas[n_["servicio"] & 0x0F] for n_ in m["npcs"]
+                            if n_["servicio"] < 0x10 and (n_["servicio"] & 0x0F) < len(tiendas)}
+    if m["npcs"]:
+        print(f"Gente que habla: {len(m['npcs'])} ("
+              + ", ".join(f"{n_['visitas'][0][0]}" + (f" tienda {n_['servicio']:#x}" if n_["servicio"] != 0xFF else "")
+                          for n_ in m["npcs"]) + ")")
     print("Enemigos: " + (", ".join(f"{n} {t}" for t, n in res["enemigos"].most_common()) or "ninguno"))
     print(f"  tipos del 4 usados: {', '.join(res['tipos_kf4'])}"
           + (f"  (otros cambiados: {res['cambiados']})" if res["cambiados"] else ""))
@@ -709,6 +745,9 @@ def salidas_y_llegadas(m, arch, nivel, pad, ox, oy, altura_capa):
     print(f"Cambios de nivel: salidas a {sorted({s_['nivel'] for s_ in salidas})}, llegadas desde {sorted(llegadas)}")
 
 
+NIEBLA_KF1 = [8, 8, 12]       # el fondo y la niebla de un nivel del King's Field: casi negro, como el original
+
+
 def main():
     if len(sys.argv) < 3:
         print(__doc__)
@@ -734,6 +773,10 @@ def main():
     arch = leer_archivos(ruta)
     juego = juego_de(arch)
     if juego == "kf1":
+        exe = leer_exe(ruta)
+        if exe:
+            arch["GAME.EXE"] = exe
+    if juego == "kf1":
         if "RTMD.T" not in arch:
             raise FileNotFoundError("Falta RTMD.T")
         celdas = rejilla_kf1(arch["FDAT.T"], arch["RTMD.T"], nivel)
@@ -751,6 +794,11 @@ def main():
         m["kf_malla"] = {"ruta": os.path.abspath(ruta), "juego": juego, "nivel": nivel, **m["kf_base"]}
     if juego == "kf1" and "--sin-enemigos" not in sys.argv:
         poner_enemigos_kf1(m, arch, nivel)
+    if juego == "kf1":
+        # el King's Field no tiene cielo: lo que no tapa la roca (el final de un pasillo que sigue en otro nivel, la
+        # boca de la cueva) es negro. Con el domo de nubes del 4 se veía el cielo por esos huecos
+        m["cielo"] = False
+        m["niebla"] = NIEBLA_KF1
     print(f"Juego: {'King' + chr(39) + 's Field (KF2 japonés)' if juego == 'kf1' else 'King' + chr(39) + 's Field II USA (KF3 japonés)'}")
     with open(salida, "w") as f:
         json.dump(m, f)

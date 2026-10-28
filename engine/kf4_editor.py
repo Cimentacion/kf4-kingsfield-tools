@@ -756,10 +756,18 @@ class MapaEditor(kp.Prologo):
         self.objetos = [(int(it["id"]), (float(it["x"]), float(it["y"]), z_de(it))) for it in m.get("items", [])]
         self.enemigos = [(e.get("tipo", "escarabajo"), (float(e["x"]), float(e["y"]), z_de(e)))
                          for e in m.get("enemigos", [])]
+        # la gente que habla de un mapa portado (kf1_npc): van como un enemigo más (su registro de gente del IV) y
+        # kf4_valle les pone su conversación (guion_npcs) y su tienda
+        self.kf_npcs = []
+        for n_ in m.get("npcs", []) or []:
+            pos_ = (float(n_["x"]), float(n_["y"]), z_de(n_))
+            self.enemigos.append((f"chr:{int(n_['registro'])}", pos_))
+            self.kf_npcs.append(dict(n_, pos=pos_))
+        self.tiendas_kf1 = {int(k): list(v_) for k, v_ in (m.get("tiendas_kf1") or {}).items()}
         self.spawns_pos = [p for _, p in self.enemigos]
         # hacia dónde mira cada enemigo al aparecer (el giro del mapa, como los cofres; sin él, al azar)
         self.giros = {(float(e["x"]), float(e["y"]), z_de(e)): float(e["giro"])
-                      for e in m.get("enemigos", []) if e.get("giro") is not None}
+                      for e in list(m.get("enemigos", [])) + list(m.get("npcs", []) or []) if e.get("giro") is not None}
         # cambios de nivel de un mapa portado (kf4_valle.guion_niveles): salidas (área en el suelo y nivel al que
         # llevan) y dónde se aparece al venir de cada nivel
         self.kf_nivel = int((m.get("kf_malla") or {}).get("nivel", -1))
@@ -768,5 +776,6 @@ class MapaEditor(kp.Prologo):
         # cofres, puertas y paredes que se abren de un mapa portado (kf4_valle.colocar_objetos_kf)
         self.kf_objetos = [{"tipo": o["tipo"], "pos": (float(o["x"]), float(o["y"]), z_de(o)),
                             "giro": float(o.get("giro", 0.0)), "medida": o.get("medida"),
-                            "objeto": int(o.get("objeto", 0)), "kf": o.get("kf"), "llave": int(o.get("llave", 0))}
+                            "objeto": int(o.get("objeto", 0)), "kf": o.get("kf"), "llave": int(o.get("llave", 0)),
+                            "nicho": bool(o.get("nicho"))}
                            for o in m.get("kf_objetos", []) if isinstance(o, dict) and o.get("tipo")]

@@ -2605,7 +2605,7 @@ def colocar_objetos_kf(objs, obj_secc, lista, plantillas, recs, log, tex_pared=N
                     b[0x3A] = ident
                     etiqueta = GUION_PANEL0 + len(GUIONES_PANEL)
                     struct.pack_into("<H", b, 0x40, etiqueta)
-                    GUIONES_PANEL.append((etiqueta, ident, struct.unpack_from("<3f", b, 0), bool(o.get("es_puerta")),
+                    GUIONES_PANEL.append((etiqueta, ident, struct.unpack_from("<3f", b, 0), bool(o.get("es_puerta") or o.get("nicho")),
                                           int(o.get("llave") or 0)))
                 objs += b
                 cuenta["pared secreta del King's Field"] += 1
@@ -2851,6 +2851,208 @@ def guion_niveles(guion, v, log):
     log.append(f"Cambios de nivel: {len(salidas)} salidas ("
                + ", ".join(f"al nivel {s_['nivel']} = mapa {NIVEL_MAPA[s_['nivel']]:03d}" for s_ in salidas)
                + f"), llegadas desde {sorted(llegadas)}")
+    return struct.pack("<%dI" % len(g2), *g2) + bytes(len(guion) % 4)
+
+
+# ======================= La gente que habla de un mapa portado (kf1_npc) =======================
+# Cada persona: su spawn (un registro de gente del IV) con talk_script_id = su etiqueta (al darle a usar mirándola,
+# player/interact.c: Script_Start). Su guion: le quita el control al jugador, la gira hacia él y enseña lo que dice
+# en esta visita (ShowMessageBox, 232: espera a que se cierre cada caja); la siguiente vez, la visita siguiente, y la
+# última se repite (como en el King's Field). Si vende algo, abre la pantalla de trato del IV (171) con su género.
+# Las visitas se cuentan en script_spare_var_block_a (+4, +8...: el +0 es la marca de los cambios de nivel).
+GUION_NPC0 = 0x0E80               # (099 usa la 0x0FA0)
+MENSAJE_NPC0 = 7000              # ids de mensaje libres en font.txc (de 6001 a 8191 no hay ninguno)
+MENSAJES_NPC = {}                # id -> palabras de la fuente (u16), para font.txc (patch_iso)
+_MENSAJE_DE = {}                 # texto -> [ids]
+CONTADOR_NPC = {}                # (nivel, clase) -> índice de su contador (+4 * (1 + índice))
+NPC_LETRAS = 38                  # letras por línea de la caja de mensajes (la fuente 1: unas 39 en los del juego)
+NPC_LINEAS = 5                   # líneas por caja
+TIENDA_TABLA = {1: 0, 2: 1}      # tienda del King's Field -> tabla de trato del IV (trade_values / trade_stock)
+CERRAJERO_TABLA = 2
+_ACENTOS = {"á": 0x8A7, "é": 0x8AC, "í": 0x8B0, "ñ": 0x8B4, "ó": 0x8B5, "ú": 0x8B9}
+
+
+def _glifos(texto):
+    out = []
+    for c in texto:
+        if c in _ACENTOS:
+            out.append(_ACENTOS[c])
+            continue
+        c = {"Á": "A", "É": "E", "Í": "I", "Ó": "O", "Ú": "U", "Ñ": "N", "ü": "u", "¿": "", "¡": "", "“": '"',
+             "”": '"', "’": "'"}.get(c, c)
+        if not c:
+            continue
+        o = ord(c)
+        out.append(((o - 0x20) | 0x0800) if 0x20 <= o < 0x7F else 0x0800 | (ord("?") - 0x20))
+    return out
+
+
+def _lineas(texto):
+    lineas, act = [], ""
+    for w in texto.split():
+        if act and len(act) + 1 + len(w) > NPC_LETRAS:
+            lineas.append(act)
+            act = w
+        else:
+            act = (act + " " + w) if act else w
+    if act:
+        lineas.append(act)
+    return lineas
+
+
+def _cajas(texto):
+    """El texto en cajas de NPC_LINEAS líneas de NPC_LETRAS letras: frases enteras en cada caja mientras quepan
+    (una frase más larga que una caja se parte por palabras)."""
+    import re
+    frases = [f for f in re.split(r"(?<=[.!?])\s+", texto.strip()) if f]
+    cajas, act = [], ""
+    for f in frases:
+        prueba = (act + " " + f) if act else f
+        if len(_lineas(prueba)) <= NPC_LINEAS:
+            act = prueba
+            continue
+        if act:
+            cajas.append(_lineas(act))
+        if len(_lineas(f)) <= NPC_LINEAS:
+            act = f
+        else:
+            ls = _lineas(f)
+            cajas += [ls[i:i + NPC_LINEAS] for i in range(0, len(ls), NPC_LINEAS)]
+            act = ""
+    if act:
+        cajas.append(_lineas(act))
+    return cajas
+
+
+def mensajes_de(texto):
+    """[ids de mensaje] de un texto (una caja por id), registrados para font.txc."""
+    if texto in _MENSAJE_DE:
+        return _MENSAJE_DE[texto]
+    ids = []
+    for caja in _cajas(texto):
+        palabras = []
+        for k, linea in enumerate(caja):
+            if k:
+                palabras.append(0x8000)          # salto de línea
+            palabras += _glifos(linea)
+        palabras.append(0xFFFF)                  # fin
+        mid = MENSAJE_NPC0 + len(MENSAJES_NPC)
+        MENSAJES_NPC[mid] = palabras
+        ids.append(mid)
+    _MENSAJE_DE[texto] = ids
+    return ids
+
+
+def font_con_npc(d):
+    """font.txc con los mensajes de la gente (MENSAJES_NPC) añadidos al final; None si no hace falta o no se puede."""
+    if not MENSAJES_NPC or len(d) < 4:
+        return None
+    n = struct.unpack_from("<I", d, 0)[0]
+    if n * 4 + 4 > len(d) or max(MENSAJES_NPC) >= n:
+        return None
+    offs = list(struct.unpack_from(f"<{n}I", d, 4))
+    if any(offs[i] for i in MENSAJES_NPC):
+        return None                              # (ocupados en esta fuente: otra versión del juego)
+    out = bytearray(d)
+    out += bytes((-len(out)) % 4)
+    for mid, palabras in sorted(MENSAJES_NPC.items()):
+        offs[mid] = len(out)
+        out += struct.pack(f"<{len(palabras)}H", *palabras)
+        out += bytes((-len(out)) % 4)
+    struct.pack_into(f"<{n}I", out, 4, *offs)
+    if len(out) > FONT_TXC_MAX:
+        return None
+    return bytes(out)
+
+
+FONT_TXC_MAX = 0x200000 - 0x1A0400       # el sitio de font.txc en el menu_heap (Message_GetFontText)
+
+
+def guion_npcs(guion, v, log):
+    npcs = [n_ for n_ in getattr(v, "kf_npcs", []) if n_["pos"] in getattr(v, "_npc_etiqueta", {})]
+    if not npcs:
+        return guion
+    import kf1_dialogos_es
+    import kf1_objetos
+    E = 0x40000
+    LOCAL = (0x40002, 0)
+    ADD, FIN = (0 << 8) | 4, 0xFF
+
+    def set_(dest, a, op, b):
+        return [(0x196 << 16) | 8, dest[0], dest[1], a[0], a[1], op, b[0], b[1], FIN]
+
+    def si(conds, bloque, todas=True):
+        w = [(0x192 << 16) | (len(conds) << 8) | (1 if todas else 0), len(bloque)]
+        for a, op, b in conds:
+            w += [a[0], a[1], op, b[0], b[1]]
+        return w + bloque
+    g = _palabras(guion)
+    try:
+        i0 = g.index((0x190 << 16) | 0x7FFF)
+    except ValueError:
+        log.append("AVISO: el mapa no tiene guion de inicio; la gente no habla")
+        return guion
+    usadas = {w & 0xFFFF for w in g if w >> 16 == 0x190}
+    nivel = getattr(v, "kf_nivel", 0)
+    tiendas = getattr(v, "tiendas_kf1", {})
+    bloques, etiquetas, sin_texto, con_tienda = [], [], 0, []
+    for n_ in npcs:
+        clave = (nivel, n_.get("clase"))
+        if clave not in CONTADOR_NPC:
+            CONTADOR_NPC[clave] = len(CONTADOR_NPC)
+        k = CONTADOR_NPC[clave]
+        if k >= 15:
+            continue
+        cont = (0x40D01, 4 + 4 * k)
+        et, sid = v._npc_etiqueta[n_["pos"]]     # (su spawn ya lleva esta etiqueta: spawns del mapa)
+        if et in usadas:
+            log.append(f"AVISO: la etiqueta {et:#x} ya la usa el guion del mapa; esa persona no habla")
+            continue
+        usadas.add(et)
+        b = [(0x190 << 16) | et, (231 << 16) | 0, (238 << 16) | 2, E, sid, E, 30]
+        b += set_(LOCAL, cont, ADD, (E, 0))
+        vis = n_.get("visitas") or []
+        for s_, sec in enumerate(vis):
+            ultima = s_ == len(vis) - 1
+            blk = []
+            for t in sec:
+                texto = kf1_dialogos_es.DIALOGOS.get(t)
+                if not texto:
+                    sin_texto += 1
+                    continue
+                for mid in mensajes_de(texto):
+                    blk += [(232 << 16) | 3, E, mid, E, 1, E, 1]
+            if not ultima:
+                blk += set_(cont, (E, s_ + 1), ADD, (E, 0))
+            cond = [(LOCAL, 2, (E, s_ - 1))] if ultima else [(LOCAL, 0, (E, s_))]
+            b += si(cond, blk)
+        srv = n_.get("servicio", 0xFF)
+        if srv < 0x10 and (srv & 0x0F) in tiendas:
+            tabla = TIENDA_TABLA.get(srv & 0x0F, (srv & 0x0F) % 4)
+            for obj in tiendas[srv & 0x0F]:
+                it = kf1_objetos.OBJETOS.get(obj)
+                if it is None:
+                    continue
+                b += set_(((1 << 16) | ((5 + tabla) << 8) | 1, it), (E, 1 if it >= 150 else 9), ADD, (E, 0))
+            b += [(171 << 16) | 1, E, tabla]
+            con_tienda.append(f"tienda {srv & 0x0F}")
+        elif srv == 0x10:
+            # el cerrajero copia las llaves que llevas: las tuyas, a la venta
+            for llave in sorted(set(kf1_objetos.LLAVES.values())):
+                b += si([((0x10401, llave), 2, (E, 0))],
+                        set_(((1 << 16) | ((5 + CERRAJERO_TABLA) << 8) | 1, llave), (E, 2), ADD, (E, 0)))
+            b += [(171 << 16) | 1, E, CERRAJERO_TABLA]
+            con_tienda.append("cerrajero")
+        b += [(230 << 16) | 0, 0x191 << 16]
+        bloques += b
+        etiquetas.append(et)
+    g2 = g[:i0] + bloques + g[i0:]
+    malas = _etiquetas_perdidas(g2, etiquetas + [0x7FFF])
+    if malas:
+        log.append(f"AVISO: el guion de la gente no se lee bien ({malas}); la gente no habla")
+        return guion
+    log.append(f"Gente que habla: {len(etiquetas)}" + (f" ({', '.join(con_tienda)})" if con_tienda else "")
+               + f"; {len(MENSAJES_NPC)} mensajes en font.txc" + (f" ({sin_texto} líneas sin traducir)" if sin_texto else ""))
     return struct.pack("<%dI" % len(g2), *g2) + bytes(len(guion) % 4)
 
 
@@ -3141,6 +3343,7 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
         pools = {t: 0xFF for t in frec}
     quitados = collections.Counter()
     enemigos = []
+    npc_pos = {n_["pos"] for n_ in getattr(valle, "kf_npcs", [])}
     for tipo, pos in valle.enemigos:
         t = tipo if tipo in plantillas else "escarabajo"
         if pools.get(t) is None:
@@ -3151,12 +3354,16 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
         log.append(f"AVISO: más de {MAX_POOLS} tipos de enemigo; fuera: {dict(quitados)}")
     if len(enemigos) > MAX_SPAWNS:
         log.append(f"AVISO: {len(enemigos)} enemigos; se dejan {MAX_SPAWNS}")
-        enemigos = [enemigos[i * len(enemigos) // MAX_SPAWNS] for i in range(MAX_SPAWNS)]
+        gente = [e_ for e_ in enemigos if e_[1] in npc_pos]           # la gente que habla se queda siempre
+        resto_ = [e_ for e_ in enemigos if e_[1] not in npc_pos]
+        n_ = MAX_SPAWNS - len(gente)
+        enemigos = gente + [resto_[i * len(resto_) // n_] for i in range(n_)]
     # +0x32: número de tipo de enemigo dentro del mapa (en los originales va 0, 1, 2... por tipo; las plantillas
     # traen el de su mapa: un 3 o un 8 con un solo tipo en el mapa cuelga la carga)
     orden_tipo = {}
     for t, _ in enemigos:
         orden_tipo.setdefault(t, len(orden_tipo))
+    valle._npc_etiqueta = {}
     rangos = _rangos_de_carga(enemigos)
     if rangos:
         cortos = sum(1 for r_, (t_, _) in zip(rangos, enemigos) if r_ < DISTANCIA_TIPO.get(t_, DISTANCIA_ENEMIGOS))
@@ -3177,6 +3384,13 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
         # golpe delante; los mapas grandes del 4 (000) usan 48-65 m y sin límite vertical se cargan pisos enteros
         struct.pack_into("<H", b, 0x5A, rangos[k])
         struct.pack_into("<H", b, 0x48, 800)       # vertical_despawn_range, como 000
+        if pos in npc_pos:
+            # la gente que habla: quieta en su sitio, y al hablarle, su guion (guion_npcs)
+            et = GUION_NPC0 + len(valle._npc_etiqueta)
+            valle._npc_etiqueta[pos] = (et, k & 0xFF)
+            struct.pack_into("<H", b, 0x4E, et)
+            struct.pack_into("<H", b, 0x4C, 0)     # wander_radius: no se va de su sitio
+            struct.pack_into("<H", b, 0x56, 0)
         nuevos += b
         cuenta[tipo] += 1
     spawns = nuevos
@@ -3259,6 +3473,8 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
                     lista[k] = dict(o, tipo="secreta", panel=libres.pop(pk), es_puerta=o["tipo"] == "puerta" and o.get("kf") not in PUERTAS_PESADAS)
                     con_panel += 1
             log.append(f"Paredes secretas y puertas con su modelo del King's Field: {con_panel} de {len(paneles)}")
+        # los nichos (la tapa cuadrada que se abre) solo con su tapa: la losa del 4 cruzaría la casilla
+        lista = [o for o in lista if not o.get("nicho") or o.get("panel")]
         puerta_kf = getattr(valle, "kf_puerta_en", None)
         if puerta_kf and OBJ_SECRETA in plantillas_obj:
             # las puertas del King's Field suben al abrirse, como la losa del 4: la losa con la textura de la puerta
@@ -3473,6 +3689,7 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
         guion = guion_fuente(guion, d099, log)
     guion = guion_paneles(guion, log)
     guion = guion_niveles(guion, valle, log)
+    guion = guion_npcs(guion, valle, log)
     out += guion
     # las texturas (paquetes DMA) tienen que empezar alineadas a 16 bytes, como en todos los mapas del juego: con el
     # guion de cierre de la revisión 8 quedaban a 4 y el juego se colgaba al cargar el mapa
@@ -5095,11 +5312,14 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
                 b += 1
         return None
 
+    usados_lg = {}
+    fuentes = {}                       # idioma -> (font.txc nuevo, dónde va en la ISO, texto)
     for lg in ("SPA", "ENG", "FRA", "GER", "ITA"):
         d_off, tabo = _dat_table(iso, lg)
         if not tabo:
             continue
         usados = []
+        usados_lg[lg] = usados
         dummy_libre = 0
         c = s0.iso_files.get("DUMMY.OUT")
         if grande:
@@ -5141,6 +5361,25 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
             elif c and c[1] >= dummy_libre + n and c[0] >= d_off and c[0] + dummy_libre + n < (1 << 32):
                 destinos_otro[nombre_o][lg] = (c[0] + dummy_libre, "dentro de DUMMY.OUT")
                 dummy_libre += n
+        usados_lg[lg] = list(usados)
+        # font.txc con los mensajes de la gente que habla (guion_npcs): en su sitio si cabe; si no, aparte
+        if MENSAJES_NPC and "font.txc" in tabo:
+            _, s_f, a_f, o_f = tabo["font.txc"]
+            with open(iso, "rb") as g_:
+                g_.seek(d_off + o_f)
+                nueva_f = font_con_npc(g_.read(s_f))
+            if nueva_f is None:
+                log.append(f"AVISO: no se pueden añadir los mensajes de la gente a font.txc ({lg})")
+            elif len(nueva_f) <= a_f:
+                fuentes[lg] = (nueva_f, d_off + o_f, "en su sitio")
+            else:
+                n = (len(nueva_f) + 2047) // 2048 * 2048
+                m = buscar_en_dat(tabo, n, set(usados))
+                if m and d_off + m[0] + n < (1 << 32):
+                    fuentes[lg] = (nueva_f, d_off + m[0], f"en su DAT, encima de {', '.join(m[1])}")
+                    usados_lg[lg] = list(usados) + m[1]
+                else:
+                    log.append(f"AVISO: no hay sitio para font.txc con los mensajes de la gente ({lg})")
     for mdl in chrs:
         if not destinos_chr[mdl]:
             log.append(f"AVISO: no hay sitio seguro para chr/c{mdl:04d}.chr: va otro bicho en su lugar")
@@ -5161,6 +5400,9 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
             for pos in sorted({d for d, _ in destinos_otro[nombre_o].values()}):
                 f.seek(pos)
                 f.write(d_o + bytes((-len(d_o)) % 2048))
+        for lg_, (d_f, pos, _) in fuentes.items():
+            f.seek(pos)
+            f.write(d_f + bytes((-len(d_f)) % 2048 if pos % 2048 == 0 else 0))
         total = f.seek(0, 2)
         f.seek(16 * 2048 + 80)            # tamaño del volumen (descriptor primario), por si algo lo mira
         f.write(struct.pack("<I", total // 2048) + struct.pack(">I", total // 2048))
@@ -5182,6 +5424,16 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
             continue
         _, orig = _dat_table(iso, lang)
         with open(out, "r+b") as f:
+            if lang in fuentes and "font.txc" in orig:
+                d_f, pos, donde = fuentes[lang]
+                rec_f, s_f, a_f, o_f = orig["font.txc"]
+                f.seek(rec_f + 0x34)
+                if donde == "en su sitio":
+                    f.write(struct.pack("<III", len(d_f), a_f, o_f))
+                else:
+                    f.write(struct.pack("<III", len(d_f), (len(d_f) + 2047) // 2048 * 2048, pos - dat_off))
+                if done == 0 or lang == "SPA":
+                    log.append(f"font.txc ({lang}): {len(MENSAJES_NPC)} mensajes de la gente, {donde}")
             for nombre_o, d_o in otros.items():
                 if lang in destinos_otro[nombre_o] and nombre_o in orig:
                     f.seek(orig[nombre_o][0] + 0x34)
