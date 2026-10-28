@@ -13,6 +13,8 @@ del propio soldado (andar, guardia, los dos espadazos, golpes, muerte...) y su I
 
 import struct
 
+import kf1_ia_datos
+
 import numpy as np
 
 import kf2_tex
@@ -274,4 +276,5 @@ def esqueleto_prm(base_rec):
     struct.pack_into("<H", r, 0, MODELO)
     struct.pack_into("<H", r, 0x0A, VIDA)
     struct.pack_into("<H", r, 0x0E, EXP)
+    kf1_ia_datos.esqueleto(r)          # su IA del King's Field (ia/kf1_ia.c) sobre la preparación del soldado
     return bytes(r)

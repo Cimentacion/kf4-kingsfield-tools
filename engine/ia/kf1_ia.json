@@ -1,10 +1,10 @@
 {
  "va": 31846912,
- "tam": 1728,
- "init": 31848448,
- "think": 31848508,
+ "tam": 3808,
+ "init": 31850512,
+ "think": 31850572,
  "juego": {
-  "Beetle_Init": 1231520,
+  "EntityAi_Guard": 1574040,
   "EntityAi_SensePlayer": 1659048,
   "EntityAi_StepState": 1626616,
   "EntityAi_StartAction": 1655024,
@@ -12,10 +12,13 @@
   "EntityAi_MeleeAttack": 1574528,
   "rand": 2367904,
   "frame_counter": 4512852,
-  "player_state": 4273984
+  "player_state": 4273984,
+  "player_weapon_step": 4274584,
+  "held_item_model_ptr": 4511480,
+  "entity_type_handlers": 4089344
  },
  "firmas": {
-  "Beetle_Init": "b0ffbd279f0005240000b0ffffff0324",
+  "EntityAi_Guard": "c0ffbd272000b2ff1000b1ff01001224",
   "EntityAi_SensePlayer": "c0ffbd272000b2ff1000b1ff2d90a000",
   "EntityAi_StepState": "cc0085900100062400160500031e0200",
   "EntityAi_StartAction": "f0ffbd270000bfffca0080a05400828c",

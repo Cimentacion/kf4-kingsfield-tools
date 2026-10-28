@@ -1,6 +1,26 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 40 (2026-10-28)
+------------------------------------
+- The King's Field AI is now general and also used by the skeletons, green slimes and Head Eaters. Each one is
+  set up like the KFIV monster it is built on (hits taken, death, walking, animations) and then decides like
+  King's Field, with the weights and distances of its level 0 class (engine/kf1_ia_datos.py):
+  - idle, wander (walks to random points around where it appeared), move towards you (from its start distance;
+    keeps following up to a longer one), guard and up to three melee attacks;
+  - each decision every possible action draws a random number up to its weight and the highest wins; a melee
+    attack weighs less when you are farther than where it lands, and moving weighs double right after an attack;
+  - after an attack, or when you are too close, it backs away if its KFIV model has a walk-back animation
+    (otherwise it stays facing you).
+- Skeletons: wander, come at you from 16.5 m, guard when you swing at them from close, double slash and thrust
+  with King's Field reach and angles (never less than what the KFIV soldier had). Green slimes: bite all around.
+  Head Eaters: bite from 4.8 m and back off.
+- Kraken also has its King's Field idle action now; baby Krakens whip with their real weights (100, 100, 80).
+- More King's Field action types decoded in docs/kf1_ia.md (wander, the skeleton's double slash, thrust and
+  guard, how moving backs away).
+- Baltails and the fish keep the KFIV bat and Seafang AIs (they fly or swim).
+- Without the known executable each monster falls back to the AI of its KFIV base monster.
+
 Alpha 0.1 - revision 39 (2026-10-28)
 ------------------------------------
 - Kraken and baby Krakens showed you their back when they turned to you: the half turn added to the model in

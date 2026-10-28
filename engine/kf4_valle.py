@@ -4568,7 +4568,7 @@ IA_OFF_ARCHIVO = 0x34EE00             # dentro de .DVP.ovlystrtab / overlays (no
 IA_OFF_LIMITE = 0x3516E4              # tabla de secciones
 MONTON_LUI, MONTON_ADDIU = 0x10006C, 0x100074     # SetupHeap(_end, -1) en __start
 MONTON_ORIG = (0x3C0401E6, 0x2484F1B0)
-IA_KF1_OK = False                     # lo pone parche_kf1_ia; sin él los bichos con TIPO_KF1 vuelven al escarabajo
+IA_KF1_OK = False                     # lo pone parche_kf1_ia; sin él los bichos con TIPO_KF1 vuelven a su tipo del IV
 
 
 def parche_kf1_ia(e, log):
@@ -4580,7 +4580,7 @@ def parche_kf1_ia(e, log):
         info = json.load(open(os.path.join(aqui, "kf1_ia.json")))
         code = open(os.path.join(aqui, "kf1_ia.bin"), "rb").read()
     except OSError:
-        log.append("AVISO: falta ia/kf1_ia.bin; el Kraken usa la IA del escarabajo")
+        log.append("AVISO: falta ia/kf1_ia.bin; los bichos del King's Field usan la IA de su bicho del IV")
         return
     fo = lambda va: va - 0xFF000
     ok = all(bytes(e[fo(info["juego"][k]):fo(info["juego"][k]) + 16]).hex() == f
@@ -4592,7 +4592,7 @@ def parche_kf1_ia(e, log):
         == MONTON_ORIG
     ok = ok and IA_OFF_ARCHIVO + len(code) <= IA_OFF_LIMITE and len(e) >= IA_OFF_LIMITE
     if not ok:
-        log.append("AVISO: no reconozco el ejecutable para la IA del King's Field; el Kraken usa la del escarabajo")
+        log.append("AVISO: no reconozco el ejecutable para la IA del King's Field; sus bichos usan la de su bicho del IV")
         return
     va = info["va"]
     e[IA_OFF_ARCHIVO:IA_OFF_ARCHIVO + len(code)] = code
@@ -4605,7 +4605,7 @@ def parche_kf1_ia(e, log):
     struct.pack_into("<II", e, fo(TABLA_TIPOS + 8 * TIPO_KF1), info["init"], UPDATE_IA)
     IA_KF1_OK = True
     log.append(f"IA del King's Field: tipo de enemigo {TIPO_KF1:#x} nuevo ({len(code)} bytes de código en {va:#x}):"
-               " Kraken y pulpitos eligen como en el King's Field")
+               " Kraken, pulpitos, esqueletos, babosas y Head Eaters eligen como en el King's Field")
 
 
 def parchear_ejecutable(elf, giro, log, mando="dos_sticks", vida_numero=True, cruz=True, exp_menu=True, cruz_off=None,
@@ -5012,7 +5012,7 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
                             rec = chr_nuevo[resp * 0x450:(resp + 1) * 0x450]   # sin sitio para su modelo: otro
                         chr_nuevo[r0:r0 + 0x450] = rec
                         if chr_nuevo[r0 + 2] == TIPO_KF1 and not IA_KF1_OK:
-                            chr_nuevo[r0 + 2] = 5                        # sin la IA nueva: la del escarabajo
+                            chr_nuevo[r0 + 2] = chr_nuevo[r0 + 0x3F8]    # sin la IA nueva: la del bicho del IV
                     chr_nuevo = bytes(chr_nuevo)
                 f.seek(dat_off + oc)
                 f.write(chr_nuevo)

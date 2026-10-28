@@ -19,6 +19,7 @@ import struct
 
 import numpy as np
 
+import kf1_ia_datos
 import kf2_tex
 import kf4_chr as kc
 import kf4_pulpo as kp
@@ -26,9 +27,9 @@ import kf4_pulpo as kp
 # kf1 = modelo del King's Field (MO.T); los nombres de la tabla de enemigos de kf1_objetos
 BICHOS = {
     "babosa": dict(kf1=0, modelo=94, registro=94, base=2, vida=75, exp=3, tinte=(0.95, 1.10, 0.90), escala=1.0,
-                   texto="Babosa verde del King's Field (se porta como la babosa del IV)"),
+                   ia="babosa", texto="Babosa verde del King's Field (se porta como la babosa del IV)"),
     "head_eater": dict(kf1=14, modelo=95, registro=95, base=4, vida=70, exp=7, tinte=(1.0, 1.0, 1.0), escala=1.0,
-                       texto="Head Eater del King's Field (la planta del IV: c0004)"),
+                       ia="head_eater", texto="Head Eater del King's Field (la planta del IV: c0004)"),
     "baltail": dict(kf1=4, modelo=96, registro=96, base=10, vida=60, exp=22, tinte=(1.0, 1.0, 1.0), escala=1.0,
                     centro=True, texto="Baltail del King's Field (vuela y ataca como el murciélago del IV)"),
     # los del agua: con el Seafang del IV (nada bajo el agua); el registro es el del pez (kf4_valle.registro_pez)
@@ -197,4 +198,6 @@ def portar_prm(base_rec, cfg):
     struct.pack_into("<H", r, 0, cfg["modelo"])
     struct.pack_into("<H", r, 0x0A, cfg["vida"])
     struct.pack_into("<H", r, 0x0E, cfg["exp"])
+    if cfg.get("ia"):                  # su IA del King's Field (ia/kf1_ia.c, kf1_ia_datos)
+        getattr(kf1_ia_datos, cfg["ia"])(r)
     return bytes(r)

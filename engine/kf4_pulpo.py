@@ -16,6 +16,8 @@ Lo que sale:
 import math
 import struct
 
+import kf1_ia_datos
+
 import numpy as np
 
 import kf2_tex
@@ -546,31 +548,6 @@ def chr_con(flor, modelo, mov, tex):
 
 
 # ---------------- chr.prm ----------------
-TIPO_KF1 = 0x53            # kf4_valle.TIPO_KF1: la IA propia (ia/kf1_ia.c)
-
-
-def _latigo(r, i, peso, alcance_cm, angulo, golpe_cm, fuerzas, radio):
-    """Latigazo i (chr.prm 0x240 + 0x88 i) con los números del King's Field: lo elige si estás a menos de
-    alcance_cm (de centro a centro) y a menos de angulo grados de su frente; el golpe llega a golpe_cm del centro,
-    en un arco de angulo grados, a mitad de la animación (fotogramas 24-30 de los 50 del latigazo)."""
-    o = 0x240 + 0x88 * i
-    r[o:o + 0x88] = bytes(0x88)
-    r[o], r[o + 1], r[o + 2], r[o + 3] = peso, 0, 10, 0       # peso, gira hasta el fotograma 0, 10 de respiro
-    struct.pack_into("<HHf", r, o + 4, 0, max(1, round(alcance_cm - radio - 100)), math.radians(angulo))
-    struct.pack_into("<9h", r, o + 0x10, *fuerzas)
-    struct.pack_into("<HHHH", r, o + 0x30, max(1, round(golpe_cm - radio)), angulo, 24, 30)
-
-
-def _ia_kf1(r, peso_giro, empieza_cm, sigue_cm, anda_hasta_cm=0):
-    """Datos que lee la IA propia (ia/kf1_ia.c)."""
-    r[2] = TIPO_KF1
-    r[0x14], r[0x15] = peso_giro                  # girarse: peso nuevo / si ya se estaba girando
-    struct.pack_into("<f", r, 0x1C, math.pi)      # te ve alrededor (en el King's Field, por la distancia)
-    struct.pack_into("<H", r, 0x18, max(1200, empieza_cm))
-    struct.pack_into("<hhhhh", r, 0x436, 0, anda_hasta_cm, empieza_cm, sigue_cm, 12)
-    r[0x3D8] = 0                                  # no escupe (en el King's Field tampoco)
-
-
 def pulpo_prm(base_rec):
     """El Kraken grande, como en el King's Field (clase 0 del nivel 0, sus acciones del disco: docs/kf1_ia.md),
     con su IA propia (ia/kf1_ia.c, tipo TIPO_KF1): no anda; desde 12,2 m se gira hacia ti (hasta 14,6 m si ya
@@ -591,11 +568,7 @@ def pulpo_prm(base_rec):
         ids[anim] = mov
     ids[3] = ids[4] = 0                           # girarse = quieto: no avanza (en el King's Field, velocidad 0)
     r[0x60:0x80] = bytes(ids)
-    radio = struct.unpack_from("<H", r, 0xCC)[0]
-    _latigo(r, 0, 160, 707, 52, 703, (0, 33, 0, 0, 0, 0, 0, 0, 0), radio)
-    _latigo(r, 1, 160, 707, 52, 703, (0, 40, 0, 0, 0, 0, 0, 0, 0), radio)
-    _latigo(r, 2, 120, 951, 44, 945, (0, 47, 21, 0, 0, 0, 0, 0, 0), radio)
-    _ia_kf1(r, (100, 140), 1220, 1460)
+    kf1_ia_datos.kraken(r)
     return bytes(r)
 
 
@@ -610,9 +583,5 @@ def mini_prm(grande_rec):
     ids = list(r[0x60:0x80])
     ids[3] = ids[4] = ANIMACION[3]                # este sí se arrastra
     r[0x60:0x80] = bytes(ids)
-    radio = struct.unpack_from("<H", r, 0xCC)[0] * MINI_ESCALA / 100.0
-    _latigo(r, 0, 160, 328, 52, 328, (0, 12, 0, 0, 0, 0, 0, 0, 0), radio)
-    _latigo(r, 1, 160, 328, 52, 328, (0, 12, 0, 0, 0, 0, 0, 0, 0), radio)
-    _latigo(r, 2, 120, 414, 44, 414, (0, 15, 0, 0, 0, 0, 0, 0, 0), radio)
-    _ia_kf1(r, (100, 140), 1220, 1460, anda_hasta_cm=256)
+    kf1_ia_datos.pulpito(r)
     return bytes(r)

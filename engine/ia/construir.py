@@ -19,7 +19,7 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 IA_VA = 0x01E5F200          # justo tras el final del ejecutable (_end = 0x1E5F1B0), antes del montón
 # funciones y datos del juego (SLES_509.20; kfiv-decomp, US - 0x17C8 en el código del juego, - 0x840 en datos)
 JUEGO = {
-    "Beetle_Init": 0x12CAA0,
+    "EntityAi_Guard": 0x180498,
     "EntityAi_SensePlayer": 0x1950A8,
     "EntityAi_StepState": 0x18D1F8,
     "EntityAi_StartAction": 0x1940F0,
@@ -28,7 +28,11 @@ JUEGO = {
     "rand": 0x2421A0,
     "frame_counter": 0x44DC54,
     "player_state": 0x413740,
+    "player_weapon_step": 0x413998,
+    "held_item_model_ptr": 0x44D6F8,
+    "entity_type_handlers": 0x3E6600,
 }
+DATOS = ("frame_counter", "player_state", "player_weapon_step", "held_item_model_ptr", "entity_type_handlers")
 CF = ["--target=mipsel-none-elf", "-march=mips2", "-msingle-float", "-mno-abicalls", "-fno-pic", "-G0", "-O2",
       "-ffreestanding", "-fno-builtin", "-fno-jump-tables", "-mno-check-zero-division", "-fomit-frame-pointer",
       "-ffinite-math-only", "-fno-signed-zeros", "-mstack-alignment=16", "-fno-unroll-loops"]
@@ -106,7 +110,7 @@ def main():
     if exe:
         e = open(exe, "rb").read()
         info["firmas"] = {k: e[v - 0xFF000:v - 0xFF000 + 16].hex() for k, v in JUEGO.items()
-                          if k not in ("frame_counter", "player_state")}
+                          if k not in DATOS}
     elif os.path.isfile(viejo):
         info["firmas"] = json.load(open(viejo)).get("firmas", {})
     json.dump(info, open(os.path.join(AQUI, "kf1_ia.json"), "w"), indent=1)

@@ -82,6 +82,19 @@ Kraken grande: 1500 de vida, 450 de experiencia.
 Pulpito: 250 de vida, 12 de experiencia. Sí anda (velocidad 31) y se queda a 2-2,6 m de ti. Latigazos de 3,3 m
 (37), 3,3 m (37) y 4,1 m (45). Su cabeza (clase 19): 250 de vida, 3 de experiencia, quieta.
 
+## Más tipos de acción (descifrados del elegir 0x8003BB98 y el hacer 0x8003FDB8)
+
+| tipo | elegir | hacer |
+|---|---|---|
+| 0x00 quieto | siempre | anim |
+| 0x01 pasear | siempre | anda hacia un rumbo al azar (velocidad u16@0x0C, giro u16@0x0E), que cambia de vez en cuando |
+| 0x05 / 0x0D moverse | a menos de u16@0x10 (u16@0x12 si ya se movía); peso siempre el byte 2, doble justo tras un golpe | va hacia ti; se aparta (rumbo + 180) justo tras un golpe o a menos de u16@0x14, hasta pasar de u16@0x16 |
+| 0x04 / 0x12 / 0x17 / 0x18 golpes | a menos de u16@0x1A, a su altura, delante (byte@0x10 x 16); peso x 5/6 más lejos que su llegada (byte@0x0E x 64), x 2/3 pasada la mitad hasta u16@0x1A | 0x04 un golpe; 0x17 golpe repetido cada u16@0x28 hasta u16@0x26 y otro golpe (+0x1C) en u16@0x2A; 0x18 estocada con avance entre u16@0x20 y u16@0x22 |
+| 0x13 / 0x14 guardia | a menos de u16@0x0E, delante (byte@0x0C x 32) y mientras atacas | |
+| 0x19 | entre u16@0x14 y u16@0x16, delante (byte@0x0D x 16) | (a distancia) |
+| 0x0B | a menos de u16@0x1A, delante (0x140) | |
+| 0x0A, 0x0C, 0x0E | siempre | (del vuelo / del agua: pendiente) |
+
 ## En el King's Field IV: la IA propia (engine/ia)
 
 Los bichos del King's Field tienen un tipo de enemigo nuevo en el IV, el 0x53 (byte 0x02 del chr.prm). Las filas
@@ -89,19 +102,18 @@ Los bichos del King's Field tienen un tipo de enemigo nuevo en el IV, el 0x53 (b
 a `KF1_Init` (engine/ia/kf1_ia.c), compilado con clang para MIPS II (o32, solo float) por engine/ia/construir.py,
 que comprueba que solo haya instrucciones del EE. El código va en un segmento nuevo del ELF justo tras el final
 del programa (0x1E5F200) y el montón del arranque empieza después. kf4_valle.parche_kf1_ia lo pone si las
-funciones del juego que llama tienen los bytes que se esperan; si no, los bichos vuelven a la IA del escarabajo.
+funciones del juego que llama tienen los bytes que se esperan; si no, cada bicho vuelve a la IA de su bicho del IV.
 
-`KF1_Init` llama a `Beetle_Init` (golpes recibidos, muerte, moverse) y cambia su "pensar" por `KF1_Think`:
-- te ve (EntityAi_SensePlayer en modo 2: aunque algo tape la vista) desde chr.prm 0x43A cm (sigue hasta 0x43C);
-- cada decisión, como en el King's Field: girarse saca rand(0..peso) (0x14 nuevo, 0x15 si ya se giraba) y cada
-  latigazo al alcance (distancia, ángulo y altura de su registro de 0x240) rand(0..su peso); gana el mayor;
-- el latigazo es EntityAi_MeleeAttack con las ventanas de golpe del registro; girarse es EntityAi_Move con
-  EntityAi_TurnCommand; si 0x438 no es 0 anda hasta esa distancia (el pulpito);
-- mientras se gira no decide en cada fotograma: espera 0x43E fotogramas.
+`KF1_Init` llama a la preparación del bicho del IV sobre el que va (su fila de la tabla: golpes recibidos,
+muerte, andar, animar) y cambia su "pensar" por `KF1_Think`, que elige como el King's Field entre quieto, pasear,
+moverse, guardia y tres golpes con los pesos y distancias de engine/kf1_ia_datos.py (bloque en chr.prm 0x3F8).
+Los golpes son EntityAi_MeleeAttack; la guardia, EntityAi_Guard; andar y girarse, el "mover" del bicho.
 
-| | Kraken | pulpito |
+| | IA del King's Field | base del IV |
 |---|---|---|
-| girarse (pesos) | 100 / 140 | 100 / 140 |
-| latigazos (peso, alcance, ángulo) | 160 7,1 m 52°; 160 7,1 m 52°; 120 9,5 m 44° | 160 3,3 m; 160 3,3 m; 120 4,1 m |
-| anda | no | hasta 2,6 m de ti |
-| te sigue | de 12,2 m (14,6 si ya te seguía) | igual |
+| Kraken (clase 0) | quieto, girarse, tres latigazos | escarabajo (tipo 5) |
+| pulpito (clase 18) | quieto, moverse (se aparta 1,95-2,56 m), tres latigazos | escarabajo |
+| esqueleto (clase 15) | pasear, moverse, guardia, doble tajo y estocada | soldado esqueleto (tipo 6) |
+| babosa (clase 8) | quieto, pasear, moverse, mordisco alrededor | babosa (tipo 1) |
+| Head Eater (clase 11) | quieto, pasear, moverse (muerde y se retira), dos mordiscos | planta (tipo 0) |
+| Baltail, Sigill, pez largo | vuelan o nadan: siguen con la IA del murciélago y del Seafang del IV | |
