@@ -3241,6 +3241,7 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
         origin = to_native((cx, cy, cz))
         rec = {"origin": origin, "omd": -1, "csk": -1}
         if TROZO:
+            rec["grupo"] = TROZO.get("grupos", {}).get(tuple(ch[:-2]), 0)   # su grupo (lo que se ve desde dónde)
             rec["zona"] = ch[-2]          # kf4_trozos: el vecino que pide este registro
             rec["dentro"] = bool(ch[-1])  # bajo techo: niebla cerrada (NIEBLA_DENTRO)
         if ch[0] == "A":
@@ -3308,6 +3309,8 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
     p = md.OFF_RECORDS + nrec0 * md.REC
     flag_blocks = h[p:p + nfb * md.FLAGBLK]
     p += nfb * md.FLAGBLK
+    if TROZO and TROZO.get("bloques"):
+        flag_blocks = TROZO["bloques"]       # los grupos del trozo y lo que se ve desde cada uno (kf4_trozos)
     neigh = h[p:p + md.NEIGH_N * md.NEIGH]
     if TROZO:
         neigh = TROZO["neigh"]               # los trozos vecinos de este (kf4_trozos)
@@ -3586,7 +3589,7 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
             struct.pack_into("<hh", b, 0x30, r["omd"], -1)
             b[0x34] = CIELO_FOG
             b[0x35] = CIELO_LUZ
-            b[0x38] = 1          # el bloque de flags de los demás registros (el 8 de 099 depende del guion)
+            b[0x38] = 0 if TROZO else 1     # el bloque de flags de los demás registros (el 8 de 099 depende del guion)
             for base in (0x40, 0x50):
                 x, y, z = struct.unpack_from("<3f", b, base)
                 struct.pack_into("<3f", b, base, x + ox, y + oy, z + oz)
@@ -3601,7 +3604,7 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
         b[0x35] = 6      # luz (la de la roca en 031)
         b[0x36] = 0      # niebla de los enemigos que lo pisan
         b[0x37] = LUZ_ENEMIGOS
-        b[0x38] = 1      # bloque de flags
+        b[0x38] = r.get("grupo", 0) if TROZO else 1      # bloque de flags (su grupo, en los trozos)
         b[0x39] = 0
         b[0x3A] = 0xFF   # sin vecino que precargar
         if r.get("dentro") and not r.get("tarde"):
@@ -3768,6 +3771,7 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
         log.append(f"Secciones de 099 desplazadas {delta} bytes para que quepa la geometría")
     struct.pack_into("<HH", out, 0x2C, len(omds), len(csks))
     struct.pack_into("<H", out, 0x3C, len(recs))
+    struct.pack_into("<H", out, 0x3E, len(flag_blocks) // md.FLAGBLK)
     struct.pack_into("<H", out, 0x40, nobj)
     struct.pack_into("<H", out, 0x42, nsp)
     struct.pack_into("<H", out, 0x44, nit)
@@ -5935,6 +5939,12 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.1
         for t in trozos:
             if t.mapa is None:
                 t.mapa = libres.pop(0)
+        # lo que se ve desde cada sitio (bloques de flags, como el IV): sin esto el trozo vecino no se dibujaba
+        kt.grupos(N0, t0 + [enlace])
+        kt.grupos(N1, t1)
+        for t in trozos:
+            t.aire = (N0 if t.nivel == 0 else N1).aire & t.celdas
+        kt.visibilidad(trozos, desfase)
         mapas = {}
         for nivel, v, ruta, off in ((0, v0, ruta0, off0), (1, None, ruta1, off1)):
             Nv = N0
@@ -5955,7 +5965,8 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.1
                     tabla += struct.pack("<3fHH", xyz[0], xyz[1], xyz[2], b.mapa, 0)
                 while len(tabla) < md.NEIGH_N * md.NEIGH:
                     tabla += struct.pack("<3fHH", 0.0, 0.0, 0.0, 0xFFFF, 0)
-                TROZO = {"neigh": bytes(tabla[:md.NEIGH_N * md.NEIGH]), "cielo": cielos[nivel]}
+                TROZO = {"neigh": bytes(tabla[:md.NEIGH_N * md.NEIGH]), "cielo": cielos[nivel],
+                         "grupos": t.grupo, "bloques": t.bloques}
                 print(f"  {t.nombre} -> {t.mapa:03d}.map ({len(t.celdas)} casillas, vecinos "
                       f"{', '.join(f'{b.mapa:03d}' for b, _ in t.vecinos) or 'ninguno'})")
                 log_t = []

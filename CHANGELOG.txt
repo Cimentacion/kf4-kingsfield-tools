@@ -1,6 +1,18 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 54 (2026-10-29)
+------------------------------------
+- Found why the neighbouring map never showed even when loaded: KFIV draws only what the floor you stand on can
+  see. Each record has a group (+0x38) and each map one 0x40-byte block per group: the groups of that map seen from
+  it (256 bits) and up to 16 (map number, group) pairs of the neighbouring map (Map_TestFlagBlockBit, used by the
+  record draw list, objects and enemies). The streamed pieces carried the blocks of 099 unchanged, whose pairs
+  name maps 98, 8 and 5, so the loaded neighbour was never drawn until you stepped on it.
+- Every piece now has its own groups (the geometry chunks, about 20 m each) and blocks, as KFIV does: from each
+  group you see what you can reach walking within 45 m, in the piece and through its doors into the neighbour (the
+  next rooms, not the floor above or what is behind the rock); outdoors, the whole piece. Fewer things drawn
+  indoors, so better frame rate too.
+
 Alpha 0.1 - revision 53 (2026-10-29)
 ------------------------------------
 - Streamed levels cut room by room: the open-air part of a level is one map on its own, and the inside is cut into

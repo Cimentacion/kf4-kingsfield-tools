@@ -651,3 +651,132 @@ def leer_cortes(ruta, clave, nivel, excluir):
     for c, v in pintadas.items():
         grupos[v].add(c)
     return [grupos[v] for v in sorted(grupos)], None
+
+
+# ======================= Lo que se ve desde cada sitio (como el IV) =======================
+# El IV no dibuja todo lo cargado: cada registro lleva en +0x38 su grupo (una "sala": varios registros pueden
+# compartirlo) y el mapa una tabla de bloques de 0x40 bytes, uno por grupo: los grupos de ese mapa que se ven
+# estando en él (256 bits) y hasta 16 parejas (número de mapa, grupo) del mapa vecino que también se ven
+# (Map_TestFlagBlockBit; el bloque es el del grupo del suelo que pisas). Lo que no está en el bloque no se dibuja
+# (func_00112BD0), ni sus bichos ni sus objetos. 099, por ejemplo: desde su grupo 2 se ven los grupos 2, 3 y 14 del
+# 008. Los trozos llevaban los bloques de 099 tal cual (parejas con los mapas 98, 8 y 5): el trozo vecino, aunque
+# estuviera cargado, no se dibujaba nunca hasta pisarlo. Ahora cada trozo lleva los suyos: sus grupos son los
+# trozos de geometría (de unos 20 m), y desde cada uno se ve lo que se alcanza andando a VISTA_PASOS casillas (las
+# salas de al lado, no el piso de arriba ni lo que hay detrás de la roca), en el trozo y en sus vecinos; al aire
+# libre, todo el trozo.
+VISTA_PASOS = 18       # casillas andando (45 m; la niebla de dentro cierra a 30 m)
+
+
+def grupos(nivel, trozos):
+    """Los grupos de cada trozo de un nivel: t.grupo {trozo de geometría: número} y t.celdas_grupo {número:
+    casillas de suelo}. El 0 es "siempre se ve" (lo que no tiene suelo propio: agua, lo repetido de alrededor)."""
+    de = {}
+    for t in trozos:
+        t.grupo, t.celdas_grupo = {}, collections.defaultdict(set)
+        for c in t.celdas:
+            de[c] = t
+
+    def apunta(ch, c):
+        t = de.get(c)
+        if t is None:
+            return
+        g = t.grupo.get(ch)
+        if g is None:
+            g = len(t.grupo) + 1
+            if g > 254:
+                g = 0              # (no pasa: 254 trozos de geometría en un solo mapa)
+            t.grupo[ch] = g
+        if g:
+            t.celdas_grupo[g].add(c)
+    for ch, by_tex in nivel.v.geo.render.items():
+        for seqs in by_tex.values():
+            for s in seqs:
+                apunta(tuple(ch), nivel.dueno_tira(s))
+    for ch, cc in nivel.v.geo.coll.items():
+        for polys in cc.values():
+            for q in polys:
+                apunta(tuple(ch), nivel.dueno_poli(q))
+
+
+def visibilidad(trozos, desfase):
+    """t.bloques: los bloques de flags de cada trozo (uno por grupo, 0x40 bytes)."""
+    import struct
+    for a in trozos:
+        n = max([0] + list(getattr(a, "celdas_grupo", {}).keys())) + 1
+        # las puertas a cada vecino, en las coordenadas de a: casilla de a -> casillas de b al lado
+        puertas = []
+        for b, _ in a.vecinos:
+            mover, dz, _ = desfase(a, b)
+            hb = {mover(c): (c, [z + dz for z in zs]) for c, zs in b.alturas.items()}
+            pu = collections.defaultdict(list)
+            for c, za in a.alturas.items():
+                for k in VECINAS4:
+                    m = (c[0] + k[0], c[1] + k[1])
+                    if m in hb and _pasa(za, hb[m][1]):
+                        pu[c].append(hb[m][0])
+            g_de_b = {c: g for g, cs in b.celdas_grupo.items() for c in cs}
+            puertas.append((b, pu, g_de_b))
+        g_de_a = {c: g for g, cs in a.celdas_grupo.items() for c in cs}
+        aire_a = {g for g, cs in a.celdas_grupo.items() if any(c in getattr(a, "aire", ()) for c in cs)}
+        bloques = bytearray()
+        for g in range(n):
+            bits = {0}
+            pares = []                                   # (distancia, mapa, grupo)
+            if g == 0 or g in aire_a:
+                bits |= set(range(n))
+            ini = a.celdas_grupo.get(g, set()) if g else set(a.alturas)
+            dist = {c: 0 for c in ini}
+            frente = list(ini)
+            vistos_b = {}
+            for paso in range(VISTA_PASOS + 1):
+                sig = []
+                for c in frente:
+                    if c in g_de_a:
+                        bits.add(g_de_a[c])
+                    for i, (b, pu, g_de_b) in enumerate(puertas):
+                        for cb in pu.get(c, ()):
+                            if (i, cb) not in vistos_b:
+                                vistos_b[(i, cb)] = paso
+                    for k in VECINAS4:
+                        m = (c[0] + k[0], c[1] + k[1])
+                        if m in a.alturas and m not in dist and _pasa(a.alturas[c], a.alturas[m]):
+                            dist[m] = paso + 1
+                            sig.append(m)
+                frente = sig
+                if not frente:
+                    break
+            # dentro de cada vecino, desde sus casillas de puerta, lo que queda de camino
+            for i, (b, pu, g_de_b) in enumerate(puertas):
+                ini_b = {cb: p for (j, cb), p in vistos_b.items() if j == i}
+                db = dict(ini_b)
+                frente = sorted(ini_b, key=lambda c: ini_b[c])
+                while frente:
+                    sig = []
+                    for c in frente:
+                        if c in g_de_b:
+                            pares.append((db[c], b.mapa, g_de_b[c]))
+                        if db[c] >= VISTA_PASOS:
+                            continue
+                        for k in VECINAS4:
+                            m = (c[0] + k[0], c[1] + k[1])
+                            if m in b.alturas and m not in db and _pasa(b.alturas[c], b.alturas[m]):
+                                db[m] = db[c] + 1
+                                sig.append(m)
+                    frente = sig
+            # parejas: lo siempre visible de cada vecino y los grupos más cerca, hasta 16
+            lista = [(b.mapa, 0) for b, _, _ in puertas]
+            for _, mapa, gb in sorted(pares):
+                if (mapa, gb) not in lista:
+                    lista.append((mapa, gb))
+            lista = lista[:16]
+            blk = bytearray(0x40)
+            for bit in bits:
+                if bit < 256:
+                    blk[bit // 8] |= 1 << (bit % 8)
+            for i in range(16):
+                t_, v_ = lista[i] if i < len(lista) else (255, 255)
+                blk[0x20 + i] = t_ & 0xFF
+                blk[0x30 + i] = v_ & 0xFF
+            bloques += blk
+        a.bloques = bytes(bloques)
+        a.grupos_vistos = n
