@@ -1,6 +1,12 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 58 (2026-10-29)
+------------------------------------
+- No more silent fallback to the fade: if the levels cannot be streamed, the build stops, leaves the ISO of the
+  previous build untouched and says why in a framed message (--permitir-fundido builds the old version with the
+  fade instead; --con-fundido forces it).
+
 Alpha 0.1 - revision 57 (2026-10-29)
 ------------------------------------
 - Building the streamed levels is about 3-4 times faster (here: 3 minutes instead of 10):

@@ -6257,6 +6257,17 @@ def main():
                       + "\nPara cambiar dónde se corta cada nivel, abre CORTES_NIVELES.html (en esta carpeta)."
                       + "\n" + "=" * 78)
                 return
+        # no se ha podido sin fundido: no se genera la versión con fundido salvo que se pida (--permitir-fundido): la
+        # ISO de la vez anterior se queda como estaba y se dice por qué
+        if "--permitir-fundido" not in sys.argv:
+            with open(os.path.join(outdir, "resumen.txt"), "w", encoding="utf-8") as o:
+                o.write("\n".join(log) + "\n")
+            print("\n".join(log))
+            motivo = [l_ for l_ in log if "van con fundido" in l_ or "AVISO" in l_]
+            print("\n" + "=" * 78 + "\nNO SE HA PODIDO GENERAR SIN FUNDIDO, Y NO SE HA TOCADO LA ISO:\n  "
+                  + (motivo[-1] if motivo else "(sin motivo en el registro)")
+                  + "\nHaz una captura de esto y mándamela.\n" + "=" * 78)
+            sys.exit(2)
     v.construir()
     revisar(v.geo, log)
     log.append(f"Trozos extra para que no desaparezcan triángulos cerca de la cámara: {v.geo.trozos}")
