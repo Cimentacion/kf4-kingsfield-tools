@@ -37,6 +37,7 @@ import collections
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import kf4_mapdump as md  # noqa: E402
 import kf4_pulpo  # noqa: E402
+import kf4_trozos  # noqa: E402
 
 # ======================= Texturas de North Cliffs (031) por (TBP, CBP) =======================
 ROCA = (0x32C0, 0x3D43)        # roca gris oscura 512
@@ -3243,7 +3244,11 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
         if TROZO:
             rec["grupo"] = TROZO.get("grupos", {}).get(tuple(ch[:-2]), 0)   # su grupo (lo que se ve desde dónde)
             rec["zona"] = ch[-2]          # kf4_trozos: el vecino que pide este registro
-            rec["dentro"] = bool(ch[-1])  # bajo techo: niebla cerrada (NIEBLA_DENTRO)
+            # bajo techo y lejos de lo de fuera (solo los registros de colisión: el suelo que pisas): niebla cerrada
+            # y negra (NIEBLA_DENTRO) y el bloque de flags que no ve el cielo
+            rec["dentro"] = ch[-1] == kf4_trozos.SIN_CIELO
+            if rec["dentro"]:
+                rec["grupo"] = kf4_trozos.SIN_CIELO
         if ch[0] == "A":
             # agua: registro tardío (bit 0 de las marcas, como el agua de 000/016/026/099): se dibuja después de
             # componer la textura animada (modo 1 de la tabla) y por encima de lo demás, transparente
@@ -3591,7 +3596,9 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
             struct.pack_into("<hh", b, 0x30, r["omd"], -1)
             b[0x34] = CIELO_FOG
             b[0x35] = CIELO_LUZ
-            b[0x38] = 0 if TROZO else 1     # el bloque de flags de los demás registros (el 8 de 099 depende del guion)
+            # el bloque de flags de los demás registros (el 8 de 099 depende del guion); en los trozos, el suyo: no
+            # se dibuja desde los suelos de dentro
+            b[0x38] = kf4_trozos.GRUPO_CIELO if TROZO else 1
             for base in (0x40, 0x50):
                 x, y, z = struct.unpack_from("<3f", b, base)
                 struct.pack_into("<3f", b, base, x + ox, y + oy, z + oz)

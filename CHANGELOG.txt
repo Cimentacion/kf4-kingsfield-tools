@@ -1,6 +1,18 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 63 (2026-10-29)
+------------------------------------
+- The cloud sky no longer shows through unloaded rooms indoors. The sky record now has its own flag group (3), and
+  covered floors more than 3 tiles from the open air use a flag block that does not draw it. This is how KFIV's
+  own indoor maps behave. Before, any room not loaded yet showed the bluish sky behind it, even deep in the cave.
+  Now the background there is the indoor fog colour (black).
+- The floor you stand on decides the fog, background colour and sky: open air (light fog, sky), covered within
+  3 tiles of the open air, e.g. a cave mouth or porch (light fog, sky), or inside (close black fog, no sky).
+  Each piece of geometry goes in the same record as its floor's collision, so maps have fewer records than before.
+- Neighbouring pieces start loading 14 tiles (35 m) from the door instead of 10, beyond the indoor fog. In the load
+  simulator, the gap at the stairs up to level 1 is gone.
+
 Alpha 0.1 - revision 62 (2026-10-29)
 ------------------------------------
 - Fog by where you stand, as in KFIV's own maps: every record of the streamed maps has MAP_RECORD_CURRENT_BLOCKS

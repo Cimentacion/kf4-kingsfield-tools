@@ -26,6 +26,7 @@ Cómo se trocea:
 import collections
 import copy
 import math
+import os
 
 CELDA = 2.5
 
@@ -445,7 +446,7 @@ def _pasa(za, zb):
     return any(abs(a - b) <= PASO for a in za for b in zb)
 
 
-ZONA_PASOS = 10     # casillas andando (25 m) desde la puerta a un vecino en las que el juego ya lo va cargando
+ZONA_PASOS = int(os.environ.get("KF_ZONA_PASOS", "14"))     # casillas andando (35 m, más que la niebla de dentro) desde la puerta a un vecino en las que el juego ya lo va cargando
 
 
 def vecinos_y_zonas(trozos, puede, desfase, toque=1.5):
@@ -569,6 +570,11 @@ def geo_de(nivel, trozo):
             cache_cerca[k] = _cercanas([k], trozo.celdas)[k][1]
         return cache_cerca[k]
 
+    def fuera(c):
+        # (con MAP_RECORD_CURRENT_BLOCKS la niebla de cada registro es la del que pisas: la geometría va en el mismo
+        # registro que la colisión de su casilla, y así no hay más registros que antes)
+        return 0 if c in nivel.aire else (1 if c in nivel.cerca_aire else SIN_CIELO)
+
     def exterior(s):
         """¿Se ve desde fuera? Paredes que dan a suelo al aire libre o a donde no hay suelo, y tejados."""
         p = _centro([q[0] for q in s])
@@ -592,19 +598,23 @@ def geo_de(nivel, trozo):
                 # paredes que dan fuera llevan la de fuera aunque sean de una casilla cubierta (con la de dentro, desde
                 # la orilla se veían como manchas planas del color de la niebla)
                 if c in trozo.celdas:
-                    g.render[tuple(ch) + (trozo.zonas.get(c, -1), not exterior(s))][tex].append(s)
+                    g.render[tuple(ch) + (trozo.zonas.get(c, -1), fuera(c))][tex].append(s)
                     continue
                 k = celda(_centro([q[0] for q in s]))
                 if k in amplia and (not cerca3 or k in cerca3 or exterior(s)):
                     o = c if c in trozo.celdas else cerca_de(k)
-                    g.render[tuple(ch) + (trozo.zonas.get(o, -1), not exterior(s))][tex].append(s)
+                    g.render[tuple(ch) + (trozo.zonas.get(o, -1), fuera(o))][tex].append(s)
                     trozo.repetidas += 1
     for ch, cc in valle.geo.coll.items():
         for kind, polys in cc.items():
             for q in polys:
                 c = nivel.dueno_poli(q)
                 if c in trozo.celdas:
-                    k = tuple(ch) + (trozo.zonas.get(c, -1), c not in nivel.aire)
+                    # el suelo que pisas decide la niebla, el color del fondo y si se ve el cielo (los registros van
+                    # con MAP_RECORD_CURRENT_BLOCKS): 0 al aire libre, 1 bajo techo junto a lo de fuera (la boca de
+                    # una cueva o un pórtico: niebla de fuera y cielo), 2 dentro (niebla negra y cerrada, sin cielo:
+                    # lo que no esté cargado se ve negro, no las nubes)
+                    k = tuple(ch) + (trozo.zonas.get(c, -1), fuera(c))
                     g.coll[k].setdefault(kind, [])
                     g.coll[k][kind].append(q)
     return g
@@ -764,6 +774,11 @@ def grupos(nivel, trozos):
 
 
 CON_PVS = False         # True: cada grupo ve solo lo que se alcanza andando; False: todo lo cargado se ve
+# grupos sin PVS: 0 lo repetido de alrededor, 1 lo propio, SIN_CIELO los suelos de dentro (solo colisión: su bloque
+# es el que no ve el cielo) y GRUPO_CIELO el cielo de nubes (en el 4 los mapas de dentro no lo dibujan nunca; aquí, si
+# se dibujaba detrás de todo, por cualquier sala aún sin cargar se veían las nubes, también dentro de la cueva)
+SIN_CIELO = 2
+GRUPO_CIELO = 3
 
 
 def visibilidad(trozos, desfase):
@@ -773,16 +788,22 @@ def visibilidad(trozos, desfase):
         # todo lo de los dos mapas cargados se dibuja: cada bloque con todos los grupos propios y, del vecino, su
         # grupo 0 y los 15 primeros (sin PVS los trozos llevan un grupo por registro solo para esto: ver grupos())
         for a in trozos:
-            n = max([0] + list(getattr(a, "celdas_grupo", {}).keys())) + 1
-            lista = [(b.mapa, 1) for b, _ in a.vecinos] + [(b.mapa, 0) for b, _ in a.vecinos]
-            blk = bytearray(0x40)
-            for bit in range(min(n, 256)):
-                blk[bit // 8] |= 1 << (bit % 8)
-            for i in range(16):
-                t_, v_ = lista[i] if i < len(lista) else (255, 255)
-                blk[0x20 + i] = t_ & 0xFF
-                blk[0x30 + i] = v_ & 0xFF
-            a.bloques = bytes(blk) * n
+            bloques = bytearray()
+            for g in range(GRUPO_CIELO + 1):
+                cielo = g != SIN_CIELO
+                lista = [(b.mapa, v) for v in (1, 0, SIN_CIELO) for b, _ in a.vecinos]
+                if cielo:
+                    lista += [(b.mapa, GRUPO_CIELO) for b, _ in a.vecinos]
+                blk = bytearray(0x40)
+                for bit in range(GRUPO_CIELO + 1):
+                    if bit != GRUPO_CIELO or cielo:
+                        blk[bit // 8] |= 1 << (bit % 8)
+                for i in range(16):
+                    t_, v_ = lista[i] if i < len(lista) else (255, 255)
+                    blk[0x20 + i] = t_ & 0xFF
+                    blk[0x30 + i] = v_ & 0xFF
+                bloques += blk
+            a.bloques = bytes(bloques)
         return
     for a in trozos:
         n = max([0] + list(getattr(a, "celdas_grupo", {}).keys())) + 1
