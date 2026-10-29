@@ -1,6 +1,15 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 59 (2026-10-29)
+------------------------------------
+- Streamed build much faster again (here 1 minute; it was 3 in rev 57 and about 10 before):
+  - each level's geometry is built once (it was rebuilt every time the build switched from one level to the other,
+    up to 5 times, 30-60 s each, "in case the editor kept state": checked, the maps come out the same except the
+    random turn of the items on the floor);
+  - neighbours are found by touching tiles instead of nearest-distance searches, and tiny loose pieces are merged
+    by distance between centres (that search alone took 40 s).
+
 Alpha 0.1 - revision 58 (2026-10-29)
 ------------------------------------
 - No more silent fallback to the fade: if the levels cannot be streamed, the build stops, leaves the ISO of the

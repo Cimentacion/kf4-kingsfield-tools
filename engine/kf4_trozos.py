@@ -411,7 +411,9 @@ def particion(nivel, presupuesto, excluir=frozenset(), inicio=None, primeras=Non
                 # suelto (sin vecino andando): con el trozo más cercano en línea recta que lo admita
                 yo = {c for g in t for c in grupos[g]}
                 resto = [(i, {c for g in u for c in grupos[g]}) for i, u in enumerate(trozos) if u is not t]
-                resto = [(min(_cercanas(list(yo)[:50], cs).values())[0], i) for i, cs in resto
+                cx_ = sum(c[0] for c in yo) / len(yo)
+                cy_ = sum(c[1] for c in yo) / len(yo)
+                resto = [(min((c[0] - cx_) ** 2 + (c[1] - cy_) ** 2 for c in cs), i) for i, cs in resto
                          if sum(gw[g] for g in trozos[i]) + pt <= presupuesto]
                 opciones = [min(resto)[1]] if resto else []
             if opciones:
@@ -462,9 +464,10 @@ def vecinos_y_zonas(trozos, puede, desfase, toque=1.5):
                 continue
             mover, dz, xyz = desfase(a, b)
             otras = {mover(c) for c in b.celdas}
-            d = _distancias(a.celdas, otras)
-            if min(d.values()) > toque:
+            # (se tocan: alguna casilla de a junto a una de b, también en diagonal)
+            if not any((c[0] + i, c[1] + j) in otras for c in a.celdas for i in (-1, 0, 1) for j in (-1, 0, 1)):
                 continue
+            d = None
             hb = {mover(c): [z + dz for z in zs] for c, zs in b.alturas.items()}
             puertas = {c for c, za in a.alturas.items() for k in VECINAS4
                        if (c[0] + k[0], c[1] + k[1]) in hb and _pasa(za, hb[(c[0] + k[0], c[1] + k[1])])}

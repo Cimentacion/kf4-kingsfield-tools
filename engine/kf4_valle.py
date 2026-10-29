@@ -5923,11 +5923,11 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.4
 
     def nivel_listo(nivel):
         """El nivel construido el último (el editor deja estado de su nivel), con sus registros de bichos."""
-        if construido["ultimo"] != nivel or construido.get(nivel) is None:
-            v_ = kf4_editor.MapaEditor(semilla, ruta0 if nivel == 0 else ruta1)
-            v_.construir()
-            construido[nivel] = (v_, kt.Nivel(v_))
-            construido["ultimo"] = nivel
+        # (antes se volvía a construir el nivel cada vez que se cambiaba de nivel, por si el editor dejaba algo de
+        # otro nivel: comprobado que no, el mapa sale igual salvo los giros al azar de los objetos del suelo; cada
+        # construcción son 30-60 s)
+        if construido.get(nivel) is None:
+            construido[nivel] = (v1, N1) if nivel == 1 else (v0, N0)
         v_, Nv_ = construido[nivel]
         fijar_offset(v_)
         if nivel not in pulpos:
