@@ -609,6 +609,11 @@ def geo_de(nivel, trozo):
                     g.render[tuple(ch) + (trozo.zonas.get(c, -1), fuera(c))][tex].append(s)
                     continue
                 k = celda(_centro([q[0] for q in s]))
+                # (el agua, sin repetir: cada trozo lleva solo la de sus casillas y se dibuja la de los dos mapas
+                # cargados; repetida salía doble de clara, y solo la del mapa actual hacía desaparecer el mar desde
+                # la boca de la cueva)
+                if ch[0] == "A":
+                    continue
                 if k in amplia and (not cerca3 or k in cerca3 or exterior(s)):
                     o = c if c in trozo.celdas else cerca_de(k)
                     g.render[tuple(ch) + (trozo.zonas.get(o, -1), fuera(o))][tex].append(s)
@@ -813,8 +818,8 @@ CON_PVS = False         # True: cada grupo ve solo lo que se alcanza andando; Fa
 # se dibujaba detrás de todo, por cualquier sala aún sin cargar se veían las nubes, también dentro de la cueva)
 SIN_CIELO = 2
 GRUPO_CIELO = 3
-# el agua (transparente): solo la del mapa donde estás. Si el vecino también dibujaba la suya, donde se solapan (lo
-# repetido de alrededor) salía el doble de clara, una franja verde de borde recto que iba y venía con las cargas
+# el agua (transparente): sin repetir en los bordes (cada trozo solo la de sus casillas) y la de los dos mapas
+# cargados. Repetida, donde se solapaban salía el doble de clara (una franja verde de borde recto)
 GRUPO_AGUA = 4
 
 
@@ -829,7 +834,7 @@ def visibilidad(trozos, desfase):
             for g in range(GRUPO_AGUA + 1):
                 cielo = g != SIN_CIELO
                 # del vecino, todo menos su cielo y su agua (el cielo y el agua, solo los del mapa donde estás)
-                lista = [(b.mapa, v) for v in (1, 0, SIN_CIELO) for b, _ in a.vecinos]
+                lista = [(b.mapa, v) for v in (1, 0, SIN_CIELO, GRUPO_AGUA) for b, _ in a.vecinos]
                 blk = bytearray(0x40)
                 for bit in range(GRUPO_AGUA + 1):
                     if bit != GRUPO_CIELO or cielo:

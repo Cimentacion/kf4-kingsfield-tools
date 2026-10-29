@@ -1,6 +1,13 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 68 (2026-10-29)
+------------------------------------
+- Water is no longer copied into the border of neighbouring maps: each streamed map carries only the water of its
+  own tiles. Both loaded maps draw their water again, as the neighbour pairs of every flag block now include
+  group 4. In revision 66 only the current map's water was drawn, so the sea disappeared when seen from a cave
+  mouth that belongs to the cave's map. No water is drawn twice, so the doubled green band does not come back.
+
 Alpha 0.1 - revision 67 (2026-10-29)
 ------------------------------------
 - The forced wait for the neighbouring map (record byte 0x39) now starts 2 tiles before the door instead of 1. If
