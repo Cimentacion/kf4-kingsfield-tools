@@ -3539,6 +3539,8 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
     z0, z1 = NIEBLA_DENTRO_M[0] * 100.0, NIEBLA_DENTRO_M[1] * 100.0
     k_d = 255.0 / (1.0 / z0 - 1.0 / z1)
     struct.pack_into("<4f", blocks, NIEBLA_DENTRO * 0x20, 0.0, 0.0, -k_d / z1, k_d)
+    struct.pack_into("<Q", blocks, NIEBLA_DENTRO * 0x20 + 0x10, NIEBLA_DENTRO_RGB[0] | (NIEBLA_DENTRO_RGB[1] << 8)
+                     | (NIEBLA_DENTRO_RGB[2] << 16))
 
     # bloque de luz de los enemigos: luna fría desde arriba, relleno cálido, ambiente suficiente
     lb = LUZ_ENEMIGOS * 0x80 + 0x400
@@ -3616,6 +3618,10 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
             b[0x39] = z_ & 1         # 1: tocando la frontera, si no ha acabado de cargar se acaba allí mismo
         b[0x3B] = 0
         struct.pack_into("<I", b, 0x3C, 5 if r.get("tarde") else 4)
+        if TROZO and r.get("dentro") and not r.get("tarde"):
+            # y la niebla de dentro es negra: el color de la niebla (y del fondo) es el del registro que pisas, bits
+            # 24-25 de sus marcas -> header 0x50 + 4 * n (func_00112BD0, con un fundido de 30 fotogramas); el 1
+            struct.pack_into("<I", b, 0x3C, (5 if r.get("tarde") else 4) | (1 << 24))
         if "box" in r:
             (a0, a1, a2), (b0, b1, b2) = r["box"]
             struct.pack_into("<4f", b, 0x40, a0, a1, a2, 0)
@@ -3778,6 +3784,8 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
     struct.pack_into("<H", out, 0x44, nit)
     struct.pack_into("<H", out, 0x3A, len(kinds))
     out[0x50:0x53] = bytes(niebla)
+    if TROZO:
+        out[0x54:0x58] = bytes(NIEBLA_DENTRO_RGB) + b"\x00"    # el color de la niebla de dentro (bits 24-25 = 1)
     sx, sy, sz = to_native(valle.inicio)
     rumbo = getattr(valle, "rumbo", rumbo)
     struct.pack_into("<4f", out, 0x60, sx, sy, sz, rumbo)
@@ -5821,8 +5829,11 @@ PASOS_RECORTE = [("color de las ilustraciones de la cruz (16 colores en vez de 2
                                                        globals().__setitem__("TROZO_MAX", 5.2)))]
 MALLA_POR_DEFECTO = {}
 CRUZ_COLORES = 256        # las ilustraciones de la cruz en el mapa (16 si no cabe: PASOS_RECORTE)
+MARGEN_FUERA_TODO = 10       # y de ellas, hasta aquí todo (también lo de dentro: las bocas de las entradas)
+MARGEN_FUERA = 60           # casillas (150 m) hasta las que el mapa de fuera lleva repetido lo que se ve desde fuera
 NIEBLA_DENTRO = 2           # bloque de niebla de los registros bajo techo de los trozos sin fundido
-NIEBLA_DENTRO_M = (7.0, 30.0)   # m: hasta aquí no hay niebla / aquí ya no se ve nada
+NIEBLA_DENTRO_M = (5.0, 26.0)   # m: hasta aquí no hay niebla / aquí ya no se ve nada
+NIEBLA_DENTRO_RGB = (3, 3, 5)   # casi negra
 OTROS_OBLIGATORIOS = False   # (trozos) si un mapa no tiene sitio en la ISO, no se parchea: se vuelve a lo de antes
 TROZO = None              # kf4_trozos: {"neigh": tabla de vecinos, "cielo": puntos} del trozo que se monta
 MAPA_NIVEL1 = 37          # la entrada del DAT del 037.map (su sitio lo ocupa el 099 grande) lleva el nivel 1
@@ -5946,6 +5957,12 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.4
         for t in trozos:
             t.aire = (N0 if t.nivel == 0 else N1).aire & t.celdas
         kt.visibilidad(trozos, desfase)
+        for t in t0 + t1:
+            # lo de fuera ve lejos: las fachadas, tejados y torres de lo de dentro que se ven desde allí van también
+            # (repetidos) en su mapa, hasta MARGEN_FUERA casillas
+            if len(t.aire) > len(t.celdas) // 2:
+                t.margen = int(os.environ.get("KF_MARGEN_FUERA", MARGEN_FUERA))
+                t.margen_todo = int(os.environ.get("KF_MARGEN_TODO", MARGEN_FUERA_TODO))
         mapas = {}
         for nivel, v, ruta, off in ((0, v0, ruta0, off0), (1, None, ruta1, off1)):
             Nv = N0

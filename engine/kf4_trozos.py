@@ -522,8 +522,27 @@ def geo_de(nivel, trozo):
         for i in range(-m, m + 1):
             for j in range(-m, m + 1):
                 amplia.add((x + i, y + j))
+    cerca3 = set()
+    m3 = getattr(trozo, "margen_todo", MARGEN)      # hasta aquí, todo; más allá (hasta m), solo lo de fuera
+    if m > m3:
+        for (x, y) in area:
+            for i in range(-m3, m3 + 1):
+                for j in range(-m3, m3 + 1):
+                    cerca3.add((x + i, y + j))
     fuera = amplia - area
     cerca = {c: o for c, (_, o) in _cercanas(fuera, trozo.celdas).items()} if fuera else {}
+
+    def exterior(s):
+        """¿Se ve desde fuera? Paredes que dan a suelo al aire libre o a donde no hay suelo, y tejados."""
+        p = _centro([q[0] for q in s])
+        n = s[0][3] if len(s[0]) > 3 and s[0][3] else (0.0, 0.0, 0.0)
+        if abs(n[2]) < 0.6:
+            k = Nivel._mira(p, n)
+            return k not in nivel.H or k in nivel.aire
+        if n[2] >= 0.6:
+            k = celda(p)
+            return k not in nivel.H or k in nivel.aire or p[2] > max(nivel.H[k]) + 2.0
+        return False
     trozo.repetidas = 0
     for ch, by_tex in valle.geo.render.items():
         for tex, seqs in by_tex.items():
@@ -533,7 +552,7 @@ def geo_de(nivel, trozo):
                     g.render[tuple(ch) + (trozo.zonas.get(c, -1), c not in nivel.aire)][tex].append(s)
                     continue
                 k = celda(_centro([q[0] for q in s]))
-                if k in amplia:
+                if k in amplia and (not cerca3 or k in cerca3 or exterior(s)):
                     o = c if c in trozo.celdas else cerca.get(k)
                     g.render[tuple(ch) + (trozo.zonas.get(o, -1), c not in nivel.aire)][tex].append(s)
                     trozo.repetidas += 1

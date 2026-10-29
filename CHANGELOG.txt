@@ -1,6 +1,16 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 56 (2026-10-29)
+------------------------------------
+- The open-air map carries, repeated, everything that can be seen from outside: everything within 25 m of it
+  (the mouths of the entrances, the first rooms) and, up to 150 m, the walls that face open air or empty space and
+  the roofs. Measured from 30 places on the shore looking 4 ways with only the shore map loaded: missing area went
+  from 2.1 % of the screen (worst view 52 %) to 0.1 % (worst 4 %).
+- Black fog indoors: the fog colour (and the background) is the one of the record you stand on (bits 24-25 of its
+  flags pick one of the 4 colours of the map header, faded over 30 frames). Indoor records use colour 1, almost
+  black, and close the fog between 5 and 26 m; outside keeps the old light fog.
+
 Alpha 0.1 - revision 55 (2026-10-29)
 ------------------------------------
 - New load simulator (kf4_simula_carga.py): it walks through both levels over the generated maps doing what the
