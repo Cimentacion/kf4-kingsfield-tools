@@ -3629,7 +3629,9 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
         if TROZO and (r.get("dentro") or r.get("techo")) and not r.get("tarde"):
             # y la niebla de dentro es negra: el color de la niebla (y del fondo) es el del registro que pisas, bits
             # 24-25 de sus marcas -> header 0x50 + 4 * n (func_00112BD0, con un fundido de 30 fotogramas); el 1
-            struct.pack_into("<I", b, 0x3C, (5 if r.get("tarde") else 4) | (1 << 24))
+            # (el índice es el byte 0x3B: el juego lee 0x38 como u64 y se queda con los bits 24-25; antes iba en el
+            # 0x3F, que no usa ningún mapa original, y el fondo salía siempre del color 0, el azulado de fuera)
+            b[0x3B] = 1
         if TROZO and not r.get("tarde"):
             # (el agua no: con la luz del suelo que pisas salía una franja verde con un corte recto)
             # MAP_RECORD_CURRENT_BLOCKS (0x10): el registro se dibuja con la niebla (y la luz) del registro que pisas,

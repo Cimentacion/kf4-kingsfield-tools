@@ -1,6 +1,17 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 65 (2026-10-29)
+------------------------------------
+- Fixed the background colour indoors. The game picks the fog colour (header 0x50 + 4n, also the screen clear
+  colour) from byte 0x3B of the record under the player: it reads 0x38 as a u64 and keeps bits 24-25. KFIV's map 8
+  does this. The engine was setting bit 24 of the flags at 0x3C (byte 0x3F), which no original map uses, so the
+  background was always colour 0, the bluish outside one. Unloaded parts showed as flat bluish patches even deep
+  inside. Covered floors now set byte 0x3B = 1 and get the black background.
+- Each streamed map now also carries the floor collision of the copied geometry around it, up to 2 tiles past its
+  border. Before, while the neighbour was not loaded, you could see that floor (e.g. the start of a bridge) and
+  fall through it.
+
 Alpha 0.1 - revision 64 (2026-10-29)
 ------------------------------------
 - The cave mouth band (outside fog, sky visible) is now 1 tile (2.5 m) instead of 3. A few metres into a cave,

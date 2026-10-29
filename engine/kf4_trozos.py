@@ -567,6 +567,7 @@ def geo_de(nivel, trozo):
     amplia = _dilatar(area, m)
     cerca3 = _dilatar(area, m3) if m > m3 else set()
     cache_cerca = {}
+    pisable = _dilatar(area, int(os.environ.get("KF_PISABLE", "2")))
 
     def cerca_de(k):
         # la casilla del trozo más cercana (para la zona de lo repetido): solo las que hacen falta, y una vez
@@ -613,6 +614,18 @@ def geo_de(nivel, trozo):
         for kind, polys in cc.items():
             for q in polys:
                 c = nivel.dueno_poli(q)
+                if c not in trozo.celdas:
+                    # la colisión de lo repetido de alrededor que se puede pisar: si no, mientras el vecino no estaba
+                    # cargado se veía (un puente, el principio de la sala de al lado) y te caías a través
+                    # (solo suelos y a 3 casillas: más allá ya se ha acabado de cargar el vecino, el juego lo espera
+                    # al pisar la frontera)
+                    k = celda(_centro(q))
+                    if kind != "wall" and (k in pisable or c in pisable):
+                        o = cerca_de(k)
+                        kk = tuple(ch) + (trozo.zonas.get(o, -1), fuera(c))
+                        g.coll[kk].setdefault(kind, [])
+                        g.coll[kk][kind].append(q)
+                    continue
                 if c in trozo.celdas:
                     # el suelo que pisas decide la niebla, el color del fondo y si se ve el cielo (los registros van
                     # con MAP_RECORD_CURRENT_BLOCKS): 0 al aire libre, 1 bajo techo junto a lo de fuera (la boca de
