@@ -450,6 +450,7 @@ def _pasa(za, zb):
     return any(abs(a - b) <= PASO for a in za for b in zb)
 
 
+ESPERA_PASOS = int(os.environ.get("KF_ESPERA_PASOS", "2"))
 ZONA_PASOS = int(os.environ.get("KF_ZONA_PASOS", "14"))     # casillas andando (35 m, más que la niebla de dentro) desde la puerta a un vecino en las que el juego ya lo va cargando
 
 
@@ -501,7 +502,9 @@ def vecinos_y_zonas(trozos, puede, desfase, toque=1.5):
             por_camino = [(cand[i][3][c], cand[i][4], i) for i in range(len(cand)) if c in cand[i][3]]
             pasos, _, j = min(por_camino) if por_camino else (None, 0, 0)
             if pasos is not None and pasos <= ZONA_PASOS:
-                a.zonas[c] = j * 2 + (1 if pasos <= 1 else 0)
+                # (exigido a 2 casillas o menos de la puerta: si aún no ha cargado, el juego espera antes de que se
+                # acabe el suelo repetido del vecino, 2 casillas al otro lado; con 1, en el túnel del enlace te caías)
+                a.zonas[c] = j * 2 + (1 if pasos <= ESPERA_PASOS else 0)
             else:
                 # lejos de todas las puertas: no pide nada (se queda cargado lo que hubiera). Antes cada casilla pedía
                 # siempre su vecino más cercano y, andando por el medio de un trozo con dos vecinos, el juego cargaba
@@ -614,6 +617,18 @@ def geo_de(nivel, trozo):
         for kind, polys in cc.items():
             for q in polys:
                 c = nivel.dueno_poli(q)
+                if c not in trozo.celdas and kind != "wall":
+                    # un suelo grande que cruza la frontera: también es de este trozo si pisa alguna de sus casillas
+                    # (antes iba solo al trozo de la casilla de su centro y en el otro quedaba un agujero)
+                    xs = [celda(v)[0] for v in q]
+                    ys = [celda(v)[1] for v in q]
+                    for i in range(min(xs), max(xs) + 1):
+                        for j in range(min(ys), max(ys) + 1):
+                            if (i, j) in trozo.celdas:
+                                c = (i, j)
+                                break
+                        if c in trozo.celdas:
+                            break
                 if c not in trozo.celdas:
                     # la colisión de lo repetido de alrededor que se puede pisar: si no, mientras el vecino no estaba
                     # cargado se veía (un puente, el principio de la sala de al lado) y te caías a través

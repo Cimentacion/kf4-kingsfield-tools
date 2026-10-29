@@ -1,6 +1,14 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 67 (2026-10-29)
+------------------------------------
+- The forced wait for the neighbouring map (record byte 0x39) now starts 2 tiles before the door instead of 1. If
+  the neighbour is still loading, the game stops you before the end of the copied floor, which reaches 2 tiles
+  past the border. In the link tunnel to level 1 you could walk off it and fall.
+- A large floor polygon crossing the border between two streamed maps now goes into both, not only into the map
+  that owns the tile under its centre.
+
 Alpha 0.1 - revision 66 (2026-10-29)
 ------------------------------------
 - Water and sky come only from the current map. Each streamed map copies the geometry around its border, so both
