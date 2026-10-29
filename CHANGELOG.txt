@@ -1,6 +1,16 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 62 (2026-10-29)
+------------------------------------
+- Fog by where you stand, as in KFIV's own maps: every record of the streamed maps has MAP_RECORD_CURRENT_BLOCKS
+  (0x10), so it is drawn with the fog (and light) of the record under the player, faded over 30 frames when it
+  changes, instead of its own. Inside, everything you see gets the close black fog; outside, everything gets the
+  light one. Before, each wall had its own fog, so from the same spot some walls were flat fog-coloured patches
+  and others were not.
+- Covered floors within 3 tiles (7.5 m) of the open air count as outside for the fog: from under a porch you look
+  out with the light fog, not a black shore.
+
 Alpha 0.1 - revision 61 (2026-10-29)
 ------------------------------------
 - The facades, roofs and walls that face outside now use the outdoor fog, even when they belong to a covered tile:

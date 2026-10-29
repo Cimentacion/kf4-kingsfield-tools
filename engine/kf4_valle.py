@@ -3622,6 +3622,11 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
             # y la niebla de dentro es negra: el color de la niebla (y del fondo) es el del registro que pisas, bits
             # 24-25 de sus marcas -> header 0x50 + 4 * n (func_00112BD0, con un fundido de 30 fotogramas); el 1
             struct.pack_into("<I", b, 0x3C, (5 if r.get("tarde") else 4) | (1 << 24))
+        if TROZO:
+            # MAP_RECORD_CURRENT_BLOCKS (0x10): el registro se dibuja con la niebla (y la luz) del registro que pisas,
+            # no con la suya; así la niebla es la del sitio donde estás (dentro, cerrada y negra para todo lo que se
+            # ve; fuera, suave para todo), como en los mapas del 4, y no unas paredes con una y otras con otra
+            struct.pack_into("<I", b, 0x3C, struct.unpack_from("<I", b, 0x3C)[0] | 0x10)
         if "box" in r:
             (a0, a1, a2), (b0, b1, b2) = r["box"]
             struct.pack_into("<4f", b, 0x40, a0, a1, a2, 0)

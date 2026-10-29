@@ -220,6 +220,7 @@ class Nivel:
                 for q in polys:
                     candidatas.add(celda(_centro(q)))
         self.aire = {c for c, zs in self.H.items() if not (c in techo and min(techo[c]) > min(zs) + 0.5)}
+        self.cerca_aire = _dilatar(self.aire, 3)
         suelo = set(self.H)
         self._cerca = {c: o for c, (_, o) in _cercanas(candidatas - suelo, suelo).items()}
         self.todas = candidatas | suelo
@@ -577,7 +578,10 @@ def geo_de(nivel, trozo):
             return k not in nivel.H or k in nivel.aire
         if n[2] >= 0.6:
             k = celda(p)
-            return k not in nivel.H or k in nivel.aire or p[2] > max(nivel.H[k]) + 2.0
+            # (los suelos bajo techo a 3 casillas o menos de lo de fuera cuentan como de fuera: desde la boca de un
+            # pórtico se ve fuera, y con la niebla cerrada de dentro la orilla salía negra)
+            return (k not in nivel.H or k in nivel.aire or k in nivel.cerca_aire
+                    or p[2] > max(nivel.H[k]) + 2.0)
         return False
     trozo.repetidas = 0
     for ch, by_tex in valle.geo.render.items():
