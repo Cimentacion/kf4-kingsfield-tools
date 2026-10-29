@@ -3254,6 +3254,8 @@ def assemble(valle, d099, d031, rumbo, log, plantillas=None, item_modelo=None, m
             # agua: registro tardío (bit 0 de las marcas, como el agua de 000/016/026/099): se dibuja después de
             # componer la textura animada (modo 1 de la tabla) y por encima de lo demás, transparente
             rec["tarde"] = True
+            if TROZO:
+                rec["grupo"] = kf4_trozos.GRUPO_AGUA
         if allp:
             # trocear si el OMD es enorme
             omd = build_omd(by_tex, origin, templates, stats, clut_remap)

@@ -656,7 +656,9 @@ def vista(nivel, trozo):
     v._trozo = trozo
     # el cielo, solo en los mapas con algo al aire libre: en los de dentro, lo que no esté cargado se ve del color
     # de la niebla (negro), no el cielo de nubes "infinito" detrás
-    v.cielo = bool(getattr(valle, "cielo", False)) and len(getattr(trozo, "aire", ())) >= CIELO_AIRE * len(trozo.celdas)
+    # (cada mapa con algo al aire libre lleva el suyo, y solo se dibuja el del mapa donde estás: antes los de poco
+    # aire dependían del cielo del vecino y, al descargarse el vecino, el cielo desaparecía en la boca de la cueva)
+    v.cielo = bool(getattr(valle, "cielo", False)) and any(c in nivel.boca for c in trozo.celdas)
     return v
 
 
@@ -796,6 +798,9 @@ CON_PVS = False         # True: cada grupo ve solo lo que se alcanza andando; Fa
 # se dibujaba detrás de todo, por cualquier sala aún sin cargar se veían las nubes, también dentro de la cueva)
 SIN_CIELO = 2
 GRUPO_CIELO = 3
+# el agua (transparente): solo la del mapa donde estás. Si el vecino también dibujaba la suya, donde se solapan (lo
+# repetido de alrededor) salía el doble de clara, una franja verde de borde recto que iba y venía con las cargas
+GRUPO_AGUA = 4
 
 
 def visibilidad(trozos, desfase):
@@ -806,13 +811,12 @@ def visibilidad(trozos, desfase):
         # grupo 0 y los 15 primeros (sin PVS los trozos llevan un grupo por registro solo para esto: ver grupos())
         for a in trozos:
             bloques = bytearray()
-            for g in range(GRUPO_CIELO + 1):
+            for g in range(GRUPO_AGUA + 1):
                 cielo = g != SIN_CIELO
+                # del vecino, todo menos su cielo y su agua (el cielo y el agua, solo los del mapa donde estás)
                 lista = [(b.mapa, v) for v in (1, 0, SIN_CIELO) for b, _ in a.vecinos]
-                if cielo:
-                    lista += [(b.mapa, GRUPO_CIELO) for b, _ in a.vecinos]
                 blk = bytearray(0x40)
-                for bit in range(GRUPO_CIELO + 1):
+                for bit in range(GRUPO_AGUA + 1):
                     if bit != GRUPO_CIELO or cielo:
                         blk[bit // 8] |= 1 << (bit % 8)
                 for i in range(16):

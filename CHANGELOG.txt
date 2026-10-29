@@ -1,6 +1,15 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 66 (2026-10-29)
+------------------------------------
+- Water and sky come only from the current map. Each streamed map copies the geometry around its border, so both
+  loaded maps drew the transparent water where they overlap. That doubled water showed as a bright green band
+  with a straight edge, appearing and disappearing as the neighbour loaded and unloaded. Water records now have
+  their own flag group (4), the sky keeps group 3, and neither is in the neighbour pairs of any flag block.
+- Every map with an open-air or cave-mouth floor carries its own sky. Before, maps with little open air relied on
+  the neighbour's sky, which vanished at the cave mouth when the neighbour unloaded.
+
 Alpha 0.1 - revision 65 (2026-10-29)
 ------------------------------------
 - Fixed the background colour indoors. The game picks the fog colour (header 0x50 + 4n, also the screen clear
