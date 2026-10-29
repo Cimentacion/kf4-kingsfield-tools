@@ -1,6 +1,19 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 70 (2026-10-29)
+------------------------------------
+- Streaming gated by doors, as in KFIV's own maps. A King's Field door on the border between two streamed maps now
+  belongs to the map you reach it from first, counting from the start (double doors move both leaves). It is closed
+  when you arrive, even if the map behind it is not loaded yet. Before, it belonged to the map of its tile, so
+  without that map there was no door and no floor. This covers the first cave room of level 0 (door 16,17 / 17,17)
+  and the room in front of the link tunnel to level 1 (33,4 / 33,5).
+- On such a door, the forced wait for the map behind it (record byte 0x39) is only on the door tiles themselves and
+  on the copied floor behind. Before the door, the game only requests the load, so it keeps loading while you open
+  the door. In the load simulator, forced waits drop from 7 to 4, and the first cave room has none.
+- Copied floor behind a map border always forces the wait for the neighbour.
+- The partitioner prefers to cut through King's Field doors: a crossing through a door tile costs nothing.
+
 Alpha 0.1 - revision 69 (2026-10-29)
 ------------------------------------
 - Bridges and walkways of the ported King's Field levels now have floor collision. They are MO.T objects (190-192,

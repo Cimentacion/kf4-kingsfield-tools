@@ -222,6 +222,10 @@ class Nivel:
                     candidatas.add(celda(_centro(q)))
         self.aire = {c for c, zs in self.H.items() if not (c in techo and min(techo[c]) > min(zs) + 0.5)}
         self.cerca_aire = _dilatar(self.aire, 3)
+        # las puertas del King's Field (sus casillas): el reparto corta por ellas, como los mapas del IV (cerradas
+        # tapan lo que hay detrás y, mientras se abren, da tiempo a cargarlo)
+        self.puertas = {celda(o["pos"]) for o in getattr(v, "kf_objetos", []) or [] if o.get("tipo") == "puerta"}
+        self.puerta_a = {}               # casilla de puerta -> trozo que la lleva (si no, el de su casilla)
         # la boca: los suelos cubiertos pegados a lo de fuera (1 casilla, 2,5 m) llevan la niebla de fuera y ven el
         # cielo; más adentro, niebla negra y sin cielo (con 3 casillas, a unos metros dentro de la cueva lo que no
         # estaba cargado se veía del color de la niebla de fuera)
@@ -267,6 +271,10 @@ class Nivel:
         return self.dueno_celda(celda(p))
 
 
+MIN_TRANSITO = int(os.environ.get("KF_MIN_TRANSITO", "0"))   # casillas andando entre la puerta de entrada de un
+                                                                # trozo y la del siguiente (35 m: tiempo de cargarlo)
+
+
 def particion(nivel, presupuesto, excluir=frozenset(), inicio=None, primeras=None):
     """Las casillas de suelo del nivel (menos las excluidas) en trozos de peso <= presupuesto, cortando por donde
     menos se ve, como los mapas del IV: nunca al aire libre (cada zona al aire libre unida va entera en un trozo,
@@ -310,11 +318,12 @@ def particion(nivel, presupuesto, excluir=frozenset(), inicio=None, primeras=Non
         for d in ady[c]:
             if grupo[d] != grupo[c]:
                 gady[grupo[c]].add(grupo[d])
-    paso = collections.Counter()           # pasos entre grupos (cuántas casillas se tocan)
+    paso = collections.Counter()           # pasos entre grupos (cuántas casillas se tocan; por una puerta, nada)
+    puertas = getattr(nivel, "puertas", set())
     for c in nodos:
         for d in ady[c]:
             if grupo[d] != grupo[c]:
-                paso[(grupo[c], grupo[d])] += 1
+                paso[(grupo[c], grupo[d])] += 0 if (c in puertas or d in puertas) else 1
 
     libres = set(range(len(grupos)))
     trozos = []
@@ -337,7 +346,23 @@ def particion(nivel, presupuesto, excluir=frozenset(), inicio=None, primeras=Non
         total = sum(pesos)
         if total <= presupuesto:
             return set(dist)
-        mejor, acum = None, 0
+        # lo que se anda desde la puerta por la que se entra (las casillas que tocan lo ya repartido): entre esa
+        # puerta y la del trozo siguiente tiene que dar tiempo a cargarlo (con dos mapas en memoria, el siguiente
+        # se empieza a cargar al dejar atrás la zona de la puerta de entrada; con 9 casillas, en la cueva del nivel
+        # 0, no daba tiempo y el juego se paraba a esperar)
+        andado = {}
+        frente = [c for g in entrada for c in grupos[g] if any(grupo[d] not in libres for d in ady[c])]
+        for c in frente:
+            andado[c] = 0
+        while frente:
+            sig = []
+            for c in frente:
+                for d in ady[c]:
+                    if d not in andado and grupo[d] in dist:
+                        andado[d] = andado[c] + 1
+                        sig.append(d)
+            frente = sig
+        mejor, acum, cualquiera = None, 0, None
         for k, capa in enumerate(capas[:-1]):
             acum += pesos[k]
             if acum > presupuesto and k > 0:
@@ -347,8 +372,15 @@ def particion(nivel, presupuesto, excluir=frozenset(), inicio=None, primeras=Non
             siguiente = set(capas[k + 1])
             corte = sum(paso[(g, h)] for g in capa for h in gady[g] if h in siguiente)
             clave = (corte, -acum)
+            if cualquiera is None or clave < cualquiera[0]:
+                cualquiera = (clave, k)
+            if andado:
+                hasta = min((andado[c] for g in siguiente for c in grupos[g] if c in andado), default=10 ** 6)
+                if hasta < MIN_TRANSITO:
+                    continue      # la puerta de salida, demasiado cerca de la de entrada
             if mejor is None or clave < mejor[0]:
                 mejor = (clave, k)
+        mejor = mejor or cualquiera
         k = mejor[1] if mejor else 0
         return {g for g, d_ in dist.items() if d_ <= k}
 
@@ -454,6 +486,13 @@ ESPERA_PASOS = int(os.environ.get("KF_ESPERA_PASOS", "2"))
 ZONA_PASOS = int(os.environ.get("KF_ZONA_PASOS", "14"))     # casillas andando (35 m, más que la niebla de dentro) desde la puerta a un vecino en las que el juego ya lo va cargando
 
 
+PESO_FUERA = float(os.environ.get("KF_PESO_FUERA", "1"))   # (2 o más: la zona de la puerta de fuera, más corta; probado en el nivel 0 sin mejora clara)
+
+
+def _de_fuera(t):
+    return len(getattr(t, "aire", ())) >= 0.5 * max(1, len(t.celdas))
+
+
 def vecinos_y_zonas(trozos, puede, desfase, toque=1.5):
     """Para cada trozo: sus vecinos y la zona de cada casilla (qué vecino pide el juego mientras la pisas).
     Vecinos: los trozos cuyas casillas tocan las suyas (en las coordenadas de su nivel; si no se ven, no hace falta
@@ -499,8 +538,13 @@ def vecinos_y_zonas(trozos, puede, desfase, toque=1.5):
             if not cand:
                 a.zonas[c] = -1
                 continue
-            por_camino = [(cand[i][3][c], cand[i][4], i) for i in range(len(cand)) if c in cand[i][3]]
-            pasos, _, j = min(por_camino) if por_camino else (None, 0, 0)
+            # (la puerta al trozo de fuera, con la mitad de zona: al entrar en la cueva se empieza antes a cargar lo
+            # de dentro; en el nivel 0 la puerta de fuera y la del siguiente trozo están a 9 casillas y no daba
+            # tiempo; el de fuera, al salir, se ve por la boca y lo repetido de su orilla tapa la espera)
+            por_camino = [(cand[i][3][c] * (PESO_FUERA if _de_fuera(cand[i][0]) else 1), cand[i][4], i)
+                          for i in range(len(cand)) if c in cand[i][3]]
+            _, _, j = min(por_camino) if por_camino else (None, 0, 0)
+            pasos = cand[j][3][c] if por_camino else None
             if pasos is not None and pasos <= ZONA_PASOS:
                 # (exigido a 2 casillas o menos de la puerta: si aún no ha cargado, el juego espera antes de que se
                 # acabe el suelo repetido del vecino, 2 casillas al otro lado; con 1, en el túnel del enlace te caías)
@@ -642,7 +686,9 @@ def geo_de(nivel, trozo):
                     k = celda(_centro(q))
                     if kind != "wall" and (k in pisable or c in pisable):
                         o = cerca_de(k)
-                        kk = tuple(ch) + (trozo.zonas.get(o, -1), fuera(c))
+                        z_ = trozo.zonas.get(o, -1)
+                        # (lo repetido de detrás de la frontera exige siempre el vecino: pisándolo ya se ha pasado)
+                        kk = tuple(ch) + ((z_ | 1) if z_ >= 0 else z_, fuera(c))
                         g.coll[kk].setdefault(kind, [])
                         g.coll[kk][kind].append(q)
                     continue
@@ -666,7 +712,11 @@ def vista(nivel, trozo):
     v.geo = geo_de(nivel, trozo)
     v.enemigos = [(t, p) for t, p in valle.enemigos if dentro(p)]
     v.objetos = [(i, p) for i, p in getattr(valle, "objetos", []) if dentro(p)]
-    v.kf_objetos = [o for o in getattr(valle, "kf_objetos", []) if dentro(o["pos"])]
+    def objeto_mio(o):
+        # una puerta en la frontera va con el trozo que la tiene asignada (el del lado por el que se llega a ella)
+        dueno = nivel.puerta_a.get(celda(o["pos"])) if o.get("tipo") == "puerta" else None
+        return dueno is trozo if dueno is not None else dentro(o["pos"])
+    v.kf_objetos = [o for o in getattr(valle, "kf_objetos", []) if objeto_mio(o)]
     v.kf_npcs = [n for n in getattr(valle, "kf_npcs", []) if dentro(n["pos"])]
     v.kf_fuentes = [p for p in getattr(valle, "kf_fuentes", []) if dentro(p)]
     g = getattr(valle, "guardado", None)

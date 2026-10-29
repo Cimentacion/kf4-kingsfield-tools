@@ -6060,6 +6060,66 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.4
                 return (lambda c: (c[0] - dx, c[1] - dy)), -D[2], req
             return (lambda c: (c[0] + dx, c[1] + dy)), D[2], tuple(-x for x in req)
         kt.vecinos_y_zonas(trozos, puede, desfase)
+        # las puertas en la frontera entre dos trozos: con el trozo por el que se llega a ellas desde el principio
+        # (el más cercano al del inicio): así están cerradas al llegar, aunque lo de detrás aún no se haya cargado
+        # (antes iban con el trozo de su casilla y, sin él cargado, no había puerta ni suelo). Mientras se abren,
+        # da tiempo a cargar lo de detrás
+        ini_t = next((t for t in t0 if N0.dueno_punto(v0.inicio) in t.celdas), t0[0] if t0 else None)
+        dist_t = {id(ini_t): 0} if ini_t else {}
+        frente_t = [ini_t] if ini_t else []
+        while frente_t:
+            sig_t = []
+            for t in frente_t:
+                for b, _ in t.vecinos:
+                    if id(b) not in dist_t:
+                        dist_t[id(b)] = dist_t[id(t)] + 1
+                        sig_t.append(b)
+            frente_t = sig_t
+        for Nn, ts in ((N0, t0 + [enlace]), (N1, t1)):
+            de_ = {c: t for t in ts for c in t.celdas}
+            Nn.puerta_a = {}
+            for c in Nn.puertas:
+                t = de_.get(c)
+                if t is None:
+                    continue
+                junto = {de_[k] for k in ((c[0] + 1, c[1]), (c[0] - 1, c[1]), (c[0], c[1] + 1), (c[0], c[1] - 1))
+                         if k in de_ and de_[k] is not t}
+                antes = min(junto, key=lambda b: dist_t.get(id(b), 99), default=None)
+                if antes is not None and dist_t.get(id(antes), 99) < dist_t.get(id(t), 99):
+                    Nn.puerta_a[c] = antes
+            # las dos hojas de una puerta doble, juntas
+            cambio_ = True
+            while cambio_:
+                cambio_ = False
+                for c in Nn.puertas:
+                    if c in Nn.puerta_a or c not in de_:
+                        continue
+                    for k in ((c[0] + 1, c[1]), (c[0] - 1, c[1]), (c[0], c[1] + 1), (c[0], c[1] - 1)):
+                        if k in Nn.puerta_a and de_.get(k) is de_[c]:
+                            Nn.puerta_a[c] = Nn.puerta_a[k]
+                            cambio_ = True
+                            break
+        # en un paso con puerta (del trozo de este lado): la espera forzada (+0x39), solo en la puerta misma (ya
+        # abierta) y en el suelo repetido de detrás; antes de la puerta solo se pide la carga. Mientras se abre la
+        # puerta, se carga: como los mapas del IV
+        for t in trozos:
+            Nn = N1 if t.nivel == 1 else N0
+            de_ = {c: x for x in (t0 + [enlace] if t.nivel == 0 else t1) for c in x.celdas}
+            mias = {c for c in Nn.puertas if Nn.puerta_a.get(c, de_.get(c)) is t}
+            if not mias:
+                continue
+            con_puerta = set()
+            for i_, (b, _) in enumerate(t.vecinos):
+                mover = desfase(t, b)[0]
+                otras = {mover(c) for c in b.celdas}
+                if any((c[0] + k[0], c[1] + k[1]) in otras or c in otras
+                       for c in mias for k in ((1, 0), (-1, 0), (0, 1), (0, -1))):
+                    con_puerta.add(i_)
+            for c, z_ in list(t.zonas.items()):
+                if z_ >= 0 and (z_ & 1) and (z_ >> 1) in con_puerta and c not in mias:
+                    t.zonas[c] = z_ & ~1
+        puertas_log = ("Puertas en la frontera de dos trozos, con el de antes: " + (", ".join(
+                f"{c} -> {t_.nombre}" for Nn in (N0, N1) for c, t_ in sorted(Nn.puerta_a.items())) or "ninguna"))
         # antes de montar nada: si con lo ya montado se ve que no van a caber, se trocea más sin montar (montar es
         # lo que tarda: antes se montaban todos los trozos otra vez en cada intento)
         if tam:
@@ -6139,6 +6199,7 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.4
                    if _redondeo_carga(len(mapas[a.mapa])) + _redondeo_carga(len(mapas[b.mapa])) > LIMITE_PAREJA]
         if not grandes and not parejas:
             hecho = True
+            log.append(puertas_log)
             break
         malos = {t.nivel for t in grandes} | {t.nivel for p_ in parejas for t in p_ if t is not enlace}
         log.append(f"Los trozos no caben de dos en dos en la memoria de mapas ({len(parejas)} parejas): se trocea más")
