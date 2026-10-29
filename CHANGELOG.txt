@@ -1,6 +1,15 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 57 (2026-10-29)
+------------------------------------
+- Building the streamed levels is about 3-4 times faster (here: 3 minutes instead of 10):
+  - the 150 m margin of the open-air map was computed square by square (44 million steps per try); now by rows and
+    columns, and the nearest tile only for the pieces that need it;
+  - when two maps did not fit together in memory, every try rebuilt both levels and every map from scratch; now each
+    map is kept once built, and a new cut is first checked with the sizes already known (estimated by weight for the
+    new pieces) before building anything.
+
 Alpha 0.1 - revision 56 (2026-10-29)
 ------------------------------------
 - The open-air map carries, repeated, everything that can be seen from outside: everything within 25 m of it

@@ -500,6 +500,42 @@ def vecinos_y_zonas(trozos, puede, desfase, toque=1.5):
                 a.zonas[c] = -1
 
 
+def _dilatar(celdas, m):
+    """Las casillas a m o menos (en x y en y) de alguna de las dadas: por filas y luego por columnas (con m = 60 y
+    3000 casillas, cuadrado a cuadrado eran 44 millones de pasos por trozo)."""
+    if m <= 0:
+        return set(celdas)
+    filas = collections.defaultdict(set)
+    for x, y in celdas:
+        filas[y].add(x)
+    ancho = {}
+    for y, xs in filas.items():
+        out = set()
+        for x0, x1 in _tramos(sorted(xs)):
+            out.update(range(x0 - m, x1 + m + 1))
+        ancho[y] = out
+    cols = collections.defaultdict(set)
+    for y, xs in ancho.items():
+        for x in xs:
+            cols[x].add(y)
+    res = set()
+    for x, ys in cols.items():
+        for y0, y1 in _tramos(sorted(ys)):
+            res.update((x, y) for y in range(y0 - m, y1 + m + 1))
+    return res
+
+
+def _tramos(v):
+    """[(inicio, fin)] de los números seguidos de una lista ordenada."""
+    out = []
+    for x in v:
+        if out and x == out[-1][1] + 1:
+            out[-1][1] = x
+        else:
+            out.append([x, x])
+    return [tuple(t) for t in out]
+
+
 MARGEN = 3          # casillas de geometría de alrededor que lleva repetida cada trozo (7,5 m)
 
 
@@ -516,21 +552,17 @@ def geo_de(nivel, trozo):
     # a su zona, el principio de la sala de al lado... Así, mientras el vecino no está cargado, no se ve el vacío
     # nada más pasar la frontera. Repetida en los dos mapas es la misma geometría en el mismo sitio.
     area = {c for c in nivel.todas if nivel.dueno_celda(c) in trozo.celdas}
-    amplia = set()
     m = getattr(trozo, "margen", MARGEN)
-    for (x, y) in area:
-        for i in range(-m, m + 1):
-            for j in range(-m, m + 1):
-                amplia.add((x + i, y + j))
-    cerca3 = set()
     m3 = getattr(trozo, "margen_todo", MARGEN)      # hasta aquí, todo; más allá (hasta m), solo lo de fuera
-    if m > m3:
-        for (x, y) in area:
-            for i in range(-m3, m3 + 1):
-                for j in range(-m3, m3 + 1):
-                    cerca3.add((x + i, y + j))
-    fuera = amplia - area
-    cerca = {c: o for c, (_, o) in _cercanas(fuera, trozo.celdas).items()} if fuera else {}
+    amplia = _dilatar(area, m)
+    cerca3 = _dilatar(area, m3) if m > m3 else set()
+    cache_cerca = {}
+
+    def cerca_de(k):
+        # la casilla del trozo más cercana (para la zona de lo repetido): solo las que hacen falta, y una vez
+        if k not in cache_cerca:
+            cache_cerca[k] = _cercanas([k], trozo.celdas)[k][1]
+        return cache_cerca[k]
 
     def exterior(s):
         """¿Se ve desde fuera? Paredes que dan a suelo al aire libre o a donde no hay suelo, y tejados."""
@@ -553,7 +585,7 @@ def geo_de(nivel, trozo):
                     continue
                 k = celda(_centro([q[0] for q in s]))
                 if k in amplia and (not cerca3 or k in cerca3 or exterior(s)):
-                    o = c if c in trozo.celdas else cerca.get(k)
+                    o = c if c in trozo.celdas else cerca_de(k)
                     g.render[tuple(ch) + (trozo.zonas.get(o, -1), c not in nivel.aire)][tex].append(s)
                     trozo.repetidas += 1
     for ch, cc in valle.geo.coll.items():

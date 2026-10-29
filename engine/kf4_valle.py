@@ -5916,16 +5916,61 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.4
             else:
                 log.append(f"AVISO: cortes.json, nivel {clave_}: {motivo}; se corta solo")
     junto_enlace = {(c[0] + a_, c[1] + b_) for c in M1 for a_, b_ in kt.VECINAS4} - M1
-    for intento in range(6):
-        enlace = kt.Trozo(0, M, "enlace", h0)
-        enlace.margen = 0      # (alrededor del pasillo cada nivel tiene otra cosa: nada repetido)
-        a0 = kt.particion(N0, sum(N0.w.values()) * f0, M, v0.inicio)
-        a1 = kt.particion(N1, sum(N1.w.values()) * f1, M1, primeras=junto_enlace & set(h1))
-        p0 = manual.get("0") or a0
-        p1 = manual.get("1") or a1
-        t0 = [kt.Trozo(0, c, f"nivel 0, parte {i + 1}", h0) for i, c in enumerate(p0)]
-        t1 = [kt.Trozo(1, c, f"nivel 1, parte {i + 1}", h1) for i, c in enumerate(p1)]
-        trozos = t0 + [enlace] + t1
+    hechos = {}            # mapas ya montados: (nivel, casillas, vecinos, bloques, márgenes) -> bytes
+    tam = {}               # (nivel, casillas, márgenes) -> tamaño del mapa montado
+    construido = {"ultimo": 0, 0: (v0, N0), 1: None}      # (el 1 se construyó antes que el 0)
+    pulpos = {}
+
+    def nivel_listo(nivel):
+        """El nivel construido el último (el editor deja estado de su nivel), con sus registros de bichos."""
+        if construido["ultimo"] != nivel or construido.get(nivel) is None:
+            v_ = kf4_editor.MapaEditor(semilla, ruta0 if nivel == 0 else ruta1)
+            v_.construir()
+            construido[nivel] = (v_, kt.Nivel(v_))
+            construido["ultimo"] = nivel
+        v_, Nv_ = construido[nivel]
+        fijar_offset(v_)
+        if nivel not in pulpos:
+            pulpos[nivel] = preparar_registros(src, v_, [])
+        return v_, Nv_
+
+    def planificar():
+        enlace_ = kt.Trozo(0, M, "enlace", h0)
+        enlace_.margen = 0      # (alrededor del pasillo cada nivel tiene otra cosa: nada repetido)
+        a0_ = kt.particion(N0, sum(N0.w.values()) * f0, M, v0.inicio)
+        a1_ = kt.particion(N1, sum(N1.w.values()) * f1, M1, primeras=junto_enlace & set(h1))
+        t0_ = [kt.Trozo(0, c, f"nivel 0, parte {i + 1}", h0) for i, c in enumerate(manual.get("0") or a0_)]
+        t1_ = [kt.Trozo(1, c, f"nivel 1, parte {i + 1}", h1) for i, c in enumerate(manual.get("1") or a1_)]
+        trozos_ = t0_ + [enlace_] + t1_
+        for t in t0_ + t1_:
+            t.aire = (N0 if t.nivel == 0 else N1).aire & t.celdas
+            # lo de fuera ve lejos: las fachadas, tejados y torres de lo de dentro que se ven desde allí van también
+            # (repetidos) en su mapa, hasta MARGEN_FUERA casillas
+            if len(t.aire) > len(t.celdas) // 2:
+                t.margen = int(os.environ.get("KF_MARGEN_FUERA", MARGEN_FUERA))
+                t.margen_todo = int(os.environ.get("KF_MARGEN_TODO", MARGEN_FUERA_TODO))
+        enlace_.aire = N0.aire & enlace_.celdas
+        return enlace_, a0_, a1_, t0_, t1_, trozos_
+
+    clave_tam = lambda t: (t.nivel, frozenset(t.celdas), getattr(t, "margen", kt.MARGEN),
+                           getattr(t, "margen_todo", kt.MARGEN))
+
+    def estimar(t):
+        """Lo que ocupará el mapa de un trozo: lo que ocupó si ya se montó; si no, por su peso, como los demás
+        trozos de su nivel montados (lo fijo, del pasillo del enlace, que casi no lleva geometría)."""
+        k = clave_tam(t)
+        if k in tam:
+            return tam[k]
+        base_ = next((v_ for k_, v_ in tam.items() if len(k_[1]) == len(M) and k_[1] == frozenset(M)), 2 << 20)
+        Nn = N0 if t.nivel == 0 else N1
+        ks = [(v_ - base_) / max(1, sum(Nn.w.get(c, 0) for c in k_[1])) for k_, v_ in tam.items()
+              if k_[0] == t.nivel and k_[1] != frozenset(M) and k_[2] == kt.MARGEN]
+        kk = sorted(ks)[len(ks) // 2] * 1.05 if ks else 32.0
+        return base_ + kk * sum(Nn.w.get(c, 0) for c in t.celdas)
+
+    hecho = False
+    for intento in range(12):
+        enlace, a0, a1, t0, t1, trozos = planificar()
         ident = lambda c: c
 
         def puede(a, b):
@@ -5938,6 +5983,22 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.4
                 return (lambda c: (c[0] - dx, c[1] - dy)), -D[2], req
             return (lambda c: (c[0] + dx, c[1] + dy)), D[2], tuple(-x for x in req)
         kt.vecinos_y_zonas(trozos, puede, desfase)
+        # antes de montar nada: si con lo ya montado se ve que no van a caber, se trocea más sin montar (montar es
+        # lo que tarda: antes se montaban todos los trozos otra vez en cada intento)
+        if tam:
+            parejas_e = [(a, b) for a in trozos for b, _ in a.vecinos
+                         if _redondeo_carga(int(estimar(a))) + _redondeo_carga(int(estimar(b))) > LIMITE_PAREJA]
+            if parejas_e and intento < 11:
+                for k_ in sorted({t.nivel for p_ in parejas_e for t in p_ if t is not enlace} or {1}):
+                    if str(k_) in manual:
+                        log.append(f"AVISO: tus cortes del nivel {k_} (cortes.json) no caben de dos en dos en memoria:"
+                                   f" se corta solo (mira CORTES_NIVELES.html, las parejas en rojo)")
+                        del manual[str(k_)]
+                    elif k_ == 0:
+                        f0 *= 0.88
+                    else:
+                        f1 *= 0.88
+                continue
         ini = N0.dueno_punto(v0.inicio)
         libres = [m_ for m_ in TROZOS_MAPAS if disponibles is None or m_ in disponibles]
         if len(libres) < len(trozos) - 1:
@@ -5954,27 +6015,9 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.4
         # lo que se ve desde cada sitio (bloques de flags, como el IV): sin esto el trozo vecino no se dibujaba
         kt.grupos(N0, t0 + [enlace])
         kt.grupos(N1, t1)
-        for t in trozos:
-            t.aire = (N0 if t.nivel == 0 else N1).aire & t.celdas
         kt.visibilidad(trozos, desfase)
-        for t in t0 + t1:
-            # lo de fuera ve lejos: las fachadas, tejados y torres de lo de dentro que se ven desde allí van también
-            # (repetidos) en su mapa, hasta MARGEN_FUERA casillas
-            if len(t.aire) > len(t.celdas) // 2:
-                t.margen = int(os.environ.get("KF_MARGEN_FUERA", MARGEN_FUERA))
-                t.margen_todo = int(os.environ.get("KF_MARGEN_TODO", MARGEN_FUERA_TODO))
         mapas = {}
-        for nivel, v, ruta, off in ((0, v0, ruta0, off0), (1, None, ruta1, off1)):
-            Nv = N0
-            if v is None or intento > 0:     # se vuelve a construir (el editor deja estado de su nivel)
-                v = kf4_editor.MapaEditor(semilla, ruta)
-                v.construir()
-                Nv = kt.Nivel(v)
-            fijar_offset(v)
-            if nivel == 0:
-                pulpo0 = preparar_registros(src, v, [])
-            else:
-                pulpo1 = preparar_registros(src, v, [])
+        for nivel in (0, 1):
             for t in trozos:
                 if t.nivel != nivel:
                     continue
@@ -5983,6 +6026,11 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.4
                     tabla += struct.pack("<3fHH", xyz[0], xyz[1], xyz[2], b.mapa, 0)
                 while len(tabla) < md.NEIGH_N * md.NEIGH:
                     tabla += struct.pack("<3fHH", 0.0, 0.0, 0.0, 0xFFFF, 0)
+                clave = clave_tam(t) + (bytes(tabla), t.bloques, tuple(sorted(t.zonas.items())), t.mapa)
+                if clave in hechos:
+                    mapas[t.mapa] = hechos[clave]
+                    continue
+                v, Nv = nivel_listo(nivel)
                 TROZO = {"neigh": bytes(tabla[:md.NEIGH_N * md.NEIGH]), "cielo": cielos[nivel],
                          "grupos": t.grupo, "bloques": t.bloques}
                 print(f"  {t.nombre} -> {t.mapa:03d}.map ({len(t.celdas)} casillas, vecinos "
@@ -5993,6 +6041,8 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.4
                     mapas[t.mapa], _ = generar_mapa(src, vista, rumbo, log_t, d099, d031, cruz)
                 finally:
                     TROZO = None
+                hechos[clave] = mapas[t.mapa]
+                tam[clave_tam(t)] = len(mapas[t.mapa])
                 if t.mapa == 99:
                     log.extend(log_t)
                 avisos = [l_ for l_ in log_t if "AVISO" in l_]
@@ -6006,6 +6056,7 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.4
         parejas = [(a, b) for a in trozos for b, _ in a.vecinos
                    if _redondeo_carga(len(mapas[a.mapa])) + _redondeo_carga(len(mapas[b.mapa])) > LIMITE_PAREJA]
         if not grandes and not parejas:
+            hecho = True
             break
         malos = {t.nivel for t in grandes} | {t.nivel for p_ in parejas for t in p_ if t is not enlace}
         log.append(f"Los trozos no caben de dos en dos en la memoria de mapas ({len(parejas)} parejas): se trocea más")
@@ -6021,9 +6072,10 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.4
                 f0 *= 0.85
             else:
                 f1 *= 0.85
-    else:
+    if not hecho:
         log.append("AVISO: no hay forma de que los trozos quepan de dos en dos: van con fundido")
         return None
+    pulpo0, pulpo1 = pulpos.get(0), pulpos.get(1)
     pulpo = ({**(pulpo1[0] or {}), **(pulpo0[0] or {})}, {**(pulpo1[1] or {}), **(pulpo0[1] or {})},
              {**(pulpo1[2] or {}), **(pulpo0[2] or {})}) if pulpo0 and pulpo1 else (pulpo0 or pulpo1)
     mayor = max(_redondeo_carga(len(mapas[a.mapa])) + _redondeo_carga(len(mapas[b.mapa]))
