@@ -1,6 +1,15 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 64 (2026-10-29)
+------------------------------------
+- The cave mouth band (outside fog, sky visible) is now 1 tile (2.5 m) instead of 3. A few metres into a cave,
+  unloaded parts still showed in the bluish outside fog colour.
+- Every covered floor, the cave mouth included, now uses the black background colour (fog colour 1). Only open-air
+  floors keep the bluish one, and there the sky covers it.
+- Water records no longer use MAP_RECORD_CURRENT_BLOCKS. With the light of the floor under the player, the sea
+  showed a bright green band with a straight edge. It is lit and fogged as before revision 62.
+
 Alpha 0.1 - revision 63 (2026-10-29)
 ------------------------------------
 - The cloud sky no longer shows through unloaded rooms indoors. The sky record now has its own flag group (3), and

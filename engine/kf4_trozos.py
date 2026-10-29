@@ -222,6 +222,10 @@ class Nivel:
                     candidatas.add(celda(_centro(q)))
         self.aire = {c for c, zs in self.H.items() if not (c in techo and min(techo[c]) > min(zs) + 0.5)}
         self.cerca_aire = _dilatar(self.aire, 3)
+        # la boca: los suelos cubiertos pegados a lo de fuera (1 casilla, 2,5 m) llevan la niebla de fuera y ven el
+        # cielo; más adentro, niebla negra y sin cielo (con 3 casillas, a unos metros dentro de la cueva lo que no
+        # estaba cargado se veía del color de la niebla de fuera)
+        self.boca = _dilatar(self.aire, 1)
         suelo = set(self.H)
         self._cerca = {c: o for c, (_, o) in _cercanas(candidatas - suelo, suelo).items()}
         self.todas = candidatas | suelo
@@ -573,7 +577,7 @@ def geo_de(nivel, trozo):
     def fuera(c):
         # (con MAP_RECORD_CURRENT_BLOCKS la niebla de cada registro es la del que pisas: la geometría va en el mismo
         # registro que la colisión de su casilla, y así no hay más registros que antes)
-        return 0 if c in nivel.aire else (1 if c in nivel.cerca_aire else SIN_CIELO)
+        return 0 if c in nivel.aire else (1 if c in nivel.boca else SIN_CIELO)
 
     def exterior(s):
         """¿Se ve desde fuera? Paredes que dan a suelo al aire libre o a donde no hay suelo, y tejados."""
