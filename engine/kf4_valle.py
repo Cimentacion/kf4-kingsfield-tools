@@ -6055,7 +6055,8 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.4
                     log.extend(log_t)
                 avisos = [l_ for l_ in log_t if "AVISO" in l_]
                 log.append(f"Trozo {t.nombre} -> {t.mapa:03d}.map: {len(mapas[t.mapa]) // 1024} KB, "
-                           f"{len(t.celdas)} casillas, {len(vista.enemigos)} bichos, vecinos: "
+                           f"{len(t.celdas)} casillas ({100 * len(getattr(t, 'aire', ())) // max(1, len(t.celdas))} % al "
+                           f"aire{', con cielo' if vista.cielo else ''}), {len(vista.enemigos)} bichos, vecinos: "
                            + (", ".join(f"{b.mapa:03d}" + (" (otro nivel)" if b.nivel != t.nivel else "")
                                         + f" [{t.puertas.get(b.nombre, 0)} casillas de paso]"
                                         for b, _ in t.vecinos) or "ninguno")

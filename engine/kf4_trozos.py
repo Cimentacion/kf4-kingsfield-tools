@@ -539,6 +539,7 @@ def _tramos(v):
     return [tuple(t) for t in out]
 
 
+CIELO_AIRE = 0.3    # parte de casillas al aire libre a partir de la que un mapa lleva el cielo de nubes
 MARGEN = 3          # casillas de geometría de alrededor que lleva repetida cada trozo (7,5 m)
 
 
@@ -583,13 +584,16 @@ def geo_de(nivel, trozo):
         for tex, seqs in by_tex.items():
             for s in seqs:
                 c = nivel.dueno_tira(s)
+                # niebla de dentro (cerrada y negra) solo para lo que se ve desde dentro: las fachadas, tejados y
+                # paredes que dan fuera llevan la de fuera aunque sean de una casilla cubierta (con la de dentro, desde
+                # la orilla se veían como manchas planas del color de la niebla)
                 if c in trozo.celdas:
-                    g.render[tuple(ch) + (trozo.zonas.get(c, -1), c not in nivel.aire)][tex].append(s)
+                    g.render[tuple(ch) + (trozo.zonas.get(c, -1), not exterior(s))][tex].append(s)
                     continue
                 k = celda(_centro([q[0] for q in s]))
                 if k in amplia and (not cerca3 or k in cerca3 or exterior(s)):
                     o = c if c in trozo.celdas else cerca_de(k)
-                    g.render[tuple(ch) + (trozo.zonas.get(o, -1), c not in nivel.aire)][tex].append(s)
+                    g.render[tuple(ch) + (trozo.zonas.get(o, -1), not exterior(s))][tex].append(s)
                     trozo.repetidas += 1
     for ch, cc in valle.geo.coll.items():
         for kind, polys in cc.items():
@@ -619,6 +623,9 @@ def vista(nivel, trozo):
     v.kf_salidas = []
     v.kf_llegadas = {}
     v._trozo = trozo
+    # el cielo, solo en los mapas con algo al aire libre: en los de dentro, lo que no esté cargado se ve del color
+    # de la niebla (negro), no el cielo de nubes "infinito" detrás
+    v.cielo = bool(getattr(valle, "cielo", False)) and len(getattr(trozo, "aire", ())) >= CIELO_AIRE * len(trozo.celdas)
     return v
 
 

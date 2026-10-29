@@ -1,6 +1,14 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 61 (2026-10-29)
+------------------------------------
+- The facades, roofs and walls that face outside now use the outdoor fog, even when they belong to a covered tile:
+  with the dense indoor fog they looked like flat patches of fog colour from the shore (the grey/black walls and
+  tower). Only what is seen from inside uses the black indoor fog.
+- The cloud sky only goes in maps with at least 30 % of their tiles in the open air: inside, whatever is not loaded
+  shows as the fog colour (black) instead of the "infinite" sky behind.
+
 Alpha 0.1 - revision 60 (2026-10-29)
 ------------------------------------
 - Fixed "no hay forma de que los trozos quepan de dos en dos" on the real ISO: since rev 56 every piece more than
