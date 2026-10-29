@@ -1,6 +1,16 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 60 (2026-10-29)
+------------------------------------
+- Fixed "no hay forma de que los trozos quepan de dos en dos" on the real ISO: since rev 56 every piece more than
+  half in the open air carried the 150 m margin of the shore (a courtyard of 130 tiles took 6.4 MB), and on the
+  real ISO every map also carries the 618 KB of the cross pictures, so no cut could fit. Now only the open-air map
+  of each level carries that margin. Checked with the memory limit lowered by those 1.2 MB per pair: 12 maps
+  (5 + link + 6), largest pair 10.0 MB.
+- Map numbers are given to level 0 from the start of the list and to level 1 from the end, so cutting one level
+  again does not renumber (and rebuild) the maps of the other.
+
 Alpha 0.1 - revision 59 (2026-10-29)
 ------------------------------------
 - Streamed build much faster again (here 1 minute; it was 3 in rev 57 and about 10 before):

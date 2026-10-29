@@ -5845,7 +5845,7 @@ MAPA_NIVEL1 = 37          # la entrada del DAT del 037.map (su sitio lo ocupa el
 # las entradas del DAT de mapas del 4 que el mod no usa (TROZOS_MAPAS).
 # (sin los que el ejecutable trata aparte por su número: 35 sala del guardián, 38 santuario oscuro, 41, 42...)
 TROZOS_MAPAS = [37, 36, 34, 33, 32, 44, 43, 40, 39, 30, 28, 23, 22, 21, 14, 13, 7, 6, 5, 113, 114]
-LIMITE_PAREJA = 0xB80000         # map_file_area_size (con parche_memoria_mapa): los dos mapas cargados juntos
+LIMITE_PAREJA = int(os.environ.get("KF_LIMITE_PAREJA", 0xB80000))          # map_file_area_size (con parche_memoria_mapa): los dos mapas cargados juntos
 
 
 def _redondeo_carga(n):
@@ -5944,11 +5944,15 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.4
         trozos_ = t0_ + [enlace_] + t1_
         for t in t0_ + t1_:
             t.aire = (N0 if t.nivel == 0 else N1).aire & t.celdas
+        for ts in (t0_, t1_):
             # lo de fuera ve lejos: las fachadas, tejados y torres de lo de dentro que se ven desde allí van también
-            # (repetidos) en su mapa, hasta MARGEN_FUERA casillas
-            if len(t.aire) > len(t.celdas) // 2:
-                t.margen = int(os.environ.get("KF_MARGEN_FUERA", MARGEN_FUERA))
-                t.margen_todo = int(os.environ.get("KF_MARGEN_TODO", MARGEN_FUERA_TODO))
+            # (repetidos) en su mapa, hasta MARGEN_FUERA casillas. Solo en el mapa de fuera de cada nivel (el que
+            # tiene más casillas al aire libre): en la revisión 56 cualquier trozo con más de la mitad al aire lo
+            # llevaba y un patio de 130 casillas ocupaba 6,4 MB (en la ISO de verdad no cabía nada)
+            fuera_ = max(ts, key=lambda t: len(t.aire), default=None)
+            if fuera_ is not None and len(fuera_.aire) > len(fuera_.celdas) // 2:
+                fuera_.margen = int(os.environ.get("KF_MARGEN_FUERA", MARGEN_FUERA))
+                fuera_.margen_todo = int(os.environ.get("KF_MARGEN_TODO", MARGEN_FUERA_TODO))
         enlace_.aire = N0.aire & enlace_.celdas
         return enlace_, a0_, a1_, t0_, t1_, trozos_
 
@@ -6009,9 +6013,13 @@ def sin_fundido(src, ruta0, ruta1, semilla, rumbo, log, d099, d031, cruz, f0=0.4
             t.mapa = 99 if (t.nivel == 0 and ini in t.celdas) else None
         if not any(t.mapa == 99 for t in trozos):
             min(t0, key=lambda t: min((c[0] - ini[0]) ** 2 + (c[1] - ini[1]) ** 2 for c in t.celdas)).mapa = 99
-        for t in trozos:
+        # (los del nivel 0 desde el principio de la lista y los del 1 desde el final: así, si al trocear más cambia
+        # cuántos hay en un nivel, los mapas del otro conservan su número y no hace falta volver a montarlos)
+        for t in t0 + [enlace]:
             if t.mapa is None:
                 t.mapa = libres.pop(0)
+        for t in reversed(t1):
+            t.mapa = libres.pop()
         # lo que se ve desde cada sitio (bloques de flags, como el IV): sin esto el trozo vecino no se dibujaba
         kt.grupos(N0, t0 + [enlace])
         kt.grupos(N1, t1)
