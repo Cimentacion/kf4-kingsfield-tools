@@ -1,6 +1,24 @@
 FIELDIV-ENGINE - CHANGELOG
 ==========================
 
+Alpha 0.1 - revision 69 (2026-10-29)
+------------------------------------
+- Bridges and walkways of the ported King's Field levels now have floor collision. They are MO.T objects (190-192,
+  196-198), not grid tiles, and decoration objects had no collision, so you fell through the level 1 bridge. A
+  floor face of those objects, or a grid floor more than 1 m above the floors around it, gets collision when it
+  can be reached walking from a walkable floor (step up to 1 m, tile to tile). Roofs are still not reachable and
+  stay without collision.
+- NPC dialogue follows the game language. Each line keeps the same message ids in every language and each DAT gets
+  its own font.txc: Spanish uses the translation, the other languages use the original English text of the
+  European King's Field (TALK0.T, read with OCR and corrected by hand: kf1_dialogos_en.py). Before, every language
+  showed the Spanish text.
+- The level 0 fisherman uses his own King's Field model (MO.T 67, seated on his rock with the fishing rod). It is
+  mounted on the bones of KFIV's NPC 101, at real size (2048 PS1 units = 2.5 m) and rigid, as in the original.
+  No chr file was free, so it replaces chr/c0101.chr, which only this NPC uses in the mod.
+- Ported models: when the PS1 textures do not fit a 256x256 sheet at double size, they are kept at their own size.
+  The texture that gets replaced is the model's 256x256 one, and the template block is one that draws with it.
+  KFIV NPCs carry several textures.
+
 Alpha 0.1 - revision 68 (2026-10-29)
 ------------------------------------
 - Water is no longer copied into the border of neighbouring maps: each streamed map carries only the water of its

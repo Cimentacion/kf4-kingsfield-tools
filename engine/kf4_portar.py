@@ -40,6 +40,15 @@ BICHOS = {
 }
 
 
+# la gente del King's Field con su modelo, sobre el de la persona del IV de su registro (kf1_npc.GENTE_KF4): no
+# quedan archivos chr libres, así que va en el chr de ese registro (en el mod solo lo usa esta persona). kf1 = modelo
+# de MO.T (kf_modelo del JSON)
+GENTE = {
+    67: dict(kf1=67, modelo=101, registro=101, base=101, tinte=(1.0, 1.0, 1.0), escala=1.0, real=True,
+             rigido=True, texto="Pescador del King's Field (su modelo, sobre el chr de la gente 101 del IV)"),
+}
+
+
 def _malla(mo_t, n):
     d = mo_t[n]
     t = struct.unpack_from("<I", d, 8)[0]
@@ -58,8 +67,12 @@ def _posada(base):
     return W, np.array(P), np.array(I)
 
 
-def _encajar(V, P, escala=1.0, centro=False):
-    """V (PS1) colocado sobre la nube P del bicho del IV: (posiciones, giro elegido, error)."""
+CM_POR_UNIDAD = 2.5 / 2048 * 100        # el PS1: una casilla = 2048 = 2,5 m; el IV, en cm
+
+
+def _encajar(V, P, escala=1.0, centro=False, real=False):
+    """V (PS1) colocado sobre la nube P del bicho del IV: (posiciones, giro elegido, error). real: a su tamaño de
+    verdad (la gente: si no, el del IV, y el pescador con su caña larga salía pequeño)."""
     lo, hi = P.min(0), P.max(0)
     tam_iv = np.linalg.norm(hi - lo)
     mejor = None
@@ -68,7 +81,7 @@ def _encajar(V, P, escala=1.0, centro=False):
         R = np.array([[np.cos(a), 0, np.sin(a)], [0, 1, 0], [-np.sin(a), 0, np.cos(a)]])
         Q = V @ R.T
         qlo, qhi = Q.min(0), Q.max(0)
-        s = tam_iv / max(1e-6, np.linalg.norm(qhi - qlo)) * escala
+        s = CM_POR_UNIDAD * escala if real else tam_iv / max(1e-6, np.linalg.norm(qhi - qlo)) * escala
         Q = Q * s
         qlo, qhi = Q.min(0), Q.max(0)
         # mismo suelo (y mayor = más abajo) y mismo centro en x, z
@@ -86,11 +99,16 @@ def _encajar(V, P, escala=1.0, centro=False):
 def portar_chr(base, mo_t, vram, cfg):
     V, prims = _malla(mo_t, cfg["kf1"])
     W, P, I = _posada(base)
-    Q, giro, _ = _encajar(V, P, cfg.get("escala", 1.0), cfg.get("centro", False))
+    Q, giro, _ = _encajar(V, P, cfg.get("escala", 1.0), cfg.get("centro", False), cfg.get("real", False))
     padre = base.jerarquia(0)
     n = base.n_partes
     d2 = ((Q[:, None, :] - P[None, :, :]) ** 2).sum(-1)
     duenos = [int(I[j]) for j in d2.argmin(1)]
+    if cfg.get("rigido"):
+        # todo en el hueso raíz: quieto como en el King's Field (el pescador, sentado, sobre una persona del IV
+        # que anda y gesticula se deformaba)
+        raiz = next((i for i in range(n) if padre[i] < 0), 0)
+        duenos = [raiz] * len(duenos)
     tris = []
     for tp, cl, uvs, refs, _ in prims:
         orden = [(0, 1, 2), (1, 3, 2)] if len(refs) == 4 else [(0, 1, 2)]
@@ -141,9 +159,9 @@ def portar_chr(base, mo_t, vram, cfg):
     nrm = -nrm
     alto = max(1e-6, Q[:, 1].max() - Q[:, 1].min())
     inv = [np.linalg.inv(w) for w in W]
-    plantilla = base.partes[[i for i, p in enumerate(base.partes) if p["bloques"]][0]]["bloques"][0]
+    plantilla = kc.plantilla_de(base)
     por_parte = [[] for _ in range(n)]
-    E = kp.TEX_ESCALA
+    E = getattr(kp.textura, "escala", kp.TEX_ESCALA)
     for clave, refs, uvs in tris:
         ps = {duenos[r] for r in refs}
         D = next((p for p in ps if all(q == p or q == padre[p] for q in ps)), max(ps, key=prof))

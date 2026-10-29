@@ -296,7 +296,11 @@ def texturas_nuevas(chr_, img, pal):
     """La sección de texturas con la imagen (256x256 índices) y la paleta (256 x RGBA, alfa 0x80) cambiadas."""
     d = bytearray(chr_.d)
     puesta = {"img": False, "pal": False}
-    for dbp, dbw, dpsm, x, y, w, h, off, nb in subidas(chr_):
+    sub = subidas(chr_)
+    # (la gente del IV lleva varias texturas: se cambia la de 256x256 y la paleta que la sigue; plantilla_de elige
+    # un bloque que la usa)
+    k0 = next((k for k, s_ in enumerate(sub) if s_[2] == 0x13 and (s_[6], s_[5]) == img.shape), 0)
+    for dbp, dbw, dpsm, x, y, w, h, off, nb in sub[k0:]:
         if dpsm == 0x13 and not puesta["img"]:
             assert img.shape == (h, w)
             d[off:off + w * h] = np.ascontiguousarray(img, np.uint8).tobytes()
@@ -309,3 +313,18 @@ def texturas_nuevas(chr_, img, pal):
     assert puesta["img"] and puesta["pal"], puesta
     fin = chr_.cab[4] if chr_.cab[4] > chr_.tex else len(d)
     return bytes(d[chr_.tex:fin])
+
+
+def plantilla_de(chr_):
+    """Un bloque del modelo que pinta con su textura de 256x256 (la que cambia texturas_nuevas)."""
+    tbp = next((s_[0] for s_ in subidas(chr_) if s_[2] == 0x13 and (s_[5], s_[6]) == (256, 256)), None)
+    primero = None
+    for p in chr_.partes:
+        for b in p["bloques"]:
+            if primero is None:
+                primero = b
+            for o in range(0, CAB, 16):
+                v, r = struct.unpack_from("<QQ", b, o)
+                if (r & 0xFF) == 6 and tbp is not None and (v & 0x3FFF) == tbp:
+                    return b
+    return primero

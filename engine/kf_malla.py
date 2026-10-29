@@ -21,6 +21,9 @@ import numpy as np
 
 import kf2_tex
 
+_DEPURA_PUENTES = False
+PROPS_SUELO = {190, 191, 192, 196, 197, 198}   # objetos del King's Field que son puentes y pasarelas (se pisan)
+PASO_ALTO = 1.0              # m que se sube de una casilla a la de al lado para llegar a un suelo alto (puentes)
 ESCALA = 2.5 / 2048          # metros por unidad del PS1 (una casilla = 2048 = 2,5 m)
 ALTURA_M = 128 / 2048 * 2.5  # metros por unidad de altura de la rejilla
 N_KF = 80
@@ -608,6 +611,7 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
     mojadas = {(x, z) for z in range(N_KF) for x in range(N_KF) if (x, z) not in datos.suelo and (x, z) not in datos.roca}
     cerca_agua = {(x + dx, z + dz) for (x, z) in mojadas for dx in range(-3, 4) for dz in range(-3, 4)}
     cerca_suelo = {(x + dx, z + dz) for (x, z) in datos.suelo for dx in (-1, 0, 1) for dz in (-1, 0, 1)}
+    altos = []                       # suelos más altos que los de la rejilla: (registro, cara, x, z)
     # la sala de la fuente que cura: luz más clara y azulada alrededor (colores de vértice)
     luz_fuente = []
     for (col, fila, ffx, ffz) in getattr(datos, "fuentes", []):
@@ -868,6 +872,12 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
             if colision and rot == -1 - FUENTE_ID and abs(n[2]) <= 0.5:
                 # la fuente: sus caras de los lados como pared (el pilón, de 1,1 m, no se sube ni se atraviesa)
                 editor.geo.coll[trozo_de(x, z)]["wall"].append(list(P))
+            if colision and rot < 0 and -1 - rot in PROPS_SUELO and _es_colision(P, n) == "floor":
+                # los puentes y pasarelas del King's Field son objetos (MO.T), no casillas: su tablero se pisa
+                altos.append((trozo_de(x, z), list(P), x, z))
+            if colision and rot >= 0 and (x, z) not in cerca_suelo and not agua and _es_colision(P, n) == "floor":
+                # lejos de los suelos de la rejilla: un puente sobre el vacío (se queda si se llega andando: abajo)
+                altos.append((trozo_de(x, z), list(P), x, z))
             if colision and rot >= 0 and (x, z) in cerca_suelo and (not agua or (x, z) in datos.suelo):
                 tipo = _es_colision(P, n)
                 en_borde = False
@@ -895,7 +905,10 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
                 vec = [v for v in vec if v is not None]
                 if tipo == "floor" and (x, z) not in datos.suelo:
                     if not vec or min(p[2] for p in P) > max(vec) + 1.0:
-                        tipo = None
+                        # más alto que los suelos de alrededor: un tejado... o un puente. Se decide abajo: se queda
+                        # si se llega andando desde un suelo (el puente del nivel 1 no tenía colisión y se caía uno)
+                        altos.append((trozo_de(x, z), list(P), x, z))
+                        tipo = "nada"
                 # (las paredes van todas: recortarlas por la altura de los suelos vecinos dejó sin colisión la
                 # torre del caracol, cuyas casillas tienen el suelo arriba del todo)
                 chc = trozo_de(x, z)        # (el agua se dibuja en sus registros grandes; su colisión no)
@@ -905,6 +918,34 @@ def construir(editor, datos, h0, atlas, pad, colision=True):
                     editor.geo.coll[chc][tipo].append(list(P))
                 elif tipo is None and abs(n[2]) <= 0.5:
                     cantos.append((chc, list(P), n, al_otro))   # ¿canto de escalón o pared? (_decidir_cantos)
+    if colision and altos:
+        # los suelos altos (puentes, pasarelas) a los que se llega andando: de casilla en casilla desde los suelos de
+        # la rejilla y las rampas, subiendo como mucho PASO_ALTO; los tejados no se alcanzan y se quedan sin colisión
+        alcanzable = collections.defaultdict(list)
+        for k, h in pisos.items():
+            if h is not None:
+                alcanzable[k].append(h)
+        for (x, z), ((d, lo, hi), hh) in datos.rampas.items():
+            base = (hh - h0) * ALTURA_M
+            alcanzable[(x, z)] += [base + lo, base + hi]
+        pendientes = [(chc, P, x, z, sum(p[2] for p in P) / len(P)) for chc, P, x, z in altos]
+        puestos = 0
+        while pendientes:
+            quedan = []
+            for chc, P, x, z, zc in pendientes:
+                if any(abs(zc - h) <= PASO_ALTO for dx in (-1, 0, 1) for dz in (-1, 0, 1)
+                       for h in alcanzable.get((x + dx, z + dz), ())):
+                    editor.geo.coll[chc]["floor"].append(P)
+                    alcanzable[(x, z)].append(zc)
+                    puestos += 1
+                else:
+                    quedan.append((chc, P, x, z, zc))
+            if len(quedan) == len(pendientes):
+                break
+            pendientes = quedan
+        caras["puentes"] = puestos
+        if _DEPURA_PUENTES:
+            print("PUENTES", len(altos), puestos)
     if colision:
         for (x, z), ((d, lo, hi), hh) in datos.rampas.items():
             base = (hh - h0) * ALTURA_M

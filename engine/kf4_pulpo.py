@@ -201,10 +201,25 @@ def textura(vram, tris):
         c = cajas.get(clave, [255, 255, 0, 0])
         cajas[clave] = [min(c[0], min(u)), min(c[1], min(v)), max(c[2], max(u)), max(c[3], max(v))]
     rgb = np.zeros((256, 256, 3), np.uint8)
+    orden = sorted(cajas.items(), key=lambda kv: -(kv[1][3] - kv[1][1]))
+
+    def cabe(E):
+        x, y, alto_fila = 0, 0, 0
+        for _, (u0, v0, u1, v1) in orden:
+            w, h = (u1 - u0 + 1) * E, (v1 - v0 + 1) * E
+            if x + w > 256:
+                x, y, alto_fila = 0, y + alto_fila, 0
+            if y + h > 256:
+                return False
+            x += w
+            alto_fila = max(alto_fila, h)
+        return True
+    # agrandada si cabe; si no (la gente, con muchas texturas), a su tamaño (textura.escala: la usada)
+    E = TEX_ESCALA if cabe(TEX_ESCALA) else 1
+    textura.escala = E
     sitio = {}
     x, y, alto_fila = 0, 0, 0
-    E = TEX_ESCALA
-    for clave, (u0, v0, u1, v1) in sorted(cajas.items(), key=lambda kv: -(kv[1][3] - kv[1][1])):
+    for clave, (u0, v0, u1, v1) in orden:
         w, h = (u1 - u0 + 1) * E, (v1 - v0 + 1) * E
         if x + w > 256:
             x, y, alto_fila = 0, y + alto_fila, 0

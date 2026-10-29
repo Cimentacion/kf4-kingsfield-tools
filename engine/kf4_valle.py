@@ -2928,27 +2928,64 @@ def _cajas(texto):
     return cajas
 
 
-def mensajes_de(texto):
-    """[ids de mensaje] de un texto (una caja por id), registrados para font.txc."""
-    if texto in _MENSAJE_DE:
-        return _MENSAJE_DE[texto]
-    ids = []
-    for caja in _cajas(texto):
-        palabras = []
-        for k, linea in enumerate(caja):
-            if k:
-                palabras.append(0x8000)          # salto de línea
-            palabras += _glifos(linea)
-        palabras.append(0xFFFF)                  # fin
-        mid = MENSAJE_NPC0 + len(MENSAJES_NPC)
-        MENSAJES_NPC[mid] = palabras
-        ids.append(mid)
-    _MENSAJE_DE[texto] = ids
+def _palabras_caja(caja):
+    palabras = []
+    for k, linea in enumerate(caja):
+        if k:
+            palabras.append(0x8000)          # salto de línea
+        palabras += _glifos(linea)
+    palabras.append(0xFFFF)                  # fin
+    return palabras
+
+
+def _en_cajas(texto, n):
+    """El texto en exactamente n cajas (n >= las que necesita): sus líneas repartidas por igual."""
+    cajas = _cajas(texto)
+    if len(cajas) == n:
+        return cajas
+    ls = _lineas(texto)
+    por = max(1, -(-len(ls) // n))
+    out = [ls[i * por:(i + 1) * por] for i in range(n)]
+    return [c if c else [" "] for c in out]
+
+
+# el texto de cada idioma del juego (los DAT de la ISO): el castellano traducido; los demás, el inglés original
+IDIOMAS_NPC = ("SPA", "ENG", "FRA", "GER", "ITA")
+MENSAJES_NPC_LG = {}             # idioma -> {id: palabras}
+
+
+def _dialogos(lg):
+    if lg == "SPA":
+        import kf1_dialogos_es
+        return kf1_dialogos_es.DIALOGOS
+    import kf1_dialogos_en
+    return kf1_dialogos_en.DIALOGOS
+
+
+def mensajes_de(linea):
+    """[ids de mensaje] de una línea de TALK0.T (una caja por id), registrados para el font.txc de cada idioma con
+    su texto (los mismos ids en todos: el guion del mapa es el mismo). None si no hay texto."""
+    if linea in _MENSAJE_DE:
+        return _MENSAJE_DE[linea]
+    textos = {lg: _dialogos(lg).get(linea) or _dialogos("SPA").get(linea) for lg in IDIOMAS_NPC}
+    if not textos["SPA"] and not textos["ENG"]:
+        return None
+    textos = {lg: t or textos["ENG"] or textos["SPA"] for lg, t in textos.items()}
+    n = max(len(_cajas(t)) for t in textos.values())
+    ids = [MENSAJE_NPC0 + len(MENSAJES_NPC) + i for i in range(n)]
+    for lg, t in textos.items():
+        for mid, caja in zip(ids, _en_cajas(t, n)):
+            MENSAJES_NPC_LG.setdefault(lg, {})[mid] = _palabras_caja(caja)
+    for mid in ids:
+        MENSAJES_NPC[mid] = MENSAJES_NPC_LG["SPA"][mid]
+    _MENSAJE_DE[linea] = ids
     return ids
 
 
-def font_con_npc(d):
-    """font.txc con los mensajes de la gente (MENSAJES_NPC) añadidos al final; None si no hace falta o no se puede."""
+def font_con_npc(d, lg="SPA"):
+    """font.txc con los mensajes de la gente (MENSAJES_NPC, en el idioma lg) añadidos al final; None si no hace
+    falta o no se puede."""
+    mensajes = MENSAJES_NPC_LG.get(lg) or MENSAJES_NPC
     if not MENSAJES_NPC or len(d) < 4:
         return None
     n = struct.unpack_from("<I", d, 0)[0]
@@ -2959,7 +2996,7 @@ def font_con_npc(d):
         return None                              # (ocupados en esta fuente: otra versión del juego)
     out = bytearray(d)
     out += bytes((-len(out)) % 4)
-    for mid, palabras in sorted(MENSAJES_NPC.items()):
+    for mid, palabras in sorted(mensajes.items()):
         offs[mid] = len(out)
         out += struct.pack(f"<{len(palabras)}H", *palabras)
         out += bytes((-len(out)) % 4)
@@ -2976,7 +3013,6 @@ def guion_npcs(guion, v, log):
     npcs = [n_ for n_ in getattr(v, "kf_npcs", []) if n_["pos"] in getattr(v, "_npc_etiqueta", {})]
     if not npcs:
         return guion
-    import kf1_dialogos_es
     import kf1_objetos
     E = 0x40000
     LOCAL = (0x40002, 0)
@@ -3020,11 +3056,11 @@ def guion_npcs(guion, v, log):
             ultima = s_ == len(vis) - 1
             blk = []
             for t in sec:
-                texto = kf1_dialogos_es.DIALOGOS.get(t)
-                if not texto:
+                ids_ = mensajes_de(t)
+                if not ids_:
                     sin_texto += 1
                     continue
-                for mid in mensajes_de(texto):
+                for mid in ids_:
                     blk += [(232 << 16) | 3, E, mid, E, 1, E, 1]
             if not ultima:
                 blk += set_(cont, (E, s_ + 1), ADD, (E, 0))
@@ -5427,7 +5463,7 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
             _, s_f, a_f, o_f = tabo["font.txc"]
             with open(iso, "rb") as g_:
                 g_.seek(d_off + o_f)
-                nueva_f = font_con_npc(g_.read(s_f))
+                nueva_f = font_con_npc(g_.read(s_f), lg)
             if nueva_f is None:
                 log.append(f"AVISO: no se pueden añadir los mensajes de la gente a font.txc ({lg})")
             elif len(nueva_f) <= a_f:
@@ -5513,7 +5549,8 @@ def patch_iso(iso, new_map, log, debug_ini=None, giro=1.0, mando="dos_sticks", v
                 f.write(new_map + bytes(alloc - len(new_map)))
                 f.seek(rec + 0x34)
                 f.write(struct.pack("<III", len(new_map), alloc, off))
-            for mdl in CHR_VACIOS:
+            # (y los de la gente del King's Field, que van en el chr de su persona del IV: kf4_portar.GENTE)
+            for mdl in sorted(set(CHR_VACIOS) | set(chrs)):
                 nombre_chr = f"chr/c{mdl:04d}.chr"
                 if nombre_chr not in orig:
                     continue
@@ -5780,6 +5817,24 @@ def preparar_registros(src, v, log):
             else:
                 v.enemigos = [(f"chr:{cfg['base']}" if t == tipo else t, p) for t, p in v.enemigos]
                 log.append(f"AVISO: no hay {nombre} ({e}); va el registro {cfg['base']} en su lugar")
+    # la gente del King's Field con su modelo (kf4_portar.GENTE): en el chr de su registro de gente del IV
+    for kmod, cfg in kf4_portar.GENTE.items():
+        if f"chr:{cfg['registro']}" not in tipos:
+            continue
+        if not any(n_.get("kf_modelo") == kmod and int(n_.get("registro", -1)) == cfg["registro"]
+                   for n_ in getattr(v, "kf_npcs", [])):
+            continue
+        try:
+            if getattr(v, "kf_mo", None) is None:
+                raise RuntimeError("no tengo el MO.T del King's Field")
+            base = kf4_chr.Chr(src.read(f"chr/c{cfg['base']:04d}.chr"))
+            datos = kf4_portar.portar_chr(base, v.kf_mo, v.kf_vram, cfg)
+            if len(datos) > 0x80000:
+                raise RuntimeError(f"el modelo ocupa {len(datos)} bytes, más que un bloque de pool")
+            chrs[cfg["modelo"]] = datos
+            log.append(f"{cfg['texto']}: chr/c{cfg['modelo']:04d}.chr de {len(datos) // 1024} KB")
+        except Exception as e:
+            log.append(f"AVISO: la persona {kmod} del King's Field sin su modelo ({e}): va la del IV")
     nuevos = [
         ("pulpo", kf4_pulpo.REGISTRO_PULPO, kf4_pulpo.MODELO_PULPO, kf4_pulpo.REGISTRO_BASE, 13,
          lambda base: kf4_pulpo.pulpo_chr(base, v.kf_mo, v.kf_vram)[0], kf4_pulpo.pulpo_prm,
